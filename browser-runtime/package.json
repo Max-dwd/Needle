@@ -1,0 +1,24 @@
+{
+  "name": "needle-browser-runtime",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/main.js",
+  "bin": {
+    "needle-browser-local": "./dist/main.js",
+    "folo-browser-local": "./dist/main.js"
+  },
+  "exports": {
+    ".": "./dist/main.js",
+    "./browser": "./dist/browser/index.js",
+    "./browser/daemon-client": "./dist/browser/daemon-client.js"
+  },
+  "scripts": {
+    "build": "node ../node_modules/typescript/bin/tsc -p tsconfig.json",
+    "typecheck": "node ../node_modules/typescript/bin/tsc -p tsconfig.json --noEmit",
+    "test": "node ../node_modules/vitest/vitest.mjs run -c vitest.config.ts"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}

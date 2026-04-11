@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "needle": {
+      "command": "/opt/homebrew/bin/tsx",
+      "args": ["src/mcp-server/index.ts"]
+    }
+  }
+}

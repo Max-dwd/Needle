@@ -1,0 +1,13 @@
+{
+  "name": "needle-browser-bridge-extension",
+  "version": "1.5.5",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node ../../node_modules/vite/bin/vite.js build",
+    "dev": "node ../../node_modules/vite/bin/vite.js build --watch",
+    "typecheck": "node ../../node_modules/typescript/bin/tsc -p tsconfig.json --noEmit",
+    "test": "node ../../node_modules/vitest/vitest.mjs run",
+    "package:release": "node scripts/package-release.mjs"
+  }
+}

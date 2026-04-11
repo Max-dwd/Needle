@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      width: 280px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 13px;
+      color: #222;
+      background: #fff;
+      padding: 16px;
+    }
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+    .header img {
+      width: 24px;
+      height: 24px;
+      border-radius: 6px;
+    }
+    .header-copy {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .eyebrow {
+      color: #2563eb;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+    .header h1 { font-size: 15px; font-weight: 600; }
+    .status-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      background: #f4f6fb;
+    }
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .dot.connected { background: #22c55e; }
+    .dot.disconnected { background: #ef4444; }
+    .dot.connecting { background: #f59e0b; }
+    .status-text { font-size: 13px; color: #4b5563; }
+    .status-text strong { color: #111827; }
+    .hint {
+      margin-top: 10px;
+      padding: 8px 10px;
+      border-radius: 6px;
+      background: #eff6ff;
+      font-size: 11px;
+      color: #4b5563;
+      line-height: 1.5;
+      display: none;
+    }
+    .footer {
+      margin-top: 14px;
+      font-size: 11px;
+      color: #6b7280;
+      line-height: 1.5;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <img src="icons/icon-48.png" alt="Needle Browser Bridge">
+    <div class="header-copy">
+      <div class="eyebrow">Needle</div>
+      <h1>Browser Bridge</h1>
+    </div>
+  </div>
+  <div class="status-row">
+    <span class="dot disconnected" id="dot"></span>
+    <span class="status-text" id="status">Checking...</span>
+  </div>
+  <div class="hint" id="hint">
+    The bridge connects automatically when Needle starts a controlled browser task.
+  </div>
+  <div class="footer">
+    Keep this extension enabled in the same Chrome profile used for Needle Browser.
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>

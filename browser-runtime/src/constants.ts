@@ -1,0 +1,1 @@
+export const DEFAULT_DAEMON_PORT = 19825;
