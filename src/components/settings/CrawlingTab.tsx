@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { CrawlRuntimePayload, ShowToast } from './shared';
 import { crawlIntervalOptions } from './shared';
+import { useT } from '@/contexts/LanguageContext';
 
 interface CrawlingTabProps {
   showToast: ShowToast;
@@ -14,6 +15,7 @@ export default function CrawlingTab({ showToast }: CrawlingTabProps) {
   const [loading, setLoading] = useState(true);
   const [intervalSaving, setIntervalSaving] = useState(false);
   const [schedulerSaving, setSchedulerSaving] = useState(false);
+  const t = useT();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -26,7 +28,7 @@ export default function CrawlingTab({ showToast }: CrawlingTabProps) {
       setCrawlIntervalDraft(schedulerData.config.crawlInterval);
       setSchedulerEnabled(schedulerData.config.enabled);
     } catch {
-      showToast('无法读取抓取设置', 'error');
+      showToast('无法读取设置', 'error');
     } finally {
       setLoading(false);
     }
@@ -134,9 +136,9 @@ export default function CrawlingTab({ showToast }: CrawlingTabProps) {
                 onChange={(e) => setCrawlIntervalDraft(Number(e.target.value))}
                 disabled={loading || intervalSaving}
               >
-                {crawlIntervalOptions.map((opt) => (
+                {crawlIntervalOptions.map((opt, i) => (
                   <option key={opt.value} value={opt.value}>
-                    {opt.label}
+                    {t.options.crawlInterval?.[i] || opt.label}
                   </option>
                 ))}
               </select>

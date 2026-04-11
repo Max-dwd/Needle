@@ -1,5 +1,6 @@
 'use client';
 
+import { useT } from '@/contexts/LanguageContext';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ShowToast } from './shared';
 
@@ -83,6 +84,7 @@ export default function BackupTab({ showToast }: BackupTabProps) {
   const [restoreMode, setRestoreMode] = useState<RestoreMode>('full');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const t = useT();
 
   const loadStatus = useCallback(async () => {
     setLoading(true);
@@ -90,11 +92,11 @@ export default function BackupTab({ showToast }: BackupTabProps) {
       const res = await fetch('/api/backup/restore', { cache: 'no-store' });
       const data = (await res.json()) as BackupStatusPayload & { error?: string };
       if (!res.ok) {
-        throw new Error(data.error || '无法读取备份状态');
+        throw new Error(data.error || 'READ_FAILED');
       }
       setStatus(data);
     } catch {
-      showToast('无法读取备份状态', 'error');
+      showToast(t.settings.backup.toastReadFailed, 'error');
     } finally {
       setLoading(false);
     }
@@ -106,7 +108,7 @@ export default function BackupTab({ showToast }: BackupTabProps) {
 
   const latestBackupLabel = useMemo(() => {
     if (!status?.latestBackup) {
-      return '还没有生成过备份包。';
+      return t.settings.backup.noBackup;
     }
 
     return `${new Date(status.latestBackup.createdAt).toLocaleString()} · ${formatBytes(status.latestBackup.sizeBytes)} · ${status.latestBackup.fileName}`;
@@ -147,10 +149,10 @@ export default function BackupTab({ showToast }: BackupTabProps) {
       link.remove();
       URL.revokeObjectURL(objectUrl);
 
-      showToast('备份包已生成并开始下载');
+      showToast(t.settings.backup.toastBackupStarted);
       await loadStatus();
     } catch (error) {
-      const message = error instanceof Error ? error.message : '备份失败';
+      const message = error instanceof Error && error.message !== 'BACKUP_FAILED' ? error.message : t.settings.backup.toastBackupFailed;
       showToast(message, 'error');
     } finally {
       setBackupRunning(false);
@@ -159,14 +161,14 @@ export default function BackupTab({ showToast }: BackupTabProps) {
 
   const handleRestore = async () => {
     if (!selectedFile) {
-      showToast('请先选择备份包', 'error');
+      showToast(t.settings.backup.toastSelectFileFirst, 'error');
       return;
     }
 
     const confirmMessage =
       restoreMode === 'full'
-        ? '将覆盖当前数据库和本地文件，确定继续还原吗？'
-        : `将执行 ${restoreMode} 还原，确定继续吗？`;
+        ? t.settings.backup.confirmFullRestore
+        : t.settings.backup.confirmPartialRestore;
     if (!window.confirm(confirmMessage)) {
       return;
     }
@@ -195,8 +197,8 @@ export default function BackupTab({ showToast }: BackupTabProps) {
 
       showToast(
         data?.schedulerRestarted
-          ? '还原完成，调度器已恢复'
-          : '还原完成，正在刷新页面',
+          ? t.settings.backup.toastRestoreScheduler
+          : t.settings.backup.toastRestoreReload,
       );
       setSelectedFile(null);
       if (fileInputRef.current) {
@@ -207,7 +209,7 @@ export default function BackupTab({ showToast }: BackupTabProps) {
         window.location.reload();
       }, 800);
     } catch (error) {
-      const message = error instanceof Error ? error.message : '还原失败';
+      const message = error instanceof Error && error.message !== 'RESTORE_FAILED' ? error.message : t.settings.backup.toastRestoreFailed;
       showToast(message, 'error');
       await loadStatus();
     } finally {
@@ -218,16 +220,16 @@ export default function BackupTab({ showToast }: BackupTabProps) {
   return (
     <div className="settings-section-wrapper animate-in fade-in slide-in-from-bottom-4 duration-300">
       <div className="settings-group">
-        <h2 className="settings-group-title">备份下载</h2>
+        <h2 className="settings-group-title">{t.settings.backup.downloadSection}</h2>
         <div className="settings-note-box">
-          最近一次备份：{loading ? '读取中...' : latestBackupLabel}
+          {t.settings.backup.latestBackup} {loading ? t.common.loading : latestBackupLabel}
         </div>
         <div className="settings-card-group" style={{ marginTop: 16 }}>
           <div className="setting-row">
             <div className="setting-info">
-              <span className="setting-label">包含 `data/summary-md/`</span>
+              <span className="setting-label">{t.settings.backup.includeSummaryMd}</span>
               <span className="setting-description">
-                任务文件可重新生成，默认不打包。需要完整迁移中间产物时再开启。
+                {t.settings.backup.includeSummaryMdDesc}
               </span>
             </div>
             <div className="setting-control-wrapper">
@@ -245,9 +247,9 @@ export default function BackupTab({ showToast }: BackupTabProps) {
 
           <div className="setting-row">
             <div className="setting-info">
-              <span className="setting-label">包含 `.env.local`</span>
+              <span className="setting-label">{t.settings.backup.includeEnv}</span>
               <span className="setting-description">
-                默认跳过敏感配置。只有在你明确需要跨机器迁移凭证时才建议开启。
+                {t.settings.backup.includeEnvDesc}
               </span>
             </div>
             <div className="setting-control-wrapper">
@@ -272,29 +274,29 @@ export default function BackupTab({ showToast }: BackupTabProps) {
               onClick={handleBackup}
               disabled={backupRunning}
             >
-              {backupRunning ? '正在打包...' : '立即备份并下载'}
+              {backupRunning ? t.settings.backup.packing : t.settings.backup.backupNow}
             </button>
           </div>
         </div>
       </div>
 
       <div className="settings-group">
-        <h2 className="settings-group-title">上传还原</h2>
+        <h2 className="settings-group-title">{t.settings.backup.restoreSection}</h2>
         <div className="settings-note-box">
-          <p>浏览器内还原会覆盖本地持久化数据。</p>
+          <p>{t.settings.backup.restoreWarning1}</p>
           <p style={{ marginTop: 8 }}>
-            当前状态：
+            {t.settings.backup.currentState}
             {status?.readiness.canRestore
-              ? '系统空闲，可以发起还原。'
-              : status?.readiness.busyReasons.join('；') || '读取中...'}
+              ? t.settings.backup.systemIdle
+              : status?.readiness.busyReasons.join('；') || t.common.loading}
           </p>
         </div>
         <div className="settings-card-group" style={{ marginTop: 16 }}>
           <div className="setting-row">
             <div className="setting-info">
-              <span className="setting-label">还原模式</span>
+              <span className="setting-label">{t.settings.backup.restoreMode}</span>
               <span className="setting-description">
-                `full` 会替换数据库和文件；其余模式只覆盖指定部分。
+                {t.settings.backup.restoreModeDesc}
               </span>
             </div>
             <div className="setting-control-wrapper">
@@ -306,9 +308,9 @@ export default function BackupTab({ showToast }: BackupTabProps) {
                 }
                 disabled={restoreRunning}
               >
-                {restoreModeOptions.map((option) => (
+                {restoreModeOptions.map((option, i) => (
                   <option key={option.value} value={option.value}>
-                    {option.label}
+                    {t.options.restoreMode?.[i]?.label || option.label}
                   </option>
                 ))}
               </select>
@@ -317,10 +319,12 @@ export default function BackupTab({ showToast }: BackupTabProps) {
 
           <div className="setting-row" style={{ alignItems: 'flex-start' }}>
             <div className="setting-info">
-              <span className="setting-label">备份包</span>
+              <span className="setting-label">{t.settings.backup.backupPackage}</span>
               <span className="setting-description">
-                {restoreModeOptions.find((option) => option.value === restoreMode)
-                  ?.description || ''}
+                {(() => {
+                  const idx = restoreModeOptions.findIndex(o => o.value === restoreMode);
+                  return idx !== -1 ? (t.options.restoreMode?.[idx]?.description || restoreModeOptions[idx].description) : '';
+                })()}
               </span>
             </div>
             <div
@@ -339,7 +343,7 @@ export default function BackupTab({ showToast }: BackupTabProps) {
               <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
                 {selectedFile
                   ? `${selectedFile.name} · ${formatBytes(selectedFile.size)}`
-                  : '尚未选择文件'}
+                  : t.settings.backup.noFileSelected}
               </span>
             </div>
           </div>
@@ -358,14 +362,14 @@ export default function BackupTab({ showToast }: BackupTabProps) {
               }}
               disabled={restoreRunning || !selectedFile}
             >
-              清空选择
+              {t.settings.backup.clearSelection}
             </button>
             <button
               className="premium-button primary"
               onClick={handleRestore}
               disabled={restoreRunning || !selectedFile || !status?.readiness.canRestore}
             >
-              {restoreRunning ? '正在还原...' : '上传并还原'}
+              {restoreRunning ? t.settings.backup.restoring : t.settings.backup.uploadAndRestore}
             </button>
           </div>
         </div>

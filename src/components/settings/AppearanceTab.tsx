@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useTheme } from '@/contexts/ThemeContext';
+import { useLanguage, useT } from '@/contexts/LanguageContext';
 import type {
   HomeIntentShortcutSettings,
   PlayerKeyboardModeSettings,
@@ -14,6 +15,8 @@ interface AppearanceTabProps {
 
 export default function AppearanceTab({ showToast }: AppearanceTabProps) {
   const { mode, setMode } = useTheme();
+  const { language, setLanguage } = useLanguage();
+  const t = useT();
   const [playerKeyboardModeEnabled, setPlayerKeyboardModeEnabled] =
     useState(true);
   const [homeIntentShortcutsEnabled, setHomeIntentShortcutsEnabled] =
@@ -39,7 +42,7 @@ export default function AppearanceTab({ showToast }: AppearanceTabProps) {
           setHomeIntentShortcutsEnabled(homeData.enabled !== false);
         }
       } catch {
-        showToast('无法读取外观设置', 'error');
+        showToast(t.settings.appearance.toastReadFailed, 'error');
       } finally {
         setLoading(false);
       }
@@ -58,14 +61,14 @@ export default function AppearanceTab({ showToast }: AppearanceTabProps) {
         body: JSON.stringify({ enabled: nextEnabled }),
       });
       if (!res.ok) {
-        showToast('切换播放器键盘模式失败', 'error');
+        showToast(t.settings.appearance.toastSwitchPlayerFailed, 'error');
         return;
       }
       const data = (await res.json()) as PlayerKeyboardModeSettings;
       setPlayerKeyboardModeEnabled(data.enabled !== false);
-      showToast(nextEnabled ? '播放器键盘优先已开启' : '播放器键盘优先已关闭');
+      showToast(nextEnabled ? t.settings.appearance.toastPlayerOn : t.settings.appearance.toastPlayerOff);
     } catch {
-      showToast('切换播放器键盘模式失败，请稍后重试', 'error');
+      showToast(t.settings.appearance.toastSwitchPlayerError, 'error');
     } finally {
       setSaving(false);
     }
@@ -81,16 +84,16 @@ export default function AppearanceTab({ showToast }: AppearanceTabProps) {
         body: JSON.stringify({ enabled: nextEnabled }),
       });
       if (!res.ok) {
-        showToast('切换首页 intent 快捷键失败', 'error');
+        showToast(t.settings.appearance.toastSwitchHomeFailed, 'error');
         return;
       }
       const data = (await res.json()) as HomeIntentShortcutSettings;
       setHomeIntentShortcutsEnabled(data.enabled !== false);
       showToast(
-        nextEnabled ? '首页 intent 快捷键已开启' : '首页 intent 快捷键已关闭',
+        nextEnabled ? t.settings.appearance.toastHomeOn : t.settings.appearance.toastHomeOff,
       );
     } catch {
-      showToast('切换首页 intent 快捷键失败，请稍后重试', 'error');
+      showToast(t.settings.appearance.toastSwitchHomeError, 'error');
     } finally {
       setSaving(false);
     }
@@ -99,14 +102,13 @@ export default function AppearanceTab({ showToast }: AppearanceTabProps) {
   return (
     <div className="settings-section-wrapper animate-in fade-in slide-in-from-bottom-4 duration-300">
       <div className="settings-group">
-        <h2 className="settings-group-title">播放器键盘行为</h2>
+        <h2 className="settings-group-title">{t.settings.appearance.playerKeyboardBehavior}</h2>
         <div className="settings-card-group">
           <div className="setting-row">
             <div className="setting-info">
-              <span className="setting-label">默认焦点落在播放器</span>
+              <span className="setting-label">{t.settings.appearance.defaultFocusPlayer}</span>
               <span className="setting-description">
-                播放器打开后直接聚焦到真实播放器本身，`Space`
-                等按键由播放器原生处理。
+                {t.settings.appearance.defaultFocusPlayerDesc}
               </span>
             </div>
             <div className="setting-control-wrapper">
@@ -124,7 +126,7 @@ export default function AppearanceTab({ showToast }: AppearanceTabProps) {
 
           <div className="setting-row" style={{ alignItems: 'flex-start' }}>
             <div className="setting-info" style={{ flex: 1 }}>
-              <span className="setting-label">当前约定</span>
+              <span className="setting-label">{t.settings.appearance.currentConvention}</span>
               <div style={{ marginTop: 10 }}>
                 <table
                   style={{
@@ -136,11 +138,11 @@ export default function AppearanceTab({ showToast }: AppearanceTabProps) {
                 >
                   <tbody>
                     {[
-                      { key: 'Space', desc: '由播放器原生处理播放 / 暂停' },
-                      { key: 'Esc', desc: '由页面关闭播放器弹层' },
+                      { key: 'Space', desc: t.settings.appearance.conventionSpace },
+                      { key: 'Esc', desc: t.settings.appearance.conventionEsc },
                       {
                         key: 'Tab / ` / ·',
-                        desc: '不再用于切换播放器内部焦点',
+                        desc: t.settings.appearance.conventionTab,
                       },
                     ].map(({ key, desc }) => (
                       <tr key={key}>
@@ -187,14 +189,13 @@ export default function AppearanceTab({ showToast }: AppearanceTabProps) {
       </div>
 
       <div className="settings-group">
-        <h2 className="settings-group-title">首页快捷键</h2>
+        <h2 className="settings-group-title">{t.settings.appearance.homeIntentShortcutsSection}</h2>
         <div className="settings-card-group">
           <div className="setting-row">
             <div className="setting-info">
-              <span className="setting-label">首页 intent 快捷键</span>
+              <span className="setting-label">{t.settings.appearance.homeIntentShortcutsLabel}</span>
               <span className="setting-description">
-                在首页视频流中按 Tab 切换到下一个 intent，按 ` / ·
-                切换到上一个 intent。输入框聚焦时自动失效。
+                {t.settings.appearance.homeIntentShortcutsDesc}
               </span>
             </div>
             <div className="setting-control-wrapper">
@@ -213,7 +214,7 @@ export default function AppearanceTab({ showToast }: AppearanceTabProps) {
           {homeIntentShortcutsEnabled && (
             <div className="setting-row" style={{ alignItems: 'flex-start' }}>
               <div className="setting-info" style={{ flex: 1 }}>
-                <span className="setting-label">快捷键说明</span>
+                <span className="setting-label">{t.settings.appearance.shortcutInstruction}</span>
                 <div style={{ marginTop: 10 }}>
                   <table
                     style={{
@@ -225,8 +226,8 @@ export default function AppearanceTab({ showToast }: AppearanceTabProps) {
                   >
                     <tbody>
                       {[
-                        { key: 'Tab', desc: '切换到下一个 intent' },
-                        { key: '` / ·', desc: '切换到上一个 intent' },
+                        { key: 'Tab', desc: t.settings.appearance.shortcutTab },
+                        { key: '` / ·', desc: t.settings.appearance.shortcutBacktick },
                       ].map(({ key, desc }) => (
                         <tr key={key}>
                           <td
@@ -273,13 +274,13 @@ export default function AppearanceTab({ showToast }: AppearanceTabProps) {
       </div>
 
       <div className="settings-group">
-        <h2 className="settings-group-title">主题</h2>
+        <h2 className="settings-group-title">{t.settings.appearance.themeSection}</h2>
         <div className="settings-card-group">
           <div className="setting-row">
             <div className="setting-info">
-              <span className="setting-label">颜色模式</span>
+              <span className="setting-label">{t.settings.appearance.themeLabel}</span>
               <span className="setting-description">
-                跟随系统时自动匹配操作系统的浅色 / 暗色设置。
+                {t.settings.appearance.themeDesc}
               </span>
             </div>
             <div className="setting-control-wrapper">
@@ -300,7 +301,43 @@ export default function AppearanceTab({ showToast }: AppearanceTabProps) {
                     transition: 'all 0.15s',
                   }}
                 >
-                  {m === 'system' ? '💻 跟随系统' : m === 'light' ? '☀️ 浅色' : '🌙 暗色'}
+                  {m === 'system' ? t.theme.system : m === 'light' ? t.theme.light : t.theme.dark}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="settings-group">
+        <h2 className="settings-group-title">{t.settings.appearance.languageSection}</h2>
+        <div className="settings-card-group">
+          <div className="setting-row">
+            <div className="setting-info">
+              <span className="setting-label">{t.language.label}</span>
+              <span className="setting-description">
+                {t.settings.appearance.languageDesc}
+              </span>
+            </div>
+            <div className="setting-control-wrapper">
+              {(['zh', 'en'] as const).map((lang) => (
+                <button
+                  key={lang}
+                  onClick={() => setLanguage(lang)}
+                  style={{
+                    padding: '6px 12px',
+                    borderRadius: 8,
+                    fontSize: 13,
+                    fontWeight: 500,
+                    border: '1px solid',
+                    borderColor: language === lang ? 'var(--accent-purple)' : 'var(--border)',
+                    background: language === lang ? 'rgba(139,92,246,0.12)' : 'transparent',
+                    color: language === lang ? 'var(--accent-purple)' : 'var(--text-secondary)',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s',
+                  }}
+                >
+                  {lang === 'zh' ? t.language.zh : t.language.en}
                 </button>
               ))}
             </div>

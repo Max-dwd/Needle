@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { useT } from '@/contexts/LanguageContext';
 import type { ShowToast, ToastType } from '@/components/settings/shared';
 
 interface ResearchIntentType {
@@ -41,6 +42,7 @@ export default function ResearchIntentManagement({
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [deleteConfirmName, setDeleteConfirmName] = useState('');
   const [deleting, setDeleting] = useState(false);
+  const t = useT();
 
   const showMessage = useCallback(
     (text: string, type: ToastType = 'success') => {
@@ -63,7 +65,7 @@ export default function ResearchIntentManagement({
       const data = await res.json() as ResearchIntentType[];
       setIntents(data);
     } catch {
-      showMessage('无法加载意图列表', 'error');
+      showMessage(t.settings.researchIntents.toastLoadFailed, 'error');
     } finally {
       setLoading(false);
     }
@@ -86,15 +88,15 @@ export default function ResearchIntentManagement({
       });
       const data: ResearchIntentType & { error?: string } = await res.json();
       if (!res.ok) {
-        showMessage(data.error || '创建失败', 'error');
+        showMessage(data.error || t.settings.researchIntents.toastCreateFailed, 'error');
         return;
       }
       setIntents((prev) => [...prev, data]);
       setNewName('');
       setShowAddForm(false);
-      showMessage(`意图 "${data.name}" 已创建`);
+      showMessage(`${t.settings.researchIntents.toastCreateSuccess}${data.name}`);
     } catch {
-      showMessage('创建失败', 'error');
+      showMessage(t.settings.researchIntents.toastCreateFailed, 'error');
     } finally {
       setAdding(false);
     }
@@ -128,7 +130,7 @@ export default function ResearchIntentManagement({
       });
       const data: ResearchIntentType & { error?: string } = await res.json();
       if (!res.ok) {
-        showMessage(data.error || '保存失败', 'error');
+        showMessage(data.error || t.settings.researchIntents.toastSaveFailed, 'error');
         return;
       }
       setIntents((prev) => {
@@ -136,9 +138,9 @@ export default function ResearchIntentManagement({
         return next.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0) || a.id - b.id);
       });
       cancelEdit();
-      showMessage('意图已更新');
+      showMessage(t.settings.researchIntents.toastUpdateSuccess);
     } catch {
-      showMessage('保存失败', 'error');
+      showMessage(t.settings.researchIntents.toastSaveFailed, 'error');
     } finally {
       setSaving(false);
     }
@@ -164,14 +166,14 @@ export default function ResearchIntentManagement({
       });
       if (!res.ok) {
         const data = await res.json() as { error?: string };
-        showMessage(data.error || '删除失败', 'error');
+        showMessage(data.error || t.settings.researchIntents.toastDeleteFailed, 'error');
         return;
       }
       setIntents((prev) => prev.filter((i) => i.id !== deletingId));
-      showMessage(`意图 "${deleteConfirmName}" 已删除`);
+      showMessage(`${t.settings.researchIntents.toastDeleteSuccess}${deleteConfirmName}`);
       cancelDelete();
     } catch {
-      showMessage('删除失败', 'error');
+      showMessage(t.settings.researchIntents.toastDeleteFailed, 'error');
     } finally {
       setDeleting(false);
     }
@@ -201,7 +203,7 @@ export default function ResearchIntentManagement({
         }}
       >
         <h2 className="settings-group-title" style={{ margin: 0 }}>
-          研究意图配置
+          {t.settings.researchIntents.researchIntentConfig}
         </h2>
         {!showAddForm && (
           <button
@@ -209,7 +211,7 @@ export default function ResearchIntentManagement({
             onClick={() => setShowAddForm(true)}
             disabled={loading}
           >
-            + 添加意图
+            {t.settings.researchIntents.addIntent}
           </button>
         )}
       </div>
@@ -229,14 +231,14 @@ export default function ResearchIntentManagement({
                 color: '#1a1a1a',
               }}
             >
-              配置名称
+              {t.settings.researchIntents.configName}
             </label>
             <input
               className="premium-input"
               type="text"
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
-              placeholder="如：竞品分析"
+              placeholder={t.settings.researchIntents.configNamePlaceholder}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') void handleAdd();
                 if (e.key === 'Escape') setShowAddForm(false);
@@ -250,7 +252,7 @@ export default function ResearchIntentManagement({
               onClick={() => void handleAdd()}
               disabled={adding || !newName.trim()}
             >
-              {adding ? '创建中...' : '确认创建'}
+              {adding ? t.settings.researchIntents.creating : t.settings.researchIntents.confirmCreate}
             </button>
             <button
               className="premium-button"
@@ -260,7 +262,7 @@ export default function ResearchIntentManagement({
               }}
               disabled={adding}
             >
-              取消
+              {t.settings.researchIntents.cancel}
             </button>
           </div>
         </div>
@@ -276,7 +278,7 @@ export default function ResearchIntentManagement({
               fontSize: 13,
             }}
           >
-            加载中...
+            {t.settings.researchIntents.loading}
           </div>
         ) : intents.length === 0 ? (
           <div
@@ -287,7 +289,7 @@ export default function ResearchIntentManagement({
               fontSize: 13,
             }}
           >
-            暂无配置
+            {t.settings.researchIntents.noIntents}
           </div>
         ) : (
           <>
@@ -300,11 +302,11 @@ export default function ResearchIntentManagement({
                 background: '#fafafa',
               }}
             >
-              <span style={{ fontSize: 12, fontWeight: 600, color: '#888' }}>名称</span>
-              <span style={{ fontSize: 12, fontWeight: 600, color: '#888' }}>Slug</span>
-              <span style={{ fontSize: 12, fontWeight: 600, color: '#888' }}>排序</span>
-              <span style={{ fontSize: 12, fontWeight: 600, color: '#888' }}>导出模板</span>
-              <span style={{ fontSize: 12, fontWeight: 600, color: '#888', textAlign: 'center' }}>操作</span>
+              <span style={{ fontSize: 12, fontWeight: 600, color: '#888' }}>{t.settings.researchIntents.name}</span>
+              <span style={{ fontSize: 12, fontWeight: 600, color: '#888' }}>{t.settings.researchIntents.slug}</span>
+              <span style={{ fontSize: 12, fontWeight: 600, color: '#888' }}>{t.settings.researchIntents.sortItem}</span>
+              <span style={{ fontSize: 12, fontWeight: 600, color: '#888' }}>{t.settings.researchIntents.exportTemplate}</span>
+              <span style={{ fontSize: 12, fontWeight: 600, color: '#888', textAlign: 'center' }}>{t.settings.researchIntents.actions}</span>
             </div>
 
             {intents.map((intent) => {
@@ -346,7 +348,7 @@ export default function ResearchIntentManagement({
                         {intent.name}
                         {intent.is_preset === 1 && (
                           <span style={{ fontSize: 10, background: '#e0e0e0', padding: '2px 6px', borderRadius: 4, fontWeight: 'normal' }}>
-                            预设
+                            {t.settings.researchIntents.preset}
                           </span>
                         )}
                       </span>
@@ -382,7 +384,7 @@ export default function ResearchIntentManagement({
                        />
                     ) : (
                        <div style={{ fontSize: 13, color: '#666', whiteSpace: 'pre-wrap', maxHeight: 80, overflowY: 'auto', background: '#f5f5f5', padding: '4px 8px', borderRadius: 4 }}>
-                         {intent.export_template || '默认模板'}
+                         {intent.export_template || t.settings.researchIntents.defaultTemplate}
                        </div>
                     )}
                   </div>
@@ -403,7 +405,7 @@ export default function ResearchIntentManagement({
                            onClick={() => void handleSaveEdit(intent)}
                            disabled={saving || !editName.trim()}
                          >
-                           保存
+                           {t.settings.researchIntents.save}
                          </button>
                          <button
                            className="premium-button"
@@ -411,13 +413,13 @@ export default function ResearchIntentManagement({
                            onClick={cancelEdit}
                            disabled={saving}
                          >
-                           取消
+                           {t.settings.researchIntents.cancel}
                          </button>
                        </>
                     ) : (
                        <>
                          <button
-                           title="编辑"
+                           title={t.settings.researchIntents.edit}
                            style={{
                              background: 'none',
                              border: '1px solid oklch(0.922 0 0)',
@@ -430,11 +432,11 @@ export default function ResearchIntentManagement({
                            }}
                            onClick={() => startEdit(intent)}
                          >
-                           ✎ 编辑
+                           {t.settings.researchIntents.edit}
                          </button>
                          {intent.is_preset !== 1 && (
                            <button
-                             title="删除"
+                             title={t.settings.researchIntents.delete}
                              style={{
                                background: 'none',
                                border: '1px solid #fca5a5',
@@ -448,7 +450,7 @@ export default function ResearchIntentManagement({
                              }}
                              onClick={() => openDeleteConfirm(intent)}
                            >
-                             🗑 删除
+                             {t.settings.researchIntents.delete}
                            </button>
                          )}
                        </>
@@ -492,10 +494,10 @@ export default function ResearchIntentManagement({
                 marginTop: 0,
               }}
             >
-              确认删除意图？
+              {t.settings.researchIntents.deleteConfirmTitle}
             </h3>
             <p style={{ fontSize: 14, color: '#666', lineHeight: 1.5, marginBottom: 24 }}>
-              确认要删除意图 <strong>{deleteConfirmName}</strong> 吗？与此意图关联的收藏项如果在清单中可能会受到影响。此操作不可恢复。
+              {t.settings.researchIntents.deleteConfirmDesc.replace('{name}', deleteConfirmName)}
             </p>
             <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
               <button
@@ -503,7 +505,7 @@ export default function ResearchIntentManagement({
                 onClick={cancelDelete}
                 disabled={deleting}
               >
-                取消
+                {t.settings.researchIntents.cancel}
               </button>
               <button
                 className="premium-button primary"
@@ -511,7 +513,7 @@ export default function ResearchIntentManagement({
                 onClick={() => void handleDelete()}
                 disabled={deleting}
               >
-                {deleting ? '删除中...' : '确认删除'}
+                {deleting ? t.settings.researchIntents.deleting : t.settings.researchIntents.confirmDelete}
               </button>
             </div>
           </div>

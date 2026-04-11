@@ -6,6 +6,7 @@ import { Geist } from 'next/font/google';
 import { cn } from '@/lib/utils';
 import { ThemeProvider } from '@/contexts/ThemeContext';
 import { PerformanceProvider } from '@/contexts/PerformanceContext';
+import { LanguageProvider } from '@/contexts/LanguageContext';
 
 const geist = Geist({ subsets: ['latin'], variable: '--font-sans' });
 
@@ -61,12 +62,14 @@ export default function RootLayout({
         <BrowserKeepalive />
         <PerformanceProvider>
           <ThemeProvider>
-            <div className="app-shell">
-              <div className="app-main-wrapper">
-                <AppSidebar />
-                <main className="main-content">{children}</main>
+            <LanguageProvider>
+              <div className="app-shell">
+                <div className="app-main-wrapper">
+                  <AppSidebar />
+                  <main className="main-content">{children}</main>
+                </div>
               </div>
-            </div>
+            </LanguageProvider>
           </ThemeProvider>
         </PerformanceProvider>
       </body>

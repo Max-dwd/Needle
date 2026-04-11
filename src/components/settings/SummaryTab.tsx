@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useT } from '@/contexts/LanguageContext';
 import type { AiSummaryConfig, ShowToast } from './shared';
 import { useAiSettings } from './shared';
 
@@ -10,10 +11,11 @@ interface SummaryTabProps {
 
 export default function SummaryTab({ showToast }: SummaryTabProps) {
   const { config, loading, saving, load, savePartial } = useAiSettings();
+  const t = useT();
 
   useEffect(() => {
-    void load().catch(() => showToast('无法读取 AI 总结设置', 'error'));
-  }, [load, showToast]);
+    void load().catch(() => showToast(t.settings.summary.toastReadFailed, 'error'));
+  }, [load, showToast, t]);
 
   if (loading && !config) {
     return null;
@@ -47,6 +49,7 @@ function SummaryTabForm({
   onSave,
   showToast,
 }: SummaryTabFormProps) {
+  const t = useT();
   const [promptTemplate, setPromptTemplate] = useState(
     config.promptTemplates?.default ||
       config.promptTemplate ||
@@ -68,17 +71,17 @@ function SummaryTabForm({
 
   const restoreDefaultPromptTemplate = () => {
     setPromptTemplate(config?.defaults.promptTemplate || '');
-    showToast('已恢复默认预览总结模板，请保存配置以生效');
+    showToast(t.settings.summary.toastRestoreDefault);
   };
 
   const restoreDefaultObsidianPrompt = () => {
     setChatObsidianPromptTemplate(config?.defaults.chatObsidianPromptTemplate || '');
-    showToast('已恢复默认笔记模式模板，请保存配置以生效');
+    showToast(t.settings.summary.toastRestoreDefaultObsidian);
   };
 
   const restoreDefaultRoastPrompt = () => {
     setChatRoastPromptTemplate(config?.defaults.chatRoastPromptTemplate || '');
-    showToast('已恢复默认吐槽模式模板，请保存配置以生效');
+    showToast(t.settings.summary.toastRestoreDefaultRoast);
   };
 
   const handleSave = async () => {
@@ -93,25 +96,23 @@ function SummaryTabForm({
         defaultModelId,
         autoDefaultModelId,
       });
-      showToast('设置已保存');
+      showToast(t.settings.summary.toastSaveSuccess);
     } catch (error) {
-      showToast(
-        error instanceof Error ? error.message : '保存失败，请稍后重试',
-        'error',
-      );
+      const message = error instanceof Error && error.message !== 'SAVE_FAILED' ? error.message : t.settings.summary.toastSaveError;
+      showToast(message, 'error');
     }
   };
 
   return (
     <div className="settings-section-wrapper animate-in fade-in slide-in-from-bottom-4 duration-300">
       <div className="settings-group">
-        <h2 className="settings-group-title">摘要 Prompt 模板</h2>
+        <h2 className="settings-group-title">{t.settings.summary.summaryTemplateSection}</h2>
         <div className="settings-card-group">
           <div className="setting-row" style={{ borderBottom: 'none' }}>
             <div className="setting-info">
-              <span className="setting-label">视频摘要 (默认)</span>
+              <span className="setting-label">{t.settings.summary.defaultSummary}</span>
               <span className="setting-description">
-                自定义视频预览页摘要生成的系统指令。
+                {t.settings.summary.defaultSummaryDesc}
               </span>
             </div>
           </div>
@@ -139,7 +140,7 @@ function SummaryTabForm({
                   promptTemplate === (config?.defaults.promptTemplate || '')
                 }
               >
-                恢复默认
+                {t.settings.summary.restoreDefault}
               </button>
             </div>
           </div>
@@ -147,14 +148,14 @@ function SummaryTabForm({
       </div>
 
       <div className="settings-group">
-        <h2 className="settings-group-title">视频问答 Prompt 模板</h2>
+        <h2 className="settings-group-title">{t.settings.summary.qaTemplateSection}</h2>
         <div className="settings-card-group">
           {/* Obsidian Mode */}
           <div className="setting-row" style={{ borderBottom: 'none' }}>
             <div className="setting-info">
-              <span className="setting-label">笔记模式 (Obsidian)</span>
+              <span className="setting-label">{t.settings.summary.obsidianMode}</span>
               <span className="setting-description">
-                选定片段后，生成结构化 Markdown 笔记的指令。
+                {t.settings.summary.obsidianModeDesc}
               </span>
             </div>
           </div>
@@ -182,7 +183,7 @@ function SummaryTabForm({
                   chatObsidianPromptTemplate === (config?.defaults.chatObsidianPromptTemplate || '')
                 }
               >
-                恢复默认
+                {t.settings.summary.restoreDefault}
               </button>
             </div>
           </div>
@@ -192,9 +193,9 @@ function SummaryTabForm({
           {/* Roast Mode */}
           <div className="setting-row" style={{ borderBottom: 'none' }}>
             <div className="setting-info">
-              <span className="setting-label">吐槽模式 (Roast)</span>
+              <span className="setting-label">{t.settings.summary.roastMode}</span>
               <span className="setting-description">
-                选定片段后，生成犀利评论卡片原型的指令。
+                {t.settings.summary.roastModeDesc}
               </span>
             </div>
           </div>
@@ -222,7 +223,7 @@ function SummaryTabForm({
                   chatRoastPromptTemplate === (config?.defaults.chatRoastPromptTemplate || '')
                 }
               >
-                恢复默认
+                {t.settings.summary.restoreDefault}
               </button>
             </div>
           </div>
@@ -230,13 +231,13 @@ function SummaryTabForm({
       </div>
 
       <div className="settings-group">
-        <h2 className="settings-group-title">默认模型设置</h2>
+        <h2 className="settings-group-title">{t.settings.summary.defaultModelSection}</h2>
         <div className="settings-card-group">
           <div className="setting-row">
             <div className="setting-info">
-              <span className="setting-label">手动总结模型</span>
+              <span className="setting-label">{t.settings.summary.manualModel}</span>
               <span className="setting-description">
-                点击视频「生成总结」按钮时使用的模型。
+                {t.settings.summary.manualModelDesc}
               </span>
             </div>
             <div className="setting-control-wrapper" style={{ width: 240 }}>
@@ -247,7 +248,7 @@ function SummaryTabForm({
                 style={{ width: '100%' }}
                 disabled={saving}
               >
-                <option value="">-- 选择模型 --</option>
+                <option value="">{t.settings.summary.selectModel}</option>
                 {(config?.models || []).map((model) => (
                   <option key={model.id} value={model.id}>
                     {model.name}
@@ -258,9 +259,9 @@ function SummaryTabForm({
           </div>
           <div className="setting-row">
             <div className="setting-info">
-              <span className="setting-label">自动总结模型</span>
+              <span className="setting-label">{t.settings.summary.autoModel}</span>
               <span className="setting-description">
-                自动化触发总结时使用的默认模型。
+                {t.settings.summary.autoModelDesc}
               </span>
             </div>
             <div className="setting-control-wrapper" style={{ width: 240 }}>
@@ -271,7 +272,7 @@ function SummaryTabForm({
                 style={{ width: '100%' }}
                 disabled={saving}
               >
-                <option value="">-- 选择模型 --</option>
+                <option value="">{t.settings.summary.selectModel}</option>
                 {(config?.models || []).map((model) => (
                   <option key={model.id} value={model.id}>
                     {model.name}
@@ -289,7 +290,7 @@ function SummaryTabForm({
               onClick={handleSave}
               disabled={saving}
             >
-              {saving ? '正在保存...' : '保存配置'}
+              {saving ? t.settings.summary.saving : t.settings.summary.saveConfig}
             </button>
           </div>
         </div>

@@ -321,7 +321,7 @@ export function useAiSettings() {
         cache: 'no-store',
       });
       if (!res.ok) {
-        throw new Error('无法读取 AI 设置');
+        throw new Error('READ_FAILED');
       }
       const data = (await res.json()) as AiSummaryConfig;
       setConfig(data);
@@ -341,7 +341,7 @@ export function useAiSettings() {
       });
       const data = (await res.json()) as AiSummaryConfig & { error?: string };
       if (!res.ok) {
-        throw new Error(data.error || '保存失败');
+        throw new Error(data.error || 'SAVE_FAILED');
       }
       setConfig(data);
       return data;

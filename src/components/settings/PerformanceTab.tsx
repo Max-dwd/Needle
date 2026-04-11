@@ -1,5 +1,6 @@
 'use client';
 
+import { useT } from '@/contexts/LanguageContext';
 import { useCallback, useEffect, useState } from 'react';
 import type {
   BrowserKeepaliveStatus,
@@ -32,6 +33,7 @@ export default function PerformanceTab({ showToast }: PerformanceTabProps) {
   const [frontendMobileDraft, setFrontendMobileDraft] =
     useState<PerformanceMode>('full');
   const [frontendSaving, setFrontendSaving] = useState(false);
+  const t = useT();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -42,7 +44,7 @@ export default function PerformanceTab({ showToast }: PerformanceTabProps) {
         fetch('/api/settings/frontend-performance', { cache: 'no-store' }),
       ]);
       if (!performanceRes.ok || !keepaliveRes.ok || !frontendRes.ok) {
-        throw new Error('无法读取性能设置');
+        throw new Error('READ_FAILED');
       }
       const performanceData = (await performanceRes.json()) as PerformanceStatus;
       const keepaliveData = (await keepaliveRes.json()) as BrowserKeepaliveStatus;
@@ -56,7 +58,7 @@ export default function PerformanceTab({ showToast }: PerformanceTabProps) {
       setFrontendDesktopDraft(frontendData.desktop);
       setFrontendMobileDraft(frontendData.mobile);
     } catch {
-      showToast('无法读取性能设置', 'error');
+      showToast(t.settings.performance.toastReadFailed, 'error');
     } finally {
       setLoading(false);
     }
@@ -76,14 +78,14 @@ export default function PerformanceTab({ showToast }: PerformanceTabProps) {
       });
       const data = (await res.json()) as PerformanceStatus & { error?: string };
       if (!res.ok) {
-        showToast(data.error || '保存失败', 'error');
-        return;
+        throw new Error(data.error || 'SAVE_FAILED');
       }
       setPerformance(data);
       setPerformanceDraft(data.profile);
-      showToast(`后台抓取性能已切换为${data.profileLabel}档`);
-    } catch {
-      showToast('保存失败，请稍后重试', 'error');
+      showToast(`${t.settings.performance.toastPerformanceSwitched}${data.profileLabel}`); // omitted 档 to match i18n flexibly
+    } catch (error) {
+      const message = error instanceof Error && error.message !== 'SAVE_FAILED' ? error.message : t.settings.performance.toastSaveError;
+      showToast(message, 'error');
     } finally {
       setPerformanceSaving(false);
     }
@@ -99,8 +101,7 @@ export default function PerformanceTab({ showToast }: PerformanceTabProps) {
       });
       const data = (await res.json()) as BrowserKeepaliveStatus & { error?: string };
       if (!res.ok) {
-        showToast(data.error || '保存失败', 'error');
-        return;
+        throw new Error(data.error || 'SAVE_FAILED');
       }
       setKeepalive(data);
       setKeepaliveDraft(data.preset);
@@ -112,9 +113,10 @@ export default function PerformanceTab({ showToast }: PerformanceTabProps) {
           },
         }),
       );
-      showToast(`浏览器保温已切换为${data.label}模式`);
-    } catch {
-      showToast('保存失败，请稍后重试', 'error');
+      showToast(`${t.settings.performance.toastKeepaliveSwitched}${data.label}`); // omitted 模式 to match i18n flexibly
+    } catch (error) {
+      const message = error instanceof Error && error.message !== 'SAVE_FAILED' ? error.message : t.settings.performance.toastSaveError;
+      showToast(message, 'error');
     } finally {
       setKeepaliveSaving(false);
     }
@@ -132,8 +134,7 @@ export default function PerformanceTab({ showToast }: PerformanceTabProps) {
         }),
       });
       if (!res.ok) {
-        showToast('保存失败', 'error');
-        return;
+        throw new Error('SAVE_FAILED');
       }
       const data = (await res.json()) as FrontendPerformanceSettings;
       setFrontendSettings(data);
@@ -145,9 +146,9 @@ export default function PerformanceTab({ showToast }: PerformanceTabProps) {
         new CustomEvent('frontend-performance-changed', { detail: data }),
       );
 
-      showToast('前端性能设置已更新');
-    } catch {
-      showToast('保存失败，请稍后重试', 'error');
+      showToast(t.settings.performance.toastFrontendUpdated);
+    } catch (error) {
+      showToast(t.settings.performance.toastSaveError, 'error');
     } finally {
       setFrontendSaving(false);
     }
@@ -156,13 +157,13 @@ export default function PerformanceTab({ showToast }: PerformanceTabProps) {
   return (
     <div className="settings-section-wrapper animate-in fade-in slide-in-from-bottom-4 duration-300">
       <div className="settings-group">
-        <h2 className="settings-group-title">后台抓取性能</h2>
+        <h2 className="settings-group-title">{t.settings.performance.crawlingPerformance}</h2>
         <div className="settings-card-group">
           <div className="setting-row">
             <div className="setting-info">
-              <span className="setting-label">性能档位</span>
+              <span className="setting-label">{t.settings.performance.performanceProfile}</span>
               <span className="setting-description">
-                选择后台爬取的资源占用级别。
+                {t.settings.performance.performanceProfileDesc}
               </span>
             </div>
             <div className="setting-control-wrapper">
@@ -186,9 +187,9 @@ export default function PerformanceTab({ showToast }: PerformanceTabProps) {
           </div>
           <div className="setting-row">
             <div className="setting-info">
-              <span className="setting-label">实时负载</span>
+              <span className="setting-label">{t.settings.performance.realtimeLoad}</span>
               <span className="setting-description">
-                当前事件循环延迟及降频状态。
+                {t.settings.performance.realtimeLoadDesc}
               </span>
             </div>
             <div className="setting-control-wrapper">
@@ -208,20 +209,20 @@ export default function PerformanceTab({ showToast }: PerformanceTabProps) {
               onClick={savePerformance}
               disabled={loading || performanceSaving}
             >
-              {performanceSaving ? '正在保存...' : '保存档位'}
+              {performanceSaving ? t.settings.performance.saving : t.settings.performance.saveProfile}
             </button>
           </div>
         </div>
       </div>
 
       <div className="settings-group">
-        <h2 className="settings-group-title">浏览器保温</h2>
+        <h2 className="settings-group-title">{t.settings.performance.browserKeepalive}</h2>
         <div className="settings-card-group">
           <div className="setting-row">
             <div className="setting-info">
-              <span className="setting-label">保温策略</span>
+              <span className="setting-label">{t.settings.performance.keepaliveStrategy}</span>
               <span className="setting-description">
-                控制 daemon 与受控浏览器工作区的预热强度。
+                {t.settings.performance.keepaliveStrategyDesc}
               </span>
             </div>
             <div className="setting-control-wrapper">
@@ -245,9 +246,9 @@ export default function PerformanceTab({ showToast }: PerformanceTabProps) {
           </div>
           <div className="setting-row">
             <div className="setting-info">
-              <span className="setting-label">当前行为</span>
+              <span className="setting-label">{t.settings.performance.currentBehavior}</span>
               <span className="setting-description">
-                {keepalive?.description ?? '读取中'}
+                {keepalive?.description ?? t.settings.performance.reading}
               </span>
             </div>
             <div className="setting-control-wrapper">
@@ -267,20 +268,20 @@ export default function PerformanceTab({ showToast }: PerformanceTabProps) {
               onClick={saveKeepalive}
               disabled={loading || keepaliveSaving}
             >
-              {keepaliveSaving ? '正在保存...' : '保存策略'}
+              {keepaliveSaving ? t.settings.performance.saving : t.settings.performance.saveStrategy}
             </button>
           </div>
         </div>
       </div>
 
       <div className="settings-group">
-        <h2 className="settings-group-title">前端性能</h2>
+        <h2 className="settings-group-title">{t.settings.performance.frontendPerformance}</h2>
         <div className="settings-card-group">
           <div className="setting-row">
             <div className="setting-info">
-              <span className="setting-label">桌面端</span>
+              <span className="setting-label">{t.settings.performance.desktop}</span>
               <span className="setting-description">
-                控制桌面浏览器的视觉特效与动画。
+                {t.settings.performance.desktopDesc}
               </span>
             </div>
             <div className="setting-control-wrapper">
@@ -292,16 +293,16 @@ export default function PerformanceTab({ showToast }: PerformanceTabProps) {
                 }
                 disabled={loading || frontendSaving}
               >
-                <option value="full">完全</option>
-                <option value="reduced">降低效果</option>
+                <option value="full">{t.settings.performance.fullEffect}</option>
+                <option value="reduced">{t.settings.performance.reducedEffect}</option>
               </select>
             </div>
           </div>
           <div className="setting-row">
             <div className="setting-info">
-              <span className="setting-label">移动端</span>
+              <span className="setting-label">{t.settings.performance.mobile}</span>
               <span className="setting-description">
-                控制移动端（手机/平板）的视觉特效与动画。
+                {t.settings.performance.mobileDesc}
               </span>
             </div>
             <div className="setting-control-wrapper">
@@ -313,8 +314,8 @@ export default function PerformanceTab({ showToast }: PerformanceTabProps) {
                 }
                 disabled={loading || frontendSaving}
               >
-                <option value="full">完全</option>
-                <option value="reduced">降低效果</option>
+                <option value="full">{t.settings.performance.fullEffect}</option>
+                <option value="reduced">{t.settings.performance.reducedEffect}</option>
               </select>
             </div>
           </div>
@@ -327,7 +328,7 @@ export default function PerformanceTab({ showToast }: PerformanceTabProps) {
               onClick={saveFrontendPerformance}
               disabled={loading || frontendSaving}
             >
-              {frontendSaving ? '正在保存...' : '保存前端设置'}
+              {frontendSaving ? t.settings.performance.saving : t.settings.performance.saveFrontendSettings}
             </button>
           </div>
         </div>

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useT } from '@/contexts/LanguageContext';
 import type { AiSummaryConfig, AiSummaryModelConfig, ShowToast } from './shared';
 import { useAiSettings } from './shared';
 
@@ -18,10 +19,11 @@ export default function ModelsTab({ showToast }: ModelsTabProps) {
     savePartial,
     testConnection,
   } = useAiSettings();
+  const t = useT();
 
   useEffect(() => {
-    void load().catch(() => showToast('无法读取 AI 总结设置', 'error'));
-  }, [load, showToast]);
+    void load().catch(() => showToast(t.settings.models.toastReadFailed, 'error'));
+  }, [load, showToast, t]);
 
   if (loading && !config) {
     return null;
@@ -61,6 +63,7 @@ function ModelsTabForm({
   onTest,
   showToast,
 }: ModelsTabFormProps) {
+  const t = useT();
   const [endpoint, setEndpoint] = useState(config.endpoint || '');
   const [apiKey, setApiKey] = useState('');
   const [model, setModel] = useState(config.model || '');
@@ -83,7 +86,7 @@ function ModelsTabForm({
       ...current,
       {
         id: Math.random().toString(36).slice(2),
-        name: '新模型',
+        name: t.settings.models.newModel,
         endpoint: '',
         apiKey: '',
         model: '',
@@ -136,24 +139,22 @@ function ModelsTabForm({
   const handleSave = async () => {
     try {
       await onSave(buildPayload());
-      showToast('模型配置已保存');
+      showToast(t.settings.models.toastSaveSuccess);
     } catch (error) {
-      showToast(
-        error instanceof Error ? error.message : '保存失败，请稍后重试',
-        'error',
-      );
+      const message = error instanceof Error && error.message !== 'SAVE_FAILED' ? error.message : t.settings.models.toastSaveError;
+      showToast(message, 'error');
     }
   };
 
   const handleTest = async () => {
     try {
       await onTest(buildPayload());
-      showToast('连接测试成功！模型响应正常。');
+      showToast(t.settings.models.toastTestSuccess);
     } catch (error) {
       showToast(
         error instanceof Error
-          ? `连接测试失败：${error.message}`
-          : '连接测试失败，请检查网络',
+          ? `${t.settings.models.toastTestFailed}${error.message}`
+          : t.settings.models.toastTestNetworkError,
         'error',
       );
     }
@@ -162,12 +163,12 @@ function ModelsTabForm({
   return (
     <div className="settings-section-wrapper animate-in fade-in slide-in-from-bottom-4 duration-300">
       <div className="settings-group">
-        <h2 className="settings-group-title">默认 AI 接口配置</h2>
+        <h2 className="settings-group-title">{t.settings.models.defaultApiConfig}</h2>
         <div className="settings-card-group">
           <div className="setting-row">
             <div className="setting-info">
-              <span className="setting-label">API Endpoint</span>
-              <span className="setting-description">AI 服务商的接口地址。</span>
+              <span className="setting-label">{t.settings.models.apiEndpoint}</span>
+              <span className="setting-description">{t.settings.models.apiEndpointDesc}</span>
             </div>
             <div className="setting-control-wrapper" style={{ width: 400 }}>
               <input
@@ -181,8 +182,8 @@ function ModelsTabForm({
           </div>
           <div className="setting-row">
             <div className="setting-info">
-              <span className="setting-label">API Key</span>
-              <span className="setting-description">用于身份验证的密钥。</span>
+              <span className="setting-label">{t.settings.models.apiKey}</span>
+              <span className="setting-description">{t.settings.models.apiKeyDesc}</span>
             </div>
             <div className="setting-control-wrapper" style={{ width: 400 }}>
               <input
@@ -197,15 +198,15 @@ function ModelsTabForm({
                 onClick={() => setShowApiKey((current) => !current)}
                 type="button"
               >
-                {showApiKey ? '隐藏' : '显示'}
+                {showApiKey ? t.settings.models.hide : t.settings.models.show}
               </button>
             </div>
           </div>
           <div className="setting-row">
             <div className="setting-info">
-              <span className="setting-label">默认模型名</span>
+              <span className="setting-label">{t.settings.models.defaultModelName}</span>
               <span className="setting-description">
-                当前手动总结默认模型对应的模型名称。
+                {t.settings.models.defaultModelNameDesc}
               </span>
             </div>
             <div className="setting-control-wrapper" style={{ width: 400 }}>
@@ -228,14 +229,14 @@ function ModelsTabForm({
               disabled={saving || testing}
               style={{ marginRight: 8 }}
             >
-              {testing ? '测试中...' : '测试连接'}
+              {testing ? t.settings.models.testing : t.settings.models.testConnection}
             </button>
             <button
               className="premium-button primary"
               onClick={handleSave}
               disabled={saving || testing}
             >
-              {saving ? '正在保存...' : '保存配置'}
+              {saving ? t.settings.models.saving : t.settings.models.saveConfig}
             </button>
           </div>
         </div>
@@ -251,10 +252,10 @@ function ModelsTabForm({
           }}
         >
           <h2 className="settings-group-title" style={{ margin: 0 }}>
-            多模型管理
+            {t.settings.models.multiModelManagement}
           </h2>
           <button className="premium-button" onClick={handleAddModel}>
-            + 添加模型
+            {t.settings.models.addModel}
           </button>
         </div>
         <div className="settings-card-group">
@@ -267,7 +268,7 @@ function ModelsTabForm({
                 fontSize: 13,
               }}
             >
-              尚未添加备选模型。
+              {t.settings.models.noModels}
             </div>
           ) : (
             models.map((item, index) => (
@@ -306,7 +307,7 @@ function ModelsTabForm({
                     style={{ color: '#ef4444' }}
                     onClick={() => handleRemoveModel(index)}
                   >
-                    删除
+                    {t.settings.models.delete}
                   </button>
                 </div>
                 <div
@@ -318,7 +319,7 @@ function ModelsTabForm({
                 >
                   <input
                     className="premium-input"
-                    placeholder="Endpoint"
+                    placeholder={t.settings.models.endpointPlaceholder}
                     value={item.endpoint}
                     onChange={(e) =>
                       handleUpdateModel(index, 'endpoint', e.target.value)
@@ -326,7 +327,7 @@ function ModelsTabForm({
                   />
                   <input
                     className="premium-input"
-                    placeholder="Model Name"
+                    placeholder={t.settings.models.modelNamePlaceholder}
                     value={item.model}
                     onChange={(e) =>
                       handleUpdateModel(index, 'model', e.target.value)
@@ -350,14 +351,14 @@ function ModelsTabForm({
 
       <div className="settings-group">
         <h2 className="settings-group-title" style={{ marginBottom: 16 }}>
-          共享预算
+          {t.settings.models.sharedBudget}
         </h2>
         <div className="settings-card-group">
           <div className="setting-row">
             <div className="setting-info">
-              <span className="setting-label">每分钟请求上限</span>
+              <span className="setting-label">{t.settings.models.rpm}</span>
               <span className="setting-description">
-                总结和字幕 fallback 共享的 RPM。
+                {t.settings.models.rpmDesc}
               </span>
             </div>
             <div className="setting-control-wrapper" style={{ width: 240 }}>
@@ -374,9 +375,9 @@ function ModelsTabForm({
           </div>
           <div className="setting-row">
             <div className="setting-info">
-              <span className="setting-label">每日请求上限</span>
+              <span className="setting-label">{t.settings.models.rpd}</span>
               <span className="setting-description">
-                总结和字幕 fallback 共享的近 24 小时 RPD。
+                {t.settings.models.rpdDesc}
               </span>
             </div>
             <div className="setting-control-wrapper" style={{ width: 240 }}>
@@ -393,9 +394,9 @@ function ModelsTabForm({
           </div>
           <div className="setting-row">
             <div className="setting-info">
-              <span className="setting-label">每分钟 Token 上限</span>
+              <span className="setting-label">{t.settings.models.tpm}</span>
               <span className="setting-description">
-                总结和字幕 fallback 共享的 TPM。
+                {t.settings.models.tpmDesc}
               </span>
             </div>
             <div className="setting-control-wrapper" style={{ width: 240 }}>
@@ -412,9 +413,9 @@ function ModelsTabForm({
           </div>
           <div className="setting-row">
             <div className="setting-info">
-              <span className="setting-label">字幕 fallback 预留 Token</span>
+              <span className="setting-label">{t.settings.models.subtitleFallbackReserve}</span>
               <span className="setting-description">
-                字幕转录先按保守值占用预算，返回 usage 后自动校正。
+                {t.settings.models.subtitleFallbackReserveDesc}
               </span>
             </div>
             <div className="setting-control-wrapper" style={{ width: 240 }}>

@@ -2,9 +2,11 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { LogViewer } from '@/components/LogPanel';
+import { useT } from '@/contexts/LanguageContext';
 import type { CrawlRuntimePayload } from './shared';
 
 export default function LogsTab() {
+  const t = useT();
   const [todayStats, setTodayStats] = useState<CrawlRuntimePayload['status']['todayStats'] | null>(
     null,
   );
@@ -34,18 +36,18 @@ export default function LogsTab() {
   return (
     <div className="settings-section-wrapper animate-in fade-in slide-in-from-bottom-4 duration-300">
       <div className="settings-group">
-        <h2 className="settings-group-title">今日统计</h2>
+        <h2 className="settings-group-title">{t.settings.logs.todayStats}</h2>
         <div className="settings-note-box">
           {todayStats
-            ? `视频 ${todayStats.videos} / 字幕 ${todayStats.subtitles} / 摘要 ${todayStats.summaries}`
+            ? `${t.settings.logs.videos} ${todayStats.videos} / ${t.settings.logs.subtitles} ${todayStats.subtitles} / ${t.settings.logs.summaries} ${todayStats.summaries}`
             : '--'}
         </div>
       </div>
 
       <div className="settings-group">
-        <h2 className="settings-group-title">系统日志</h2>
+        <h2 className="settings-group-title">{t.settings.logs.systemLogs}</h2>
         <div className="settings-note-box">
-          日志自动轮询刷新，支持概览和详情查看。抓取今日统计也汇总在这里，方便集中排查。
+          {t.settings.logs.systemLogsDesc}
         </div>
         <div style={{ marginTop: 16 }}>
           <LogViewer active embedded showCloseButton={false} />

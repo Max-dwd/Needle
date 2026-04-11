@@ -15,6 +15,7 @@ import {
   subtitleIntervalOptions,
   useAiSettings,
 } from './shared';
+import { useT } from '@/contexts/LanguageContext';
 import { buildSubtitleBackoffFlow } from './subtitle-backoff-flow';
 
 interface SubtitlesTabProps {
@@ -59,10 +60,11 @@ export default function SubtitlesTab({ showToast }: SubtitlesTabProps) {
   const [pipelineSaving, setPipelineSaving] = useState(false);
   const [intents, setIntents] = useState<IntentOption[]>([]);
   const [channels, setChannels] = useState<ChannelOption[]>([]);
+  const t = useT();
 
   useEffect(() => {
-    void load().catch(() => showToast('无法读取 AI 总结设置', 'error'));
-  }, [load, showToast]);
+    void load().catch(() => showToast(t.settings.subtitles.toastReadSettingsFailed, 'error'));
+  }, [load, showToast, t]);
 
   useEffect(() => {
     const loadPipeline = async () => {
@@ -73,7 +75,7 @@ export default function SubtitlesTab({ showToast }: SubtitlesTabProps) {
           fetch('/api/settings/intents', { cache: 'no-store' }),
           fetch('/api/channels', { cache: 'no-store' }),
         ]);
-        if (!pipelineRes.ok) throw new Error('无法读取字幕链路配置');
+        if (!pipelineRes.ok) throw new Error(t.settings.subtitles.toastReadPipelineFailed);
         setPipelineConfig(
           (await pipelineRes.json()) as SubtitlePipelineSettingsResponse,
         );
@@ -84,7 +86,7 @@ export default function SubtitlesTab({ showToast }: SubtitlesTabProps) {
           channelsRes.ok ? ((await channelsRes.json()) as ChannelOption[]) : [],
         );
       } catch {
-        showToast('无法读取字幕链路配置', 'error');
+        showToast(t.settings.subtitles.toastReadPipelineFailed, 'error');
       } finally {
         setPipelineLoading(false);
       }
@@ -216,6 +218,7 @@ function SubtitlesTabForm({
         config.defaults.subtitleSegmentPromptTemplate ||
         '',
     );
+  const t = useT();
 
   const models = config.models || [];
   const apiFallback = pipelineConfig.apiFallback || DEFAULT_API_FALLBACK_CONFIG;
@@ -278,10 +281,10 @@ function SubtitlesTabForm({
           subtitleSegment: subtitleSegmentPromptTemplate,
         },
       });
-      showToast('字幕设置已保存');
+      showToast(t.settings.subtitles.toastSaveSettingsSuccess);
     } catch (error) {
       showToast(
-        error instanceof Error ? error.message : '保存失败，请稍后重试',
+        error instanceof Error ? error.message : t.settings.subtitles.toastSaveSettingsError,
         'error',
       );
     }
@@ -310,13 +313,13 @@ function SubtitlesTabForm({
         error?: string;
       };
       if (!res.ok) {
-        showToast(data.error || '保存字幕链路失败', 'error');
+        showToast(data.error || t.settings.subtitles.toastSavePipelineError, 'error');
         return;
       }
       onPipelineConfigChange(data);
-      showToast('字幕链路配置已保存');
+      showToast(t.settings.subtitles.toastSavePipelineSuccess);
     } catch {
-      showToast('保存字幕链路失败，请稍后重试', 'error');
+      showToast(t.settings.subtitles.toastSavePipelineError, 'error');
     } finally {
       onPipelineSavingChange(false);
     }
@@ -338,13 +341,13 @@ function SubtitlesTabForm({
         error?: string;
       };
       if (!res.ok) {
-        showToast(data.error || '重置字幕链路失败', 'error');
+        showToast(data.error || t.settings.subtitles.toastResetPipelineFailed, 'error');
         return;
       }
       onPipelineConfigChange(data);
-      showToast('字幕链路已恢复默认配置');
+      showToast(t.settings.subtitles.toastResetPipelineSuccess);
     } catch {
-      showToast('重置字幕链路失败，请稍后重试', 'error');
+      showToast(t.settings.subtitles.toastResetPipelineError, 'error');
     } finally {
       onPipelineSavingChange(false);
     }
@@ -372,7 +375,7 @@ function SubtitlesTabForm({
     const defaultChannel = channelOptions[0];
     const defaultModel = models[0];
     if (!defaultModel || (!defaultIntent && !defaultChannel)) {
-      showToast('请先配置模型，并至少存在一个意图或频道', 'error');
+      showToast(t.settings.subtitles.addRuleErrorModel, 'error');
       return;
     }
 
@@ -424,27 +427,26 @@ function SubtitlesTabForm({
     setSubtitleApiPromptTemplate(
       config.defaults.subtitleApiPromptTemplate || '',
     );
-    showToast('已恢复字幕 API 默认模板，请保存配置以生效');
+    showToast(t.settings.subtitles.toastRestoreApiPrompt);
   };
 
   const restoreDefaultSubtitleSegmentPromptTemplate = () => {
     setSubtitleSegmentPromptTemplate(
       config.defaults.subtitleSegmentPromptTemplate || '',
     );
-    showToast('已恢复分块字幕补充模板，请保存配置以生效');
+    showToast(t.settings.subtitles.toastRestoreSegmentPrompt);
   };
 
   return (
     <div className="settings-section-wrapper animate-in fade-in slide-in-from-bottom-4 duration-300">
       <div className="settings-group">
-        <h2 className="settings-group-title">浏览器字幕抓取</h2>
+        <h2 className="settings-group-title">{t.settings.subtitles.browserFetch}</h2>
         <div className="settings-card-group">
           <div className="setting-row">
             <div className="setting-info">
-              <span className="setting-label">基础抓取间隔</span>
+              <span className="setting-label">{t.settings.subtitles.baseInterval}</span>
               <span className="setting-description">
-                所有 browser 字幕任务共享同一个串行队列，但 YouTube / Bilibili
-                会分别累积退避倍数和等待间隔。
+                {t.settings.subtitles.baseIntervalDesc}
               </span>
             </div>
             <select
@@ -467,11 +469,9 @@ function SubtitlesTabForm({
 
           <div className="setting-row">
             <div className="setting-info">
-              <span className="setting-label">最大重试次数</span>
+              <span className="setting-label">{t.settings.subtitles.maxRetries}</span>
               <span className="setting-description">
-                browser
-                单次失败后会重新入队，不会阻塞后续视频。这里配置每个视频最多追加多少次
-                browser 重试。
+                {t.settings.subtitles.maxRetriesDesc}
               </span>
             </div>
             <select
@@ -496,10 +496,9 @@ function SubtitlesTabForm({
 
           <div className="setting-row">
             <div className="setting-info">
-              <span className="setting-label">当前退避状态</span>
+              <span className="setting-label">{t.settings.subtitles.currentBackoff}</span>
               <span className="setting-description">
-                连续 temporary-error
-                会按平台单独放大间隔；对应平台成功一次后自动重置。
+                {t.settings.subtitles.currentBackoffDesc}
               </span>
             </div>
             <div
@@ -528,7 +527,7 @@ function SubtitlesTabForm({
                     }}
                   >
                     {label} · ×{pipelineConfig.backoff[id].multiplier} ·
-                    连续错误 {pipelineConfig.backoff[id].consecutiveErrors}
+                    {t.settings.subtitles.consecutiveErrors} {pipelineConfig.backoff[id].consecutiveErrors}
                   </span>
                   <div
                     style={{
@@ -566,14 +565,13 @@ function SubtitlesTabForm({
       </div>
 
       <div className="settings-group">
-        <h2 className="settings-group-title">API 提取字幕</h2>
+        <h2 className="settings-group-title">{t.settings.subtitles.apiFetch}</h2>
         <div className="settings-card-group">
           <div className="setting-row">
             <div className="setting-info">
-              <span className="setting-label">启用 API fallback</span>
+              <span className="setting-label">{t.settings.subtitles.enableApiFallback}</span>
               <span className="setting-description">
-                高价值视频等待超时且 AI budget 可用时可提前逃逸到
-                API；重试全部用完后也会走 API 兜底。
+                {t.settings.subtitles.enableApiFallbackDesc}
               </span>
             </div>
             <label className="switch">
@@ -591,9 +589,9 @@ function SubtitlesTabForm({
 
           <div className="setting-row">
             <div className="setting-info">
-              <span className="setting-label">生效范围</span>
+              <span className="setting-label">{t.settings.subtitles.scope}</span>
               <span className="setting-description">
-                全局对所有视频生效；自定义只对列表中命中的频道或意图生效。
+                {t.settings.subtitles.scopeDesc}
               </span>
             </div>
             <select
@@ -606,8 +604,8 @@ function SubtitlesTabForm({
               }
               disabled={pipelineSaving || !apiFallback.enabled}
             >
-              <option value="global">全局</option>
-              <option value="custom">自定义</option>
+              <option value="global">{t.settings.subtitles.global}</option>
+              <option value="custom">{t.settings.subtitles.custom}</option>
             </select>
           </div>
 
@@ -615,10 +613,9 @@ function SubtitlesTabForm({
             <>
               <div className="setting-row">
                 <div className="setting-info">
-                  <span className="setting-label">最大等待时间</span>
+                  <span className="setting-label">{t.settings.subtitles.maxWait}</span>
                   <span className="setting-description">
-                    累计等待超过这个阈值后，如果 AI budget
-                    有余量，就会提前逃逸到 API。
+                    {t.settings.subtitles.maxWaitDesc}
                   </span>
                 </div>
                 <select
@@ -643,10 +640,9 @@ function SubtitlesTabForm({
             <>
               <div className="setting-row" style={{ borderBottom: 'none' }}>
                 <div className="setting-info">
-                  <span className="setting-label">自定义规则</span>
+                  <span className="setting-label">{t.settings.subtitles.customRules}</span>
                   <span className="setting-description">
-                    只有命中的意图或频道，才会启用 API
-                    逃逸与兜底。每条规则可独立配置最大等待时间和模型。
+                    {t.settings.subtitles.customRulesDesc}
                   </span>
                 </div>
                 <button
@@ -655,7 +651,7 @@ function SubtitlesTabForm({
                   onClick={addRule}
                   disabled={pipelineSaving || !apiFallback.enabled}
                 >
-                  添加规则
+                  {t.settings.subtitles.addRule}
                 </button>
               </div>
               <div
@@ -678,14 +674,14 @@ function SubtitlesTabForm({
                       color: '#6b7280',
                     }}
                   >
-                    <span>类型</span>
-                    <span>对象</span>
+                    <span>{t.settings.subtitles.type}</span>
+                    <span>{t.settings.subtitles.target}</span>
                     <HeaderHelp
-                      label="逃逸等待"
-                      description="累计等待超过这个时间后，如果 AI budget 有余量，就允许直接改走 API。"
+                      label={t.settings.subtitles.escapeWait}
+                      description={t.settings.subtitles.escapeWaitDesc}
                     />
-                    <span>模型</span>
-                    <span>操作</span>
+                    <span>{t.settings.subtitles.model}</span>
+                    <span>{t.settings.subtitles.actions}</span>
                   </div>
                 ) : null}
                 {apiFallback.customRules.length === 0 ? (
@@ -699,8 +695,7 @@ function SubtitlesTabForm({
                       background: '#fafafa',
                     }}
                   >
-                    还没有自定义规则。未加入列表的频道和意图，默认不会使用 API
-                    提取字幕。
+                    {t.settings.subtitles.noRules}
                   </div>
                 ) : (
                   apiFallback.customRules.map((rule) => (
@@ -731,8 +726,8 @@ function SubtitlesTabForm({
                         }
                         disabled={pipelineSaving || !apiFallback.enabled}
                       >
-                        <option value="intent">意图</option>
-                        <option value="channel">频道</option>
+                        <option value="intent">{t.settings.subtitles.intent}</option>
+                        <option value="channel">{t.settings.subtitles.channel}</option>
                       </select>
 
                       <select
@@ -810,7 +805,7 @@ function SubtitlesTabForm({
                         onClick={() => removeRule(rule.id)}
                         disabled={pipelineSaving || !apiFallback.enabled}
                       >
-                        删除
+                        {t.settings.subtitles.delete}
                       </button>
                     </div>
                   ))
@@ -829,27 +824,27 @@ function SubtitlesTabForm({
               disabled={pipelineSaving}
               style={{ marginRight: 8 }}
             >
-              恢复默认
+              {t.settings.subtitles.restoreDefault}
             </button>
             <button
               className="premium-button primary"
               onClick={savePipelineConfig}
               disabled={pipelineSaving}
             >
-              {pipelineSaving ? '正在保存...' : '保存链路'}
+              {pipelineSaving ? t.settings.subtitles.savingPipeline : t.settings.subtitles.savePipeline}
             </button>
           </div>
         </div>
       </div>
 
       <div className="settings-group">
-        <h2 className="settings-group-title">字幕 Prompt 模板</h2>
+        <h2 className="settings-group-title">{t.settings.subtitles.promptTemplate}</h2>
         <div className="settings-card-group">
           <div className="setting-row" style={{ borderBottom: 'none' }}>
             <div className="setting-info">
-              <span className="setting-label">字幕 API Prompt 模板</span>
+              <span className="setting-label">{t.settings.subtitles.apiPrompt}</span>
               <span className="setting-description">
-                用于 API 提取字幕时的提示词。
+                {t.settings.subtitles.apiPromptDesc}
               </span>
             </div>
           </div>
@@ -878,16 +873,16 @@ function SubtitlesTabForm({
                     (config.defaults.subtitleApiPromptTemplate || '')
                 }
               >
-                恢复默认
+                {t.settings.subtitles.restoreDefault}
               </button>
             </div>
           </div>
 
           <div className="setting-row" style={{ borderBottom: 'none' }}>
             <div className="setting-info">
-              <span className="setting-label">分块字幕补充 Prompt</span>
+              <span className="setting-label">{t.settings.subtitles.segmentPrompt}</span>
               <span className="setting-description">
-                仅在长视频按片段抓字幕时追加到主模板后面。
+                {t.settings.subtitles.segmentPromptDesc}
               </span>
             </div>
           </div>
@@ -916,7 +911,7 @@ function SubtitlesTabForm({
                     (config.defaults.subtitleSegmentPromptTemplate || '')
                 }
               >
-                恢复默认
+                {t.settings.subtitles.restoreDefault}
               </button>
             </div>
           </div>
@@ -930,7 +925,7 @@ function SubtitlesTabForm({
               onClick={savePrompts}
               disabled={saving}
             >
-              {saving ? '正在保存...' : '保存配置'}
+              {saving ? t.settings.subtitles.savingSettings : t.settings.subtitles.saveSettings}
             </button>
           </div>
         </div>

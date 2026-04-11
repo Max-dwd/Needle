@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { useT } from '@/contexts/LanguageContext';
 import type { ShowToast, ToastType } from '@/components/settings/shared';
 
 interface Intent {
@@ -59,6 +60,7 @@ export default function IntentManagement({
   const [agentScheduleTime, setAgentScheduleTime] = useState('09:00');
   const [agentMemory, setAgentMemory] = useState('');
   const [savingAgent, setSavingAgent] = useState(false);
+  const t = useT();
 
   const showMessage = useCallback(
     (text: string, type: ToastType = 'success') => {
@@ -88,7 +90,7 @@ export default function IntentManagement({
       setIntents(intentsData);
       setAiModels(aiSettingsData.models || []);
     } catch {
-      showMessage('无法加载意图列表', 'error');
+      showMessage(t.settings.intents.toastLoadFailed, 'error');
     } finally {
       setLoading(false);
     }
@@ -121,7 +123,7 @@ export default function IntentManagement({
           ),
         );
         const data = await res.json() as { error?: string };
-        showMessage(data.error || '切换失败', 'error');
+        showMessage(data.error || t.settings.intents.toastToggleFailed, 'error');
       }
     } catch {
       setIntents((prev) =>
@@ -129,7 +131,7 @@ export default function IntentManagement({
           i.id === intent.id ? { ...i, [field]: intent[field] } : i,
         ),
       );
-      showMessage('切换失败', 'error');
+      showMessage(t.settings.intents.toastToggleFailed, 'error');
     }
   };
 
@@ -158,7 +160,7 @@ export default function IntentManagement({
           ),
         );
         const data = await res.json() as { error?: string };
-        showMessage(data.error || '保存失败', 'error');
+        showMessage(data.error || t.settings.intents.toastSaveFailed, 'error');
       }
     } catch {
       setIntents((prev) =>
@@ -168,7 +170,7 @@ export default function IntentManagement({
             : i,
         ),
       );
-      showMessage('保存失败', 'error');
+      showMessage(t.settings.intents.toastSaveFailed, 'error');
     }
   };
 
@@ -187,7 +189,7 @@ export default function IntentManagement({
       });
       const data: Intent & { error?: string } = await res.json();
       if (!res.ok) {
-        showMessage(data.error || '创建失败', 'error');
+        showMessage(data.error || t.settings.intents.toastCreateFailed, 'error');
         return;
       }
       setIntents((prev) => {
@@ -203,9 +205,9 @@ export default function IntentManagement({
       setNewAutoSubtitle(false);
       setNewAutoSummary(false);
       setShowAddForm(false);
-      showMessage(`意图 "${data.name}" 已创建`);
+      showMessage(`${t.settings.intents.toastCreateSuccess}${data.name}`);
     } catch {
-      showMessage('创建失败', 'error');
+      showMessage(t.settings.intents.toastCreateFailed, 'error');
     } finally {
       setAdding(false);
     }
@@ -236,16 +238,16 @@ export default function IntentManagement({
       });
       const data: Intent & { error?: string } = await res.json();
       if (!res.ok) {
-        showMessage(data.error || '保存失败', 'error');
+        showMessage(data.error || t.settings.intents.toastSaveFailed, 'error');
         return;
       }
       setIntents((prev) =>
         prev.map((i) => (i.id === intent.id ? data : i)),
       );
       cancelEdit();
-      showMessage('意图名称已更新');
+      showMessage(t.settings.intents.toastUpdateSuccess);
     } catch {
-      showMessage('保存失败', 'error');
+      showMessage(t.settings.intents.toastSaveFailed, 'error');
     } finally {
       setSaving(false);
     }
@@ -270,14 +272,14 @@ export default function IntentManagement({
       });
       if (!res.ok) {
         const data = await res.json() as { error?: string };
-        showMessage(data.error || '删除失败', 'error');
+        showMessage(data.error || t.settings.intents.toastDeleteFailed, 'error');
         return;
       }
       setIntents((prev) => prev.filter((i) => i.id !== deletingId));
-      showMessage(`意图 "${deleteConfirmName}" 已删除`);
+      showMessage(`${t.settings.intents.toastDeleteSuccess}${deleteConfirmName}`);
       cancelDelete();
     } catch {
-      showMessage('删除失败', 'error');
+      showMessage(t.settings.intents.toastDeleteFailed, 'error');
     } finally {
       setDeleting(false);
     }
@@ -310,14 +312,14 @@ export default function IntentManagement({
       });
       if (!res.ok) {
         const data = await res.json() as { error?: string };
-        showMessage(data.error || '保存失败', 'error');
+        showMessage(data.error || t.settings.intents.toastSaveFailed, 'error');
         return;
       }
       const updated: Intent = await res.json();
       setIntents((prev) => prev.map((i) => (i.id === intentId ? updated : i)));
-      showMessage('Agent 配置已保存');
+      showMessage(t.settings.intents.toastAgentSaveSuccess);
     } catch {
-      showMessage('保存失败', 'error');
+      showMessage(t.settings.intents.toastSaveFailed, 'error');
     } finally {
       setSavingAgent(false);
     }
@@ -352,12 +354,12 @@ export default function IntentManagement({
         body: JSON.stringify({ ids: orderedIds }),
       });
       if (!res.ok) {
-        showMessage('排序失败', 'error');
+        showMessage(t.settings.intents.toastSortFailed, 'error');
         // Reload to revert
         void loadIntents();
       }
     } catch {
-      showMessage('排序失败', 'error');
+      showMessage(t.settings.intents.toastSortFailed, 'error');
       void loadIntents();
     }
   };
@@ -381,7 +383,7 @@ export default function IntentManagement({
         }}
       >
         <h2 className="settings-group-title" style={{ margin: 0 }}>
-          意图列表
+          {t.settings.intents.intentList}
         </h2>
         {!showAddForm && (
           <button
@@ -389,7 +391,7 @@ export default function IntentManagement({
             onClick={() => setShowAddForm(true)}
             disabled={loading}
           >
-            + 添加意图
+            {t.settings.intents.addIntent}
           </button>
         )}
       </div>
@@ -409,14 +411,14 @@ export default function IntentManagement({
                 color: '#1a1a1a',
               }}
             >
-              意图名称
+              {t.settings.intents.intentName}
             </label>
             <input
               className="premium-input"
               type="text"
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
-              placeholder="请输入意图名称"
+              placeholder={t.settings.intents.intentNamePlaceholder}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') void handleAdd();
                 if (e.key === 'Escape') setShowAddForm(false);
@@ -444,7 +446,7 @@ export default function IntentManagement({
                 />
                 <span className="toggle-slider"></span>
               </label>
-              自动抓取字幕
+              {t.settings.intents.autoSubtitle}
             </label>
             <label
               style={{
@@ -463,7 +465,7 @@ export default function IntentManagement({
                 />
                 <span className="toggle-slider"></span>
               </label>
-              自动生成摘要
+              {t.settings.intents.autoSummary}
             </label>
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
@@ -472,7 +474,7 @@ export default function IntentManagement({
               onClick={() => void handleAdd()}
               disabled={adding || !newName.trim()}
             >
-              {adding ? '创建中...' : '确认创建'}
+              {adding ? t.settings.intents.creating : t.settings.intents.confirmCreate}
             </button>
             <button
               className="premium-button"
@@ -484,7 +486,7 @@ export default function IntentManagement({
               }}
               disabled={adding}
             >
-              取消
+              {t.settings.intents.cancel}
             </button>
           </div>
         </div>
@@ -500,7 +502,7 @@ export default function IntentManagement({
               fontSize: 13,
             }}
           >
-            加载中...
+            {t.settings.intents.loading}
           </div>
         ) : intents.length === 0 ? (
           <div
@@ -511,7 +513,7 @@ export default function IntentManagement({
               fontSize: 13,
             }}
           >
-            暂无意图
+            {t.settings.intents.noIntents}
           </div>
         ) : (
           <>
@@ -534,7 +536,7 @@ export default function IntentManagement({
                   letterSpacing: '0.5px',
                 }}
               >
-                名称
+                {t.settings.intents.name}
               </span>
               <span
                 style={{
@@ -546,7 +548,7 @@ export default function IntentManagement({
                   textAlign: 'center',
                 }}
               >
-                字幕
+                {t.settings.intents.subtitle}
               </span>
               <span
                 style={{
@@ -558,7 +560,7 @@ export default function IntentManagement({
                   textAlign: 'center',
                 }}
               >
-                摘要
+                {t.settings.intents.summary}
               </span>
               <span
                 style={{
@@ -570,7 +572,7 @@ export default function IntentManagement({
                   textAlign: 'center',
                 }}
               >
-                自动模型
+                {t.settings.intents.autoModel}
               </span>
               <span
                 style={{
@@ -582,7 +584,7 @@ export default function IntentManagement({
                   textAlign: 'center',
                 }}
               >
-                排序
+                {t.settings.intents.sortItem}
               </span>
               <span
                 style={{
@@ -594,7 +596,7 @@ export default function IntentManagement({
                   textAlign: 'center',
                 }}
               >
-                操作
+                {t.settings.intents.actions}
               </span>
             </div>
 
@@ -640,7 +642,7 @@ export default function IntentManagement({
                           onClick={() => void handleSaveEdit(intent)}
                           disabled={saving || !editName.trim()}
                         >
-                          {saving ? '...' : '保存'}
+                          {saving ? '...' : t.settings.intents.save}
                         </button>
                         <button
                           className="premium-button"
@@ -648,7 +650,7 @@ export default function IntentManagement({
                           onClick={cancelEdit}
                           disabled={saving}
                         >
-                          取消
+                          {t.settings.intents.cancel}
                         </button>
                       </div>
                     ) : (
@@ -712,7 +714,7 @@ export default function IntentManagement({
                           )
                         }
                       >
-                        <option value="">使用全局自动模型</option>
+                        <option value="">{t.settings.intents.useGlobalModel}</option>
                         {aiModels.map((m) => (
                           <option key={m.id} value={m.id}>
                             {m.name}
@@ -736,7 +738,7 @@ export default function IntentManagement({
                       <>
                         {!isFirst && (
                           <button
-                            title="上移"
+                            title={t.settings.intents.moveUp}
                             style={{
                               background: 'none',
                               border: '1px solid oklch(0.922 0 0)',
@@ -753,7 +755,7 @@ export default function IntentManagement({
                         )}
                         {!isLastUser && (
                           <button
-                            title="下移"
+                            title={t.settings.intents.moveDown}
                             style={{
                               background: 'none',
                               border: '1px solid oklch(0.922 0 0)',
@@ -783,7 +785,7 @@ export default function IntentManagement({
                     {!isUncategorized && (
                       <>
                         <button
-                          title="Agent 配置"
+                          title={t.settings.intents.agentConfig}
                           style={{
                             background: isAgentExpanded ? 'oklch(0.95 0.02 250)' : intent.agent_prompt ? 'oklch(0.95 0.02 150)' : 'none',
                             border: isAgentExpanded ? '1px solid oklch(0.7 0.1 250)' : intent.agent_prompt ? '1px solid oklch(0.7 0.1 150)' : '1px solid oklch(0.922 0 0)',
@@ -799,7 +801,7 @@ export default function IntentManagement({
                           AI
                         </button>
                         <button
-                          title="编辑名称"
+                          title={t.settings.intents.edit}
                           style={{
                             background: 'none',
                             border: '1px solid oklch(0.922 0 0)',
@@ -811,10 +813,10 @@ export default function IntentManagement({
                           }}
                           onClick={() => startEdit(intent)}
                         >
-                          ✎
+                          {t.settings.intents.edit}
                         </button>
                         <button
-                          title="删除"
+                          title={t.settings.intents.delete}
                           style={{
                             background: 'none',
                             border: '1px solid #fca5a5',
@@ -827,7 +829,7 @@ export default function IntentManagement({
                           }}
                           onClick={() => openDeleteConfirm(intent)}
                         >
-                          🗑
+                          {t.settings.intents.delete}
                         </button>
                       </>
                     )}
@@ -960,29 +962,22 @@ export default function IntentManagement({
                 color: '#1a1a1a',
               }}
             >
-              删除意图
+              {t.settings.intents.deleteConfirmTitle}
             </h3>
-            <p style={{ fontSize: 14, color: '#444', marginBottom: 20, lineHeight: 1.6 }}>
-              确定要删除意图{' '}
-              <strong>&ldquo;{deleteConfirmName}&rdquo;</strong>{' '}
-              吗？该意图下的所有频道将被归入{' '}
-              <strong>未分类</strong>。
+            <p style={{ fontSize: 14, color: '#666', lineHeight: 1.5, marginBottom: 24 }}>
+              {t.settings.intents.deleteConfirmDesc.replace('{name}', deleteConfirmName)}
             </p>
-            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+            <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
               <button
                 className="premium-button"
                 onClick={cancelDelete}
                 disabled={deleting}
               >
-                取消
+                {t.settings.intents.cancel}
               </button>
               <button
-                className="premium-button"
-                style={{
-                  background: '#ef4444',
-                  color: '#fff',
-                  borderColor: '#ef4444',
-                }}
+                className="premium-button primary"
+                style={{ background: '#ef4444', borderColor: '#ef4444' }}
                 onClick={() => void handleDelete()}
                 disabled={deleting}
               >

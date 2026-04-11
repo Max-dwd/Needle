@@ -14,6 +14,7 @@ import PerformanceTab from './PerformanceTab';
 import SubtitlesTab from './SubtitlesTab';
 import SummaryTab from './SummaryTab';
 import ResearchIntentManagement from '../ResearchIntentManagement';
+import { useT } from '@/contexts/LanguageContext';
 import {
   normalizeSettingsTab,
   settingsNavItems,
@@ -24,6 +25,7 @@ import {
 export default function SettingsShell() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const t = useT();
   const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(
     null,
   );
@@ -95,7 +97,7 @@ export default function SettingsShell() {
         <div className="sidebar-brand">
           <Link href="/" className="back-to-app">
             <span>←</span>
-            <span>回到应用</span>
+            <span>{t.common.backToApp}</span>
           </Link>
         </div>
         <nav className="settings-nav">
@@ -106,7 +108,7 @@ export default function SettingsShell() {
               onClick={() => handleTabChange(item.id)}
             >
               <span className="settings-nav-icon">{item.icon}</span>
-              <span>{item.label}</span>
+              <span>{t.settings.nav[item.id as keyof typeof t.settings.nav]}</span>
             </button>
           ))}
         </nav>
@@ -115,7 +117,7 @@ export default function SettingsShell() {
       <main className="settings-main-content">
         <div className="settings-section-container">
           <h1 className="settings-large-title">
-            {settingsNavItems.find((item) => item.id === activeTab)?.label}
+            {t.settings.nav[activeTab as keyof typeof t.settings.nav]}
           </h1>
           {renderTab()}
         </div>

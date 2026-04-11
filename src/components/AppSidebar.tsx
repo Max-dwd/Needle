@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { useEffect, useState, Suspense } from 'react';
 import { useTheme } from '@/contexts/ThemeContext';
+import { useT } from '@/contexts/LanguageContext';
 import { useDraggableWidth } from '@/hooks/useDraggableWidth';
 
 interface Intent {
@@ -35,6 +36,7 @@ function AppSidebarContent() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const { mode, setMode } = useTheme();
+  const t = useT();
 
   const cycleTheme = () => {
     const next = mode === 'system' ? 'light' : mode === 'light' ? 'dark' : 'system';
@@ -42,7 +44,7 @@ function AppSidebarContent() {
   };
 
   const themeIcon = mode === 'light' ? '☀️' : mode === 'dark' ? '🌙' : '💻';
-  const themeTitle = mode === 'light' ? '浅色模式（点击切换暗色）' : mode === 'dark' ? '暗色模式（点击切换跟随系统）' : '跟随系统（点击切换浅色）';
+  const themeTitle = mode === 'light' ? t.theme.tooltipLight : mode === 'dark' ? t.theme.tooltipDark : t.theme.tooltipSystem;
 
   const { width: sidebarWidth, handleRef } = useDraggableWidth(
     'sidebar-width',
@@ -281,7 +283,7 @@ function AppSidebarContent() {
               border: 'none',
               background: 'transparent',
             }}
-            title="频道管理"
+            title={t.sidebar.channels}
           >
             ➕
           </Link>
@@ -295,7 +297,7 @@ function AppSidebarContent() {
               border: 'none',
               background: 'transparent',
             }}
-            title="设置"
+            title={t.sidebar.settings}
           >
             ⚙️
           </Link>
@@ -309,7 +311,7 @@ function AppSidebarContent() {
           className={`sidebar-nav-item ${pathname === '/' && !currentIntent && !currentChannel && !currentPlatform ? 'active' : ''}`}
         >
           <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span style={{ fontSize: 16 }}>📹</span> 全部视频
+            <span style={{ fontSize: 16 }}>📹</span> {t.sidebar.allVideos}
           </span>
           <span className="sidebar-nav-count">{totalVideos}</span>
         </Link>
@@ -385,7 +387,7 @@ function AppSidebarContent() {
                 }}
               >
                 <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  {group.name}
+                  {group.name === '未分类' ? t.sidebar.unclassified : group.name}
                   <span
                     style={{
                       fontSize: 12,
@@ -474,7 +476,7 @@ function AppSidebarContent() {
             className={`sidebar-nav-item ${pathname.startsWith('/research') ? 'active' : ''}`}
           >
             <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <span style={{ fontSize: 16 }}>🔬</span> 研究收藏
+              <span style={{ fontSize: 16 }}>🔬</span> {t.sidebar.research}
             </span>
           </Link>
         </div>
@@ -490,12 +492,13 @@ function AppSidebarContent() {
 }
 
 export default function AppSidebar() {
+  const t = useT();
   return (
     <Suspense
       fallback={
         <aside className="app-sidebar">
           <div className="sidebar-nav-group">
-            <span className="sidebar-nav-item">加载中…</span>
+            <span className="sidebar-nav-item">{t.common.loading}</span>
           </div>
         </aside>
       }
