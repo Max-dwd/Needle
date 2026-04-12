@@ -1,0 +1,24 @@
+services:
+  needle:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    init: true
+    restart: unless-stopped
+    ports:
+      - "${NEEDLE_HTTP_PORT:-3000}:3000"
+      - "19825:19825"
+    environment:
+      PORT: "3000"
+      DATA_ROOT: /app/data
+      DATABASE_PATH: /app/data/folo.db
+      SUBTITLE_ROOT: /app/data/subtitles
+      SUMMARY_ROOT: /app/data/summaries
+      SUMMARY_MD_ROOT: /app/data/summary-md
+      FOLO_BROWSER_DAEMON_PORT: "19825"
+      FOLO_BROWSER_DAEMON_BIND_HOST: 0.0.0.0
+    env_file:
+      - path: .env.local
+        required: false
+    volumes:
+      - ./data:/app/data

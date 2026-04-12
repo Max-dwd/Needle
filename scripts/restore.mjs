@@ -269,7 +269,9 @@ async function runDatabaseMigrations() {
       });
   `;
 
-  await execFileAsync(process.execPath, [
+  // Use tsx to handle .ts files and tsconfig paths
+  await execFileAsync('npx', [
+    'tsx',
     '--disable-warning=MODULE_TYPELESS_PACKAGE_JSON',
     '-e',
     script,

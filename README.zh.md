@@ -42,6 +42,45 @@ npm run dev               # http://localhost:3000
 
 ---
 
+## Docker 快速开始
+
+如果 Docker 和 Chrome 跑在同一台机器上，可直接这样启动：
+
+```bash
+cp .env.example .env.local   # 可选，用于本地覆盖和敏感配置
+docker compose up -d --build
+```
+
+然后打开 `http://localhost:3000`。
+
+Docker 部署时请注意：
+- Web 应用运行在容器里，但 **Needle Browser Bridge 扩展仍然运行在宿主机的 Chrome 中**。
+- `compose.yaml` 暴露了 `19825:19825`；请保持该端口可用，因为宿主机扩展会连接 `localhost:19825`。
+- `./data` 会 bind mount 到 `/app/data`，因此 SQLite、字幕、摘要、日志和备份都会持久化到宿主机目录。
+- 若存在 `.env.local`，compose 会将其加载进容器。核心数据路径和 daemon 绑定地址由 compose 固定；`.env.local` 更适合放 `BILIBILI_SESSDATA`、`LOG_LEVEL` 或工具路径覆盖。
+- **不需要**为了启动容器而在宿主机先运行 `npm run browser:prepare`。只有当你想从源码重建本地 browser runtime / 扩展产物时，才需要手动执行它。
+
+从当前仓库安装或刷新宿主机侧 Chrome 扩展：
+
+1. 打开 `chrome://extensions`
+2. 开启**开发者模式**
+3. 点击**加载已解压的扩展程序**
+4. 选择 `browser-bridge/extension`
+
+常用 Docker 命令：
+
+```bash
+docker compose logs -f
+docker compose down
+docker compose up -d --build
+NEEDLE_HTTP_PORT=3001 docker compose up -d --build  # 如果 3000 已被占用
+```
+
+> [!NOTE]
+> `YOUTUBE_COOKIES_BROWSER=chrome` 指向的是容器内的浏览器配置目录，而不是宿主机 Chrome 的 profile。Docker 部署下更推荐使用 OPML 导入、浏览器引导导入流程，或直接提供 `BILIBILI_SESSDATA` 这类显式认证信息。
+
+---
+
 ## 依赖
 
 **最小启动：**
@@ -74,10 +113,15 @@ sudo add-apt-repository ppa:tomtomtom/yt-dlp && sudo apt install -y yt-dlp
 
 ```env
 # 核心路径
-DATABASE_PATH=./data/folo.db
+PORT=3000
 DATA_ROOT=./data
+DATABASE_PATH=./data/folo.db
+SUBTITLE_ROOT=./data/subtitles
+SUMMARY_ROOT=./data/summaries
+SUMMARY_MD_ROOT=./data/summary-md
 
 # 可选：外部工具
+PYTHON_BIN=python3
 YT_DLP_BIN=yt-dlp
 FFMPEG_BIN=ffmpeg
 FFPROBE_BIN=ffprobe
@@ -85,6 +129,13 @@ FFPROBE_BIN=ffprobe
 # 可选：受保护内容需要登录态
 YOUTUBE_COOKIES_BROWSER=chrome
 BILIBILI_SESSDATA=your_sessdata
+
+# 可选：日志
+LOG_LEVEL=info
+
+# Needle Browser daemon
+FOLO_BROWSER_DAEMON_PORT=19825
+FOLO_BROWSER_DAEMON_BIND_HOST=127.0.0.1
 ```
 
 AI 模型的 endpoint、API Key 和 model 不走环境变量——启动后在**设置 → 模型**里配置。
@@ -98,6 +149,8 @@ npm run browser:prepare
 ```
 
 然后打开 `chrome://extensions`，开启**开发者模式**，点击**加载已解压的扩展程序**，选择 `browser-bridge/extension`。
+
+如果是 Docker 部署，这个扩展仍然运行在宿主机 Chrome 中，并通过映射出来的 `19825` 端口与容器内 daemon 通信。
 
 ### 首次导入订阅
 

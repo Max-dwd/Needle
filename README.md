@@ -42,6 +42,45 @@ The database and data directories are created automatically on first run.
 
 ---
 
+## Docker Quick Start
+
+Run Needle in Docker on the same machine as Chrome:
+
+```bash
+cp .env.example .env.local   # optional, for local overrides and secrets
+docker compose up -d --build
+```
+
+Then open `http://localhost:3000`.
+
+Important notes for Docker:
+- The web app runs in the container, but the **Needle Browser Bridge extension still runs in Chrome on the host machine**.
+- `compose.yaml` publishes `19825:19825`; keep that port available because the host extension connects to `localhost:19825`.
+- `./data` is bind-mounted to `/app/data`, so SQLite, subtitles, summaries, logs, and backups persist on the host.
+- `.env.local` is loaded into the container when present. The compose file pins the container data paths and daemon bind host; use `.env.local` mainly for optional values such as `BILIBILI_SESSDATA`, `LOG_LEVEL`, or tool path overrides.
+- You do **not** need to run `npm run browser:prepare` on the host just to start the container. Run it only when you want to rebuild the local browser runtime / extension bundle from source.
+
+Install or refresh the host-side Chrome extension from this repo:
+
+1. Open `chrome://extensions`
+2. Enable **Developer mode**
+3. Click **Load unpacked**
+4. Select `browser-bridge/extension`
+
+Useful Docker commands:
+
+```bash
+docker compose logs -f
+docker compose down
+docker compose up -d --build
+NEEDLE_HTTP_PORT=3001 docker compose up -d --build  # if port 3000 is already in use
+```
+
+> [!NOTE]
+> `YOUTUBE_COOKIES_BROWSER=chrome` points to a browser profile inside the container, not your host Chrome profile. For Docker deployments, prefer OPML import, the browser-based import flow, or explicit auth values such as `BILIBILI_SESSDATA`.
+
+---
+
 ## Requirements
 
 **Minimum:**
@@ -74,10 +113,15 @@ Copy `.env.example` to `.env.local` and adjust as needed:
 
 ```env
 # Core paths
-DATABASE_PATH=./data/folo.db
+PORT=3000
 DATA_ROOT=./data
+DATABASE_PATH=./data/folo.db
+SUBTITLE_ROOT=./data/subtitles
+SUMMARY_ROOT=./data/summaries
+SUMMARY_MD_ROOT=./data/summary-md
 
 # Optional: tools
+PYTHON_BIN=python3
 YT_DLP_BIN=yt-dlp
 FFMPEG_BIN=ffmpeg
 FFPROBE_BIN=ffprobe
@@ -85,6 +129,13 @@ FFPROBE_BIN=ffprobe
 # Optional: authenticated access
 YOUTUBE_COOKIES_BROWSER=chrome   # browser whose cookie store to use
 BILIBILI_SESSDATA=your_sessdata
+
+# Optional: logging
+LOG_LEVEL=info
+
+# Needle Browser daemon
+FOLO_BROWSER_DAEMON_PORT=19825
+FOLO_BROWSER_DAEMON_BIND_HOST=127.0.0.1
 ```
 
 AI model endpoints, API keys, and model IDs are configured at runtime in **Settings → Models** — not through environment variables.
@@ -98,6 +149,8 @@ npm run browser:prepare
 ```
 
 Then open `chrome://extensions`, enable **Developer mode**, click **Load unpacked**, and select `browser-bridge/extension`.
+
+For Docker deployments, this extension still runs on the host Chrome instance and talks to the containerized daemon through the published `19825` port.
 
 ### Import subscriptions
 

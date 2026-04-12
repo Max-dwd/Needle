@@ -3,6 +3,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { DEFAULT_DAEMON_PORT } from './constants.js';
 import { EXIT_CODES } from './errors.js';
 const PORT = Number.parseInt(process.env.FOLO_BROWSER_DAEMON_PORT ?? String(DEFAULT_DAEMON_PORT), 10);
+const BIND_HOST = process.env.FOLO_BROWSER_DAEMON_BIND_HOST || '127.0.0.1';
 const IDLE_TIMEOUT_MS = 5 * 60 * 1000;
 const MAX_BODY_BYTES = 1024 * 1024;
 let extensionWs = null;
@@ -199,8 +200,8 @@ wss.on('connection', (ws) => {
         rejectPending();
     });
 });
-httpServer.listen(PORT, '127.0.0.1', () => {
-    console.error(`[needle-browser-daemon] Listening on http://127.0.0.1:${PORT}`);
+httpServer.listen(PORT, BIND_HOST, () => {
+    console.error(`[needle-browser-daemon] Listening on http://${BIND_HOST}:${PORT}`);
     resetIdleTimer();
 });
 httpServer.on('error', (error) => {
