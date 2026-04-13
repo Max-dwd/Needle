@@ -64,4 +64,21 @@ describe('POST /api/videos/[id]/repair', () => {
     expect(ensureEnrichmentQueue).toHaveBeenCalledTimes(1);
     expect(enrichVideo).toHaveBeenCalledWith(1);
   });
+
+  it('returns 409 for videos marked as abandoned', async () => {
+    prepareMock.mockReturnValueOnce({
+      get: vi.fn().mockReturnValue({
+        id: 2,
+        video_id: 'gone123',
+        platform: 'youtube',
+        availability_status: 'abandoned',
+      }),
+    });
+
+    const response = await POST(new Request('http://localhost') as Request, makeParams('2'));
+
+    expect(response.status).toBe(409);
+    expect(ensureEnrichmentQueue).not.toHaveBeenCalled();
+    expect(enrichVideo).not.toHaveBeenCalled();
+  });
 });

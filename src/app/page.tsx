@@ -398,6 +398,7 @@ function FeedPageContent() {
       es.addEventListener('summary-start', (event) => {
         try {
           const { videoId } = JSON.parse(event.data);
+          setSummaryProgress(null);
           setVideos((prev) =>
             prev.map((v) =>
               v.video_id === videoId
@@ -411,6 +412,7 @@ function FeedPageContent() {
       es.addEventListener('summary-complete', (event) => {
         try {
           const { videoId } = JSON.parse(event.data);
+          setSummaryProgress(null);
           setVideos((prev) =>
             prev.map((v) =>
               v.video_id === videoId
@@ -425,6 +427,7 @@ function FeedPageContent() {
       es.addEventListener('summary-error', (event) => {
         try {
           const { videoId } = JSON.parse(event.data);
+          setSummaryProgress(null);
           setVideos((prev) =>
             prev.map((v) =>
               v.video_id === videoId
@@ -513,6 +516,18 @@ function FeedPageContent() {
                       fields.access_status === undefined
                         ? v.access_status
                         : fields.access_status,
+                    availability_status:
+                      fields.availability_status === undefined
+                        ? v.availability_status
+                        : fields.availability_status,
+                    availability_reason:
+                      fields.availability_reason === undefined
+                        ? v.availability_reason
+                        : fields.availability_reason,
+                    availability_checked_at:
+                      fields.availability_checked_at === undefined
+                        ? v.availability_checked_at
+                        : fields.availability_checked_at,
                   }
                 : v,
             ),

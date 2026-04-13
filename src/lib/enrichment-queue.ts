@@ -19,8 +19,14 @@ import { getDb } from './db';
 import { getOrCreatePool, type PoolStatus } from './async-pool';
 import {
   fetchBilibiliVideoDetail,
+  probeYouTubeVideoAvailability,
   fetchYouTubeVideoDetail,
 } from './fetcher';
+import {
+  clearVideoAvailability,
+  markVideoAsUnavailable,
+} from './video-error-handling';
+import type { VideoAvailabilityStatus } from '@/types';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -39,6 +45,7 @@ interface VideoWithChannel {
   duration: string | null;
   members_only_checked_at: string | null;
   access_status: string | null;
+  availability_status: VideoAvailabilityStatus;
   created_at: string;
 }
 
@@ -118,6 +125,7 @@ function getVideoWithChannel(videoDbId: number): VideoWithChannel | null {
         v.duration,
         v.members_only_checked_at,
         v.access_status,
+        v.availability_status,
         v.created_at
       FROM videos v
       JOIN channels c ON c.id = v.channel_id
@@ -133,9 +141,16 @@ function getVideoWithChannel(videoDbId: number): VideoWithChannel | null {
  * Check if a video needs enrichment or member-only status probing.
  */
 function needsEnrichment(video: VideoWithChannel): boolean {
+  if (video.availability_status === 'abandoned') {
+    return false;
+  }
   const hasThumbnail = Boolean(video.thumbnail_url && video.thumbnail_url.trim() !== '');
   const hasDuration = Boolean(video.duration && video.duration.trim() !== '');
-  const hasPublishedAt = Boolean(video.published_at && video.published_at.trim() !== '');
+  const hasPublishedAt = Boolean(
+    video.published_at &&
+      video.published_at.trim() !== '' &&
+      Number.isFinite(Date.parse(video.published_at)),
+  );
   return (
     !hasThumbnail ||
     !hasDuration ||
@@ -156,6 +171,9 @@ function updateVideoFields(
     is_members_only?: number;
     access_status?: 'members_only' | 'limited_free' | null;
     members_only_checked_at?: string | null;
+    availability_status?: VideoAvailabilityStatus;
+    availability_reason?: string | null;
+    availability_checked_at?: string | null;
   },
 ): void {
   const db = getDb();
@@ -186,6 +204,18 @@ function updateVideoFields(
     sets.push('members_only_checked_at = ?');
     values.push(fields.members_only_checked_at);
   }
+  if (fields.availability_status !== undefined) {
+    sets.push('availability_status = ?');
+    values.push(fields.availability_status);
+  }
+  if (fields.availability_reason !== undefined) {
+    sets.push('availability_reason = ?');
+    values.push(fields.availability_reason);
+  }
+  if (fields.availability_checked_at !== undefined) {
+    sets.push('availability_checked_at = ?');
+    values.push(fields.availability_checked_at);
+  }
 
   if (sets.length === 0) return;
 
@@ -214,13 +244,61 @@ async function runEnrichmentJob(
         ? await fetchYouTubeVideoDetail(job.videoId)
         : await fetchBilibiliVideoDetail(job.videoId);
 
-    if (!detail) {
+    const hasUsableDetail = Boolean(
+      detail &&
+        (
+          (detail.thumbnail_url && detail.thumbnail_url.trim() !== '') ||
+          (detail.published_at && detail.published_at.trim() !== '') ||
+          (detail.duration && detail.duration.trim() !== '') ||
+          detail.access_status !== undefined ||
+          detail.is_members_only === 1
+        ),
+    );
+
+    if (!detail || !hasUsableDetail) {
+      if (job.platform === 'youtube') {
+        const availability = await probeYouTubeVideoAvailability(job.videoId);
+        if (availability.status === 'unavailable') {
+          const status = markVideoAsUnavailable(
+            job.videoDbId,
+            availability.reason || 'YouTube video unavailable',
+          );
+          appEvents.emit('video:availability-changed', {
+            videoDbId: job.videoDbId,
+            videoId: job.videoId,
+            platform: job.platform,
+            status,
+            reason: availability.reason || null,
+          });
+          log.warn('enrichment', 'video_unavailable', {
+            videoDbId: job.videoDbId,
+            videoId: job.videoId,
+            platform: job.platform,
+            status,
+            reason: availability.reason || null,
+          });
+          return {
+            success: true,
+            durationMs: Date.now() - startTime,
+          };
+        }
+      }
+
       return {
         success: false,
         durationMs: Date.now() - startTime,
         error: 'No detail returned from platform detail API',
       };
     }
+
+    clearVideoAvailability(job.videoDbId);
+    appEvents.emit('video:availability-changed', {
+      videoDbId: job.videoDbId,
+      videoId: job.videoId,
+      platform: job.platform,
+      status: null,
+      reason: null,
+    });
 
     // Build update fields
     const updateFields: {
@@ -229,6 +307,9 @@ async function runEnrichmentJob(
       duration?: string | null;
       is_members_only?: number;
       access_status?: 'members_only' | 'limited_free' | null;
+      availability_status?: VideoAvailabilityStatus;
+      availability_reason?: string | null;
+      availability_checked_at?: string | null;
     } = {};
 
     if (detail.thumbnail_url) {
@@ -272,6 +353,9 @@ async function runEnrichmentJob(
         duration: detail.duration ?? null,
         is_members_only: detail.is_members_only ?? undefined,
         access_status: detail.access_status ?? null,
+        availability_status: null,
+        availability_reason: null,
+        availability_checked_at: new Date().toISOString(),
       },
     });
 
@@ -330,13 +414,20 @@ export async function enrichVideo(
 
   // Check if enrichment is needed
   if (!needsEnrichment(video)) {
-    log.info('enrichment', 'skip_already_complete', {
+    log.info(
+      'enrichment',
+      video.availability_status === 'abandoned'
+        ? 'skip_abandoned_unavailable'
+        : 'skip_already_complete',
+      {
       videoDbId,
       videoId: video.video_id,
       platform: video.platform,
       channel_id: resolvedChannelId,
       channel_name: resolvedChannelName,
-    });
+      availability_status: video.availability_status ?? null,
+    },
+    );
     return;
   }
 

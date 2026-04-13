@@ -26,6 +26,7 @@ export async function GET(request: NextRequest) {
       `
       SELECT v.id, v.channel_id, v.platform, v.video_id, v.title, v.thumbnail_url,
              v.published_at, v.duration, v.is_read, v.is_members_only, v.access_status,
+             v.availability_status, v.availability_reason, v.availability_checked_at,
              v.subtitle_status, v.subtitle_path, v.subtitle_language, v.subtitle_format,
              v.subtitle_error, v.subtitle_last_attempt_at, v.subtitle_cooldown_until, v.created_at,
              COALESCE(c.name, v.channel_name) as channel_name, c.avatar_url,

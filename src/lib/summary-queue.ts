@@ -67,8 +67,51 @@ const tracking: SummaryQueueTracking = {
   activeTaskIds: new Set<number>(),
 };
 
+function getActiveSummaryTaskSnapshot(): {
+  videoId: string;
+  title: string | null;
+  startedAt: string | null;
+} | null {
+  const db = getDb();
+  const row = db
+    .prepare(
+      `
+      SELECT st.video_id AS videoId,
+             st.started_at AS startedAt,
+             v.title AS title
+      FROM summary_tasks st
+      LEFT JOIN videos v
+        ON v.video_id = st.video_id
+       AND v.platform = st.platform
+      WHERE st.status = 'processing'
+      ORDER BY COALESCE(st.started_at, st.created_at) DESC
+      LIMIT 1
+    `,
+    )
+    .get() as
+    | {
+        videoId: string;
+        title: string | null;
+        startedAt: string | null;
+      }
+    | undefined;
+
+  return row ?? null;
+}
+
 export function getQueueState(): SummaryQueueState {
-  return { ...queueState };
+  const activeTask =
+    queueState.currentVideoId || queueState.currentTitle
+      ? null
+      : getActiveSummaryTaskSnapshot();
+
+  return {
+    ...queueState,
+    running: queueState.running || Boolean(activeTask),
+    currentVideoId: queueState.currentVideoId ?? activeTask?.videoId ?? null,
+    currentTitle: queueState.currentTitle ?? activeTask?.title ?? null,
+    startedAt: queueState.startedAt ?? activeTask?.startedAt ?? null,
+  };
 }
 
 export function isQueueRunning(): boolean {

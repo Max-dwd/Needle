@@ -26,6 +26,7 @@ beforeEach(() => {
   vi.useRealTimers();
   // Reset all mocks before each test
   vi.clearAllMocks();
+  mockMarkVideoAsUnavailable.mockReturnValue('unavailable');
 });
 
 afterEach(() => {
@@ -47,6 +48,9 @@ const mockLogError = vi.hoisted(() => vi.fn());
 // Mock fetcher module for platform detail lookups
 const mockFetchBilibiliVideoDetail = vi.hoisted(() => vi.fn());
 const mockFetchYouTubeVideoDetail = vi.hoisted(() => vi.fn());
+const mockProbeYouTubeVideoAvailability = vi.hoisted(() => vi.fn());
+const mockMarkVideoAsUnavailable = vi.hoisted(() => vi.fn());
+const mockClearVideoAvailability = vi.hoisted(() => vi.fn());
 
 vi.mock('./db', () => ({
   getDb: mockGetDb,
@@ -63,6 +67,12 @@ vi.mock('./events', () => ({
 vi.mock('./fetcher', () => ({
   fetchBilibiliVideoDetail: mockFetchBilibiliVideoDetail,
   fetchYouTubeVideoDetail: mockFetchYouTubeVideoDetail,
+  probeYouTubeVideoAvailability: mockProbeYouTubeVideoAvailability,
+}));
+
+vi.mock('./video-error-handling', () => ({
+  markVideoAsUnavailable: mockMarkVideoAsUnavailable,
+  clearVideoAvailability: mockClearVideoAvailability,
 }));
 
 vi.mock('./logger', () => ({
@@ -299,6 +309,160 @@ describe('VAL-L1-004: Skip non-enrichable videos', () => {
       call => call[0] === 'video:enriched'
     );
     expect(videoEnrichedCalls).toHaveLength(0);
+  });
+
+  it('does not treat relative published_at text as complete metadata', async () => {
+    const videoNeedingRepair = {
+      id: 12,
+      video_id: 'rel123',
+      platform: 'youtube' as const,
+      channel_id: 3,
+      channel_id__platform: 'UCrelative',
+      channel_name: 'Relative Channel',
+      title: 'Relative Video',
+      thumbnail_url: 'https://example.com/existing.jpg',
+      published_at: '29 minutes ago',
+      duration: '10:00',
+      members_only_checked_at: '2026-03-25T10:00:00.000Z',
+      created_at: new Date().toISOString(),
+    };
+
+    mockGetDb.mockReturnValue({
+      prepare: vi.fn().mockReturnValue({
+        get: vi.fn().mockReturnValue(videoNeedingRepair),
+        run: vi.fn(),
+        all: vi.fn().mockReturnValue([]),
+      }),
+    });
+
+    mockFetchYouTubeVideoDetail.mockResolvedValue({
+      thumbnail_url: 'https://example.com/existing.jpg',
+      published_at: '2026-03-25T10:00:00.000Z',
+      duration: '10:00',
+      is_members_only: 0,
+    });
+
+    await enrichVideo(12);
+
+    expect(mockFetchYouTubeVideoDetail).toHaveBeenCalledWith('rel123');
+    expect(mockAppEventsEmit).toHaveBeenCalledWith(
+      'video:enriched',
+      expect.objectContaining({
+        videoDbId: 12,
+        videoId: 'rel123',
+        fields: expect.objectContaining({
+          published_at: '2026-03-25T10:00:00.000Z',
+        }),
+      }),
+    );
+  });
+
+  it('marks a YouTube video as unavailable when detail is empty and yt-dlp confirms removal', async () => {
+    const unavailableVideo = {
+      id: 13,
+      video_id: 'gone123',
+      platform: 'youtube' as const,
+      channel_id: 4,
+      channel_id__platform: 'UCgone',
+      channel_name: 'Gone Channel',
+      title: 'Removed Video',
+      thumbnail_url: 'https://example.com/existing.jpg',
+      published_at: '29 minutes ago',
+      duration: '10:00',
+      members_only_checked_at: '2026-03-25T10:00:00.000Z',
+      access_status: null,
+      availability_status: null,
+      created_at: new Date().toISOString(),
+    };
+
+    mockGetDb.mockReturnValue({
+      prepare: vi.fn().mockReturnValue({
+        get: vi.fn().mockReturnValue(unavailableVideo),
+        run: vi.fn(),
+        all: vi.fn().mockReturnValue([]),
+      }),
+    });
+
+    mockFetchYouTubeVideoDetail.mockResolvedValue({
+      thumbnail_url: '',
+      published_at: '',
+      duration: '',
+      is_members_only: 0,
+    });
+    mockProbeYouTubeVideoAvailability.mockResolvedValue({
+      status: 'unavailable',
+      reason: 'Video unavailable. Removed by uploader',
+    });
+
+    const enrichPromise = enrichVideo(13);
+
+    await new Promise(resolve => setTimeout(resolve, 10));
+
+    await enrichPromise;
+
+    expect(mockProbeYouTubeVideoAvailability).toHaveBeenCalledWith('gone123');
+    expect(mockMarkVideoAsUnavailable).toHaveBeenCalledWith(
+      13,
+      'Video unavailable. Removed by uploader',
+    );
+    expect(mockAppEventsEmit).toHaveBeenCalledWith(
+      'video:availability-changed',
+      expect.objectContaining({
+        videoDbId: 13,
+        videoId: 'gone123',
+        status: 'unavailable',
+      }),
+    );
+  });
+
+  it('does not clear availability when detail only contains channel metadata', async () => {
+    const unavailableVideo = {
+      id: 14,
+      video_id: 'stillbroken123',
+      platform: 'youtube' as const,
+      channel_id: 5,
+      channel_id__platform: 'UCstillbroken',
+      channel_name: 'Still Broken Channel',
+      title: 'Still Broken Video',
+      thumbnail_url: null,
+      published_at: null,
+      duration: null,
+      members_only_checked_at: null,
+      access_status: null,
+      availability_status: 'unavailable' as const,
+      created_at: new Date().toISOString(),
+    };
+
+    mockGetDb.mockReturnValue({
+      prepare: vi.fn().mockReturnValue({
+        get: vi.fn().mockReturnValue(unavailableVideo),
+        run: vi.fn(),
+        all: vi.fn().mockReturnValue([]),
+      }),
+    });
+
+    mockFetchYouTubeVideoDetail.mockResolvedValue({
+      channel_name: 'Recovered Name Only',
+    });
+    mockProbeYouTubeVideoAvailability.mockResolvedValue({
+      status: 'unknown',
+      reason: 'detail remained incomplete',
+    });
+
+    const enrichPromise = enrichVideo(14);
+
+    await new Promise(resolve => setTimeout(resolve, 10));
+
+    await enrichPromise;
+
+    expect(mockProbeYouTubeVideoAvailability).toHaveBeenCalledWith(
+      'stillbroken123',
+    );
+    expect(mockClearVideoAvailability).not.toHaveBeenCalled();
+    expect(mockAppEventsEmit).not.toHaveBeenCalledWith(
+      'video:enriched',
+      expect.anything(),
+    );
   });
 
   it('skips when video not found', async () => {

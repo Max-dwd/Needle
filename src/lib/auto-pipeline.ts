@@ -13,7 +13,11 @@ import { appEvents } from './events';
 import { getDb, type Channel, type Intent, type Video } from './db';
 import { ensureSubtitleForVideo, shouldEscapeToApi } from './subtitles';
 import { createSummaryTask, getSummaryTask } from './summary-tasks';
-import { isQueueRunning, startQueueProcessing } from './summary-queue';
+import {
+  getQueueState as getSummaryQueueState,
+  isQueueRunning,
+  startQueueProcessing,
+} from './summary-queue';
 import { log } from './logger';
 import { getOrCreatePool, type AsyncPool } from './async-pool';
 import type { JobResult } from './async-pool';
@@ -832,6 +836,7 @@ export function getAutoPipelineStatus(): AutoPipelineStatus {
   const state = getState();
   const db = getDb();
   const browserFetchConfig = getSubtitleBrowserFetchConfig();
+  const summaryQueueState = getSummaryQueueState();
 
   const pendingSummaryCount = db
     .prepare("SELECT COUNT(*) AS c FROM summary_tasks WHERE status = 'pending'")
@@ -979,8 +984,8 @@ export function getAutoPipelineStatus(): AutoPipelineStatus {
     },
     summary: {
       queueLength: pendingSummaryCount.c,
-      processing: isQueueRunning(),
-      currentVideoId: null, // exposed via summary-queue getQueueState
+      processing: summaryQueueState.running,
+      currentVideoId: summaryQueueState.currentVideoId ?? null,
     },
   };
 }

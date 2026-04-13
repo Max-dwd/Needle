@@ -21,6 +21,13 @@ export async function POST(
     return NextResponse.json({ error: 'Video not found' }, { status: 404 });
   }
 
+  if (video.availability_status === 'abandoned') {
+    return NextResponse.json(
+      { error: 'Video has been marked as abandoned' },
+      { status: 409 },
+    );
+  }
+
   ensureEnrichmentQueue();
   void enrichVideo(videoDbId);
 

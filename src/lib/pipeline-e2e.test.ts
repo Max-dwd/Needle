@@ -270,6 +270,51 @@ describe('VAL-CROSS-001: Full Bilibili pipeline end-to-end', () => {
         }),
       );
     });
+
+    it('insertOrUpdateVideos clears stale availability flags when a video reappears in feed', () => {
+      const channel = createChannel({
+        platform: 'youtube',
+        channel_id: 'UCRecovered',
+        intent: '工作',
+      });
+      const feedVideo = {
+        platform: 'youtube' as const,
+        video_id: 'recovered123',
+        title: 'Recovered Video',
+        thumbnail_url: 'https://example.com/thumb.jpg',
+        published_at: '2026-04-13T00:00:00.000Z',
+        duration: '12:34',
+      };
+
+      const insertRun = vi.fn().mockReturnValue({ changes: 0 });
+      const enrichRun = vi.fn();
+      const preparedQueries: string[] = [];
+
+      mockGetDb.mockReturnValue({
+        prepare: vi.fn().mockImplementation((query: string) => {
+          preparedQueries.push(query);
+          if (query.includes('INSERT OR IGNORE INTO videos')) {
+            return { run: insertRun, get: vi.fn() };
+          }
+          if (query.includes('UPDATE videos')) {
+            return { run: enrichRun, get: vi.fn() };
+          }
+          return { run: vi.fn(), get: vi.fn() };
+        }),
+      });
+
+      insertOrUpdateVideos(channel, [feedVideo]);
+
+      expect(
+        preparedQueries.some((query) =>
+          query.includes('availability_status = NULL'),
+        ),
+      ).toBe(true);
+      expect(enrichRun).toHaveBeenCalledTimes(1);
+      const args = enrichRun.mock.calls[0] ?? [];
+      expect(typeof args[12]).toBe('string');
+      expect(args[13]).toBe('recovered123');
+    });
   });
 
   // -------------------------------------------------------------------------

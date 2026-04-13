@@ -1,3 +1,6 @@
+export type VideoAvailabilityStatus = 'unavailable' | 'abandoned' | null;
+export type UnavailableVideoBehavior = 'keep' | 'abandon';
+
 export interface VideoWithMeta {
   id: number;
   video_id: string;
@@ -9,6 +12,9 @@ export interface VideoWithMeta {
   is_read: number;
   is_members_only: number;
   access_status: 'members_only' | 'limited_free' | null;
+  availability_status: VideoAvailabilityStatus;
+  availability_reason: string | null;
+  availability_checked_at: string | null;
   subtitle_status: string | null;
   subtitle_error: string | null;
   subtitle_last_attempt_at: string | null;

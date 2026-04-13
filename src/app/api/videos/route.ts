@@ -3,6 +3,7 @@ import { getDb } from '@/lib/db';
 import { batchCheckSummaryExistence } from '@/lib/video-summary';
 import { getScopeLastRefreshAt } from '@/lib/refresh-history';
 import { getAppSetting } from '@/lib/app-settings';
+import { getVideoErrorHandlingConfig } from '@/lib/video-error-handling';
 
 type QueryArg = string | number;
 
@@ -94,49 +95,57 @@ export async function GET(req: NextRequest) {
   const topic = searchParams.get('topic');
   const channel_id = searchParams.get('channel_id');
   const includeResearch = searchParams.get('include_research') === '1';
+  const includeUnavailable = searchParams.get('include_unavailable') === '1';
   const page = parseInt(searchParams.get('page') || '1');
   const limit = parseInt(searchParams.get('limit') || '30');
   const offset = (page - 1) * limit;
 
   const db = getDb();
+  const errorHandling = getVideoErrorHandlingConfig();
 
   let whereClause = '';
   const args: QueryArg[] = [];
 
-  if (platform || intent || topic || channel_id) {
-    const conditions = [];
-    if (platform) {
-      conditions.push('v.platform = ?');
-      args.push(platform);
-    }
-    if (intent) {
-      if (intent === '未分类') {
-        // Include channels with NULL, empty, literal '未分类', or orphaned intent
-        // (intent name that doesn't exist in the intents table)
-        conditions.push(
-          "(c.intent = '未分类' OR c.intent IS NULL OR c.intent = '' OR NOT EXISTS (SELECT 1 FROM intents WHERE name = c.intent))",
-        );
-      } else {
-        conditions.push('c.intent = ?');
-        args.push(intent);
-      }
-    }
-    if (topic) {
+  const conditions = [];
+  if (!includeUnavailable && errorHandling.hideUnavailableVideos) {
+    conditions.push(
+      "(v.availability_status IS NULL OR v.availability_status NOT IN ('unavailable', 'abandoned'))",
+    );
+  }
+  if (platform) {
+    conditions.push('v.platform = ?');
+    args.push(platform);
+  }
+  if (intent) {
+    if (intent === '未分类') {
+      // Include channels with NULL, empty, literal '未分类', or orphaned intent
+      // (intent name that doesn't exist in the intents table)
       conditions.push(
-        'EXISTS (SELECT 1 FROM json_each(c.topics) WHERE json_each.value = ?)',
+        "(c.intent = '未分类' OR c.intent IS NULL OR c.intent = '' OR NOT EXISTS (SELECT 1 FROM intents WHERE name = c.intent))",
       );
-      args.push(topic);
+    } else {
+      conditions.push('c.intent = ?');
+      args.push(intent);
     }
-    if (channel_id) {
-      conditions.push('v.channel_id = ?');
-      args.push(channel_id);
-    }
+  }
+  if (topic) {
+    conditions.push(
+      'EXISTS (SELECT 1 FROM json_each(c.topics) WHERE json_each.value = ?)',
+    );
+    args.push(topic);
+  }
+  if (channel_id) {
+    conditions.push('v.channel_id = ?');
+    args.push(channel_id);
+  }
+  if (conditions.length > 0) {
     whereClause = 'WHERE ' + conditions.join(' AND ');
   }
 
   const query = `
     SELECT v.id, v.channel_id, v.platform, v.video_id, v.title, v.thumbnail_url,
            v.published_at, v.duration, v.is_read, v.is_members_only, v.access_status,
+           v.availability_status, v.availability_reason, v.availability_checked_at,
            v.subtitle_status, v.subtitle_path, v.subtitle_language, v.subtitle_format,
            v.subtitle_error, v.subtitle_last_attempt_at, v.subtitle_cooldown_until, v.created_at,
            c.name as channel_name, c.avatar_url, c.channel_id as channel_channel_id, c.intent, c.topics,

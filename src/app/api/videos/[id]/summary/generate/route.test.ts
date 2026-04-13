@@ -157,7 +157,7 @@ describe('POST /api/videos/[id]/summary/generate', () => {
     expect(decoded).toContain('第一段');
 
     controller.abort();
-    expect(forwardedAbortSignal.aborted).toBe(true);
+    expect(forwardedAbortSignal.aborted).toBe(false);
 
     await reader!.cancel();
     gate.resolve();

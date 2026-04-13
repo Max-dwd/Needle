@@ -128,6 +128,13 @@ describe('browser source commands', () => {
     expect(results[0].published_at).toMatch(/^\d{4}-\d{2}-\d{2}T/);
   });
 
+  it('normalizes english relative published_at text via shared helper', async () => {
+    const { normalizePublishedAtValue } = await import('./browser-source-shared');
+    expect(normalizePublishedAtValue('29 minutes ago')).toMatch(
+      /^\d{4}-\d{2}-\d{2}T/,
+    );
+  });
+
   it('normalizes bilibili user-videos into the one-pass contract', async () => {
     mockJsonOnce([
       {
