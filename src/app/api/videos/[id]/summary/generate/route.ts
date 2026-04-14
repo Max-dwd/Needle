@@ -17,11 +17,17 @@ import { log } from '@/lib/logger';
 
 const SUMMARY_REQUEST_TIMEOUT_MS = 5 * 60 * 1000;
 
-function createRequestAbortSignal(requestSignal: AbortSignal): AbortSignal {
-  return AbortSignal.any([
-    requestSignal,
-    AbortSignal.timeout(SUMMARY_REQUEST_TIMEOUT_MS),
-  ]);
+function createRequestAbortSignal(
+  requestSignal: AbortSignal,
+  options?: { respectClientAbort?: boolean },
+): AbortSignal {
+  const signals: AbortSignal[] = [AbortSignal.timeout(SUMMARY_REQUEST_TIMEOUT_MS)];
+
+  if (options?.respectClientAbort !== false) {
+    signals.unshift(requestSignal);
+  }
+
+  return signals.length === 1 ? signals[0] : AbortSignal.any(signals);
 }
 
 function validateAndLoadVideo(id: string) {
@@ -201,7 +207,11 @@ function handleStreamGenerate(
   modelIdOverride: string | null,
   requestSignal: AbortSignal,
 ) {
-  const abortSignal = createRequestAbortSignal(requestSignal);
+  // Keep the server-side generation running even if the player closes mid-stream.
+  // The SSE response can be canceled independently from the actual summary job.
+  const abortSignal = createRequestAbortSignal(requestSignal, {
+    respectClientAbort: false,
+  });
   const encoder = new TextEncoder();
   let streamClosed = false;
 

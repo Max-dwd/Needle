@@ -544,6 +544,62 @@ describe('VAL-POOL-004: Pause / resume / drain', () => {
     expect(resolved).toBe(true);
   });
 
+  it('drain() continues after a rate-limit retry while draining', async () => {
+    const pool = new AsyncPool<number>({
+      name: 'drain-rate-limit-test',
+      initialConcurrency: 1,
+      minConcurrency: 1,
+      maxConcurrency: 1,
+      adjustIntervalMs: 999_999_999,
+      rateLimit: { requestsPerWindow: 1, windowMs: 50 },
+    });
+
+    const completed: number[] = [];
+    const executor = async (value: number): Promise<JobResult> => {
+      completed.push(value);
+      await delay(1);
+      return { success: true, durationMs: 1 };
+    };
+
+    pool.enqueue(1, 1, executor);
+    pool.enqueue(2, 1, executor);
+
+    const settled = await Promise.race([
+      pool.drain().then(() => 'done'),
+      delay(500).then(() => 'timeout'),
+    ]);
+
+    expect(settled).toBe('done');
+    expect(completed).toEqual([1, 2]);
+  });
+
+  it('drain() refs an existing rate-limit timer so scripts stay alive', () => {
+    const pool = new AsyncPool<number>({
+      name: 'drain-rate-limit-ref-test',
+      initialConcurrency: 1,
+      minConcurrency: 1,
+      maxConcurrency: 1,
+      adjustIntervalMs: 999_999_999,
+    });
+
+    const ref = vi.fn();
+    const unref = vi.fn();
+    const internals = pool as unknown as {
+      _rateLimitTimer: { ref?: () => void; unref?: () => void } | null;
+      _queue: Map<number, unknown[]>;
+    };
+
+    internals._rateLimitTimer = { ref, unref };
+    internals._queue.get(1)!.push({} as never);
+
+    void pool.drain();
+
+    expect(ref).toHaveBeenCalledTimes(1);
+    expect(unref).not.toHaveBeenCalled();
+
+    pool.destroy();
+  });
+
   it('getStatus() returns accurate queueDepth and activeJobs', async () => {
     const pool = makePool({
       initialConcurrency: 1,

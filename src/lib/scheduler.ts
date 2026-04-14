@@ -456,7 +456,13 @@ export function insertOrUpdateVideos(
       published_at = CASE WHEN ? <> '' THEN ? ELSE published_at END,
       duration = CASE WHEN ? <> '' THEN ? ELSE duration END,
       is_members_only = CASE WHEN ? IS NOT NULL THEN ? ELSE is_members_only END,
-      access_status = CASE WHEN ? IS NOT NULL THEN ? ELSE access_status END
+      access_status = CASE WHEN ? IS NOT NULL THEN ? ELSE access_status END,
+      availability_status = NULL,
+      availability_reason = NULL,
+      availability_checked_at = CASE
+        WHEN availability_status IS NOT NULL THEN ?
+        ELSE availability_checked_at
+      END
     WHERE video_id = ?
   `);
 
@@ -505,6 +511,9 @@ export function insertOrUpdateVideos(
             is_read: 0,
             is_members_only: video.is_members_only ?? 0,
             access_status: video.access_status ?? null,
+            availability_status: null,
+            availability_reason: null,
+            availability_checked_at: null,
             subtitle_status: null,
             summary_status: null,
             automation_tags: null,
@@ -519,6 +528,7 @@ export function insertOrUpdateVideos(
     const publishedAt = video.published_at || '';
     const isMembersOnly = video.is_members_only ?? null;
     const accessStatus = video.access_status ?? null;
+    const recoveredAt = nowIso();
     enrich.run(
       title,
       title,
@@ -532,6 +542,7 @@ export function insertOrUpdateVideos(
       isMembersOnly,
       accessStatus,
       accessStatus,
+      recoveredAt,
       video.video_id,
     );
   }

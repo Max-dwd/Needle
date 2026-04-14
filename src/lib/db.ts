@@ -1,7 +1,10 @@
 import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
-import type { SummaryTaskStatus } from '@/types';
+import type {
+  SummaryTaskStatus,
+  VideoAvailabilityStatus,
+} from '@/types';
 
 const DB_PATH = process.env.DATABASE_PATH || './data/folo.db';
 const CHANNEL_INTENT_MIGRATION_KEY = 'channels_intent_topics_migrated_v1';
@@ -70,6 +73,9 @@ function initSchema(db: Database.Database) {
       duration TEXT,
       is_read INTEGER DEFAULT 0,
       access_status TEXT,
+      availability_status TEXT,
+      availability_reason TEXT,
+      availability_checked_at DATETIME,
       subtitle_path TEXT,
       subtitle_language TEXT,
       subtitle_format TEXT,
@@ -85,7 +91,6 @@ function initSchema(db: Database.Database) {
 
     CREATE INDEX IF NOT EXISTS idx_videos_channel ON videos(channel_id);
     CREATE INDEX IF NOT EXISTS idx_videos_published ON videos(published_at DESC);
-    CREATE INDEX IF NOT EXISTS idx_videos_subtitle_status ON videos(subtitle_status);
 
     CREATE TABLE IF NOT EXISTS app_settings (
       key TEXT PRIMARY KEY,
@@ -176,6 +181,15 @@ function initSchema(db: Database.Database) {
   if (!cols.includes('access_status')) {
     db.exec('ALTER TABLE videos ADD COLUMN access_status TEXT');
   }
+  if (!cols.includes('availability_status')) {
+    db.exec('ALTER TABLE videos ADD COLUMN availability_status TEXT');
+  }
+  if (!cols.includes('availability_reason')) {
+    db.exec('ALTER TABLE videos ADD COLUMN availability_reason TEXT');
+  }
+  if (!cols.includes('availability_checked_at')) {
+    db.exec('ALTER TABLE videos ADD COLUMN availability_checked_at DATETIME');
+  }
   if (!cols.includes('subtitle_path')) {
     db.exec('ALTER TABLE videos ADD COLUMN subtitle_path TEXT');
   }
@@ -214,6 +228,10 @@ function initSchema(db: Database.Database) {
   if (!cols.includes('channel_name')) {
     db.exec("ALTER TABLE videos ADD COLUMN channel_name TEXT");
   }
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_videos_subtitle_status ON videos(subtitle_status);
+    CREATE INDEX IF NOT EXISTS idx_videos_availability_status ON videos(availability_status);
+  `);
 
   const channelCols = (
     db.prepare('PRAGMA table_info(channels)').all() as Array<{ name: string }>
@@ -440,6 +458,9 @@ export interface Video {
   is_read: number;
   is_members_only: number;
   access_status: string | null;
+  availability_status: VideoAvailabilityStatus;
+  availability_reason: string | null;
+  availability_checked_at: string | null;
   subtitle_path: string | null;
   subtitle_language: string | null;
   subtitle_format: string | null;

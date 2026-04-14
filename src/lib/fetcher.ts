@@ -12,7 +12,10 @@ import {
   fetchBrowserYoutubeChannelVideos,
   fetchBrowserYoutubeVideoMeta,
 } from './browser-youtube-source';
-import { normalizeBrowserError } from './browser-source-shared';
+import {
+  normalizeBrowserError,
+  normalizePublishedAtValue,
+} from './browser-source-shared';
 import {
   getCrawlPipelineSourceOrder,
   getPreferredCrawlMethod,
@@ -28,6 +31,11 @@ interface VideoInfo {
   is_members_only?: number;
   access_status?: 'members_only' | 'limited_free';
   channel_name?: string;
+}
+
+export interface VideoAvailabilityProbeResult {
+  status: 'available' | 'unavailable' | 'unknown';
+  reason?: string;
 }
 
 export interface ChannelInfo {
@@ -47,6 +55,27 @@ export function runYtDlp(args: string[], timeout: number): Promise<string> {
       resolve(stdout);
     });
   });
+}
+
+function readExecErrorMessage(error: unknown): string {
+  if (!(error instanceof Error)) return String(error);
+  const stderr =
+    'stderr' in error
+      ? typeof error.stderr === 'string'
+        ? error.stderr
+        : error.stderr instanceof Buffer
+          ? error.stderr.toString('utf8')
+          : ''
+      : '';
+  const stdout =
+    'stdout' in error
+      ? typeof error.stdout === 'string'
+        ? error.stdout
+        : error.stdout instanceof Buffer
+          ? error.stdout.toString('utf8')
+          : ''
+      : '';
+  return stderr.trim() || stdout.trim() || error.message;
 }
 
 function resolveFeedTargetLabel(
@@ -89,7 +118,7 @@ function normalizeBrowserVideo(
     platform,
     title,
     thumbnail_url: normalizeThumb(video.thumbnail_url),
-    published_at: video.published_at || '',
+    published_at: normalizePublishedAtValue(video.published_at),
     duration: video.duration || '',
     is_members_only: video.is_members_only,
     access_status: video.access_status,
@@ -203,6 +232,38 @@ export async function fetchYouTubeVideoDetail(
     return normalizeBrowserVideo('youtube', detail);
   } catch {
     return null;
+  }
+}
+
+export async function probeYouTubeVideoAvailability(
+  videoId: string,
+): Promise<VideoAvailabilityProbeResult> {
+  try {
+    await runYtDlp(
+      ['--skip-download', '--dump-single-json', `https://www.youtube.com/watch?v=${videoId}`],
+      20_000,
+    );
+    return { status: 'available' };
+  } catch (error) {
+    const message = compactLogValue(readExecErrorMessage(error));
+    if (
+      /(removed by the uploader|video unavailable|this video is unavailable|private video|account associated with this video has been terminated)/i.test(
+        message,
+      ) &&
+      !/(members?[- ]only|join this channel|requires membership|会员|付费|limited free)/i.test(
+        message,
+      )
+    ) {
+      return {
+        status: 'unavailable',
+        reason: message,
+      };
+    }
+
+    return {
+      status: 'unknown',
+      reason: message,
+    };
   }
 }
 

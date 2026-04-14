@@ -2974,10 +2974,119 @@ a.feed-channel-link:hover {
   display: none;
 }
 
+.feed-header-top {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+}
+
 .feed-header-actions {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.feed-header-actions .toolbar-icon-btn.active {
+  background: var(--bg-hover);
+  color: var(--accent-purple);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.feed-header-search-floating {
+  position: absolute;
+  top: calc(100% - 4px);
+  right: 0;
+  width: 380px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1), 0 4px 10px rgba(0, 0, 0, 0.05);
+  padding: 8px;
+  z-index: 1000;
+  animation: search-pop-in 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  transform-origin: top right;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+@keyframes search-pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@media (max-width: 900px) {
+  .feed-header-search-floating {
+    width: calc(100vw - 32px);
+    right: 16px;
+    top: calc(100% + 8px);
+    transform-origin: top;
+  }
+}
+
+.search-input-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0 10px;
+  height: 38px;
+}
+
+.search-input-wrapper:focus-within {
+  border-color: var(--accent-purple);
+}
+
+.search-input-icon {
+  font-size: 13px;
+  opacity: 0.5;
+}
+
+.search-input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 13px;
+  outline: none;
+}
+
+.search-input::placeholder {
+  color: var(--text-muted);
+}
+
+.search-input-clear {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(0, 0, 0, 0.1);
+  color: var(--text-primary);
+  font-size: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.search-input-clear:hover {
+  background: rgba(0, 0, 0, 0.2);
+}
+
+@media (max-width: 900px) {
+  .feed-header-search {
+    padding: 4px 12px 2px 12px;
+  }
 }
 
 /* ─── Task Status Bar ──────────────────────────────────────────────────────── */

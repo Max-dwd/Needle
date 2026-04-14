@@ -12,6 +12,7 @@ const mockEnsureSubtitleForVideo = vi.hoisted(() => vi.fn());
 const mockCreateSummaryTask = vi.hoisted(() => vi.fn());
 const mockGetSummaryTask = vi.hoisted(() => vi.fn());
 const mockIsQueueRunning = vi.hoisted(() => vi.fn());
+const mockGetQueueState = vi.hoisted(() => vi.fn());
 const mockStartQueueProcessing = vi.hoisted(() => vi.fn());
 const mockLogInfo = vi.hoisted(() => vi.fn());
 const mockLogWarn = vi.hoisted(() => vi.fn());
@@ -76,6 +77,7 @@ vi.mock('./summary-tasks', () => ({
 }));
 
 vi.mock('./summary-queue', () => ({
+  getQueueState: mockGetQueueState,
   isQueueRunning: mockIsQueueRunning,
   startQueueProcessing: mockStartQueueProcessing,
 }));
@@ -181,6 +183,9 @@ function createVideo(overrides: Partial<Video> = {}): Video {
     is_read: 0,
     is_members_only: 0,
     access_status: null,
+    availability_status: null,
+    availability_reason: null,
+    availability_checked_at: null,
     subtitle_path: null,
     subtitle_language: null,
     subtitle_format: null,
@@ -235,6 +240,15 @@ function setupDefaultMocks(): void {
     }),
   });
   mockIsQueueRunning.mockReturnValue(false);
+  mockGetQueueState.mockReturnValue({
+    running: false,
+    stopRequested: false,
+    processed: 0,
+    total: 0,
+    currentVideoId: null,
+    currentTitle: null,
+    startedAt: null,
+  });
   mockCreateSummaryTask.mockReturnValue({ id: 1 } as ReturnType<
     typeof mockCreateSummaryTask
   >);
@@ -989,6 +1003,31 @@ describe('auto-pipeline', () => {
 
       const status = getAutoPipelineStatus();
       expect(status.subtitle.currentVideoTitle).toBe('Stored Title');
+    });
+
+    it('surfaces manual summary processing in pipeline status', () => {
+      mockGetDb.mockReturnValue({
+        prepare: vi.fn().mockReturnValue({
+          get: vi.fn().mockReturnValue({ c: 0 }),
+          all: vi.fn().mockReturnValue([]),
+        }),
+      });
+      mockGetQueueState.mockReturnValue({
+        running: true,
+        stopRequested: false,
+        processed: 0,
+        total: 0,
+        currentVideoId: 'manual-summary-video',
+        currentTitle: 'Manual Summary Video',
+        startedAt: '2026-03-23T12:00:00.000Z',
+      });
+
+      const status = getAutoPipelineStatus();
+
+      expect(status.summary).toMatchObject({
+        processing: true,
+        currentVideoId: 'manual-summary-video',
+      });
     });
 
     it('reports subtitle backoff timing and exhausted retry state', () => {

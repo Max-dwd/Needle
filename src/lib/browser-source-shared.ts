@@ -283,13 +283,23 @@ function parseRelativeDate(input: string): string | undefined {
   return undefined;
 }
 
-function normalizeSummaryPublishedAt(value: unknown): string | undefined {
+export function normalizePublishedAtValue(value: unknown): string {
   if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
     return new Date(value * 1000).toISOString();
   }
-  const input = asOptionalString(value)?.trim();
-  if (!input) return undefined;
-  return parseRelativeDate(input) ?? input;
+
+  const input = asOptionalString(value)?.replace(/\u00a0/g, ' ').trim();
+  if (!input) return '';
+
+  const relative = parseRelativeDate(input);
+  if (relative) return relative;
+
+  return normalizeIsoDate(input) || input;
+}
+
+function normalizeSummaryPublishedAt(value: unknown): string | undefined {
+  const normalized = normalizePublishedAtValue(value);
+  return normalized || undefined;
 }
 
 function normalizeIsoDate(value: unknown): string {

@@ -34,7 +34,18 @@ interface VideoEnrichedEvent {
     duration: string | null;
     is_members_only?: number;
     access_status?: 'members_only' | 'limited_free' | null;
+    availability_status?: 'unavailable' | 'abandoned' | null;
+    availability_reason?: string | null;
+    availability_checked_at?: string | null;
   };
+}
+
+interface VideoAvailabilityChangedEvent {
+  videoDbId: number;
+  videoId: string;
+  platform: string;
+  status: 'unavailable' | 'abandoned' | null;
+  reason?: string | null;
 }
 
 export async function GET() {
@@ -76,6 +87,15 @@ export async function GET() {
   }) => send('subtitle-status', data);
   const onVideoEnriched = (data: VideoEnrichedEvent) =>
     send('video-enriched', data);
+  const onVideoAvailabilityChanged = (data: VideoAvailabilityChangedEvent) => {
+    send('video-availability', data);
+    send('videos-updated', {
+      reason: 'video-availability-changed',
+      videoId: data.videoId,
+      platform: data.platform,
+      timestamp: new Date().toISOString(),
+    });
+  };
   const onPoolStatusChanged = (data: PoolStatus) => send('pool-status', data);
   const onCrawlerStatusChanged = (data: CrawlerStatusChangedEvent) => {
     const current = {
@@ -115,6 +135,10 @@ export async function GET() {
     appEvents.removeListener('video:new-skeleton', onVideoNewSkeleton);
     appEvents.removeListener('subtitle:status-changed', onSubtitleStatusChanged);
     appEvents.removeListener('video:enriched', onVideoEnriched);
+    appEvents.removeListener(
+      'video:availability-changed',
+      onVideoAvailabilityChanged,
+    );
     // Remove pool event listeners
     appEvents.removeListener('pool:status-changed', onPoolStatusChanged);
     appEvents.removeListener('crawler:status-changed', onCrawlerStatusChanged);
@@ -131,6 +155,7 @@ export async function GET() {
   appEvents.on('video:new-skeleton', onVideoNewSkeleton);
   appEvents.on('subtitle:status-changed', onSubtitleStatusChanged);
   appEvents.on('video:enriched', onVideoEnriched);
+  appEvents.on('video:availability-changed', onVideoAvailabilityChanged);
   appEvents.on('pool:status-changed', onPoolStatusChanged);
   appEvents.on('crawler:status-changed', onCrawlerStatusChanged);
   appEvents.on('log:entry', onLogEntry);

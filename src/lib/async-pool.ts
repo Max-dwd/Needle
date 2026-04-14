@@ -419,6 +419,7 @@ export class AsyncPool<T> {
     }
 
     this._state = 'draining';
+    this._syncRateLimitTimerRefState();
 
     log.info('system', 'pool_drain_start', {
       pool: this.name,
@@ -510,6 +511,15 @@ export class AsyncPool<T> {
     return Math.min(this._concurrency, this._getAdjustedMax());
   }
 
+  private _syncRateLimitTimerRefState(): void {
+    if (!this._rateLimitTimer) return;
+    if (this._state === 'draining') {
+      this._rateLimitTimer.ref?.();
+      return;
+    }
+    this._rateLimitTimer.unref?.();
+  }
+
   /** Check if drain should complete */
   private _checkDrainComplete(): void {
     if (!this._drainResolve) return; // not draining
@@ -527,11 +537,13 @@ export class AsyncPool<T> {
       this._tryStartNext(); // starts the next job
       // Immediately go back to draining
       this._state = 'draining';
+      this._syncRateLimitTimerRefState();
     } else {
       // Queue empty and no active jobs — drain is complete
       const resolver = this._drainResolve;
       this._drainResolve = undefined;
       this._state = 'running';
+      this._syncRateLimitTimerRefState();
       resolver(); // transitions state and resolves drain Promise
     }
   }
@@ -591,8 +603,13 @@ export class AsyncPool<T> {
       }
       this._rateLimitTimer = setTimeout(() => {
         this._rateLimitTimer = null;
+        if (this._state === 'draining') {
+          this._checkDrainComplete();
+          return;
+        }
         this._tryStartNext(); // retry after wait
       }, waitMs);
+      this._syncRateLimitTimerRefState();
       return false;
     }
 
@@ -605,8 +622,13 @@ export class AsyncPool<T> {
 
     this._rateLimitTimer = setTimeout(() => {
       this._rateLimitTimer = null;
+      if (this._state === 'draining') {
+        this._checkDrainComplete();
+        return;
+      }
       this._tryStartNext(); // retry
     }, waitMs);
+    this._syncRateLimitTimerRefState();
 
     return false;
   }

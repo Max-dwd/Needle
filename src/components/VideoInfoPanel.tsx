@@ -232,6 +232,16 @@ export default function VideoInfoPanel({
   }, [loadSummary]);
 
   useEffect(() => {
+    const summaryIsProcessing = video.summary_status === 'processing';
+    setSummaryGenerating(summaryIsProcessing);
+    setSummaryError(null);
+    setSummaryProgressMessage(
+      summaryIsProcessing ? '总结正在后台生成中...' : null,
+    );
+    setStreamingMarkdown(null);
+  }, [video.id, video.summary_status]);
+
+  useEffect(() => {
     if (activePanel === 'summary' && models.length === 0) {
       fetch('/api/settings/ai-summary')
         .then((r) => r.json())
@@ -414,6 +424,7 @@ export default function VideoInfoPanel({
 
     const abort = new AbortController();
     abortRef.current = abort;
+    let handedOffToExistingTask = false;
 
     try {
       const params = new URLSearchParams();
@@ -431,6 +442,14 @@ export default function VideoInfoPanel({
 
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
+        if (res.status === 409) {
+          handedOffToExistingTask = true;
+          setSummaryGenerating(true);
+          setSummaryError(null);
+          setSummaryProgressMessage('总结已在后台生成中...');
+          setStreamingMarkdown(null);
+          return;
+        }
         setSummaryError(data.details || data.error || '生成失败');
         setSummaryProgressMessage(null);
         setStreamingMarkdown(null);
@@ -506,7 +525,9 @@ export default function VideoInfoPanel({
       setSummaryProgressMessage(null);
       setStreamingMarkdown(null);
     } finally {
-      setSummaryGenerating(false);
+      if (!handedOffToExistingTask) {
+        setSummaryGenerating(false);
+      }
       abortRef.current = null;
     }
   };

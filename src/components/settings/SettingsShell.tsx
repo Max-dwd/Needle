@@ -7,6 +7,7 @@ import AppearanceTab from './AppearanceTab';
 import BackupTab from './BackupTab';
 import BilibiliSummaryTab from './BilibiliSummaryTab';
 import CrawlingTab from './CrawlingTab';
+import ErrorHandlingTab from './ErrorHandlingTab';
 import IntentTab from './IntentTab';
 import LogsTab from './LogsTab';
 import ModelsTab from './ModelsTab';
@@ -74,6 +75,8 @@ export default function SettingsShell() {
         return <SummaryTab showToast={showToast} />;
       case 'models':
         return <ModelsTab showToast={showToast} />;
+      case 'errors':
+        return <ErrorHandlingTab showToast={showToast} />;
       case 'backup':
         return <BackupTab showToast={showToast} />;
       case 'logs':

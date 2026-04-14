@@ -55,6 +55,12 @@ const VideoCard = memo(function VideoCard({
       : video.access_status === 'members_only' || video.is_members_only === 1
         ? { label: '👑 会员', title: '会员专属视频' }
         : null;
+  const availabilityBadge =
+    video.availability_status === 'abandoned'
+      ? { label: '⛔ 放弃', title: video.availability_reason || '已确认不可用并完全放弃' }
+      : video.availability_status === 'unavailable'
+        ? { label: '⚠ 不可用', title: video.availability_reason || '已确认不可用' }
+        : null;
   const subtitleBadge = getSubtitleBadgeLabel(video);
   const [showSummary, setShowSummary] = useState(false);
   const [summaryData, setSummaryData] = useState<BilibiliSummaryData | null>(
@@ -445,7 +451,8 @@ const VideoCard = memo(function VideoCard({
   };
 
   const handleClick = (e: React.MouseEvent) => {
-    if (externalOpen) return;
+    const isMobileViewport = window.innerWidth <= 900;
+    if (externalOpen && !isMobileViewport) return;
     e.preventDefault();
     playInApp();
   };
@@ -467,7 +474,7 @@ const VideoCard = memo(function VideoCard({
   }, [summaryModels.length, summaryModelsLoading]);
 
   const triggerMetadataRepair = useCallback(() => {
-    if (metadataRepairing) return;
+    if (metadataRepairing || video.availability_status === 'abandoned') return;
     setMetadataRepairing(true);
     fetch(`/api/videos/${video.id}/repair`, {
       method: 'POST',
@@ -476,7 +483,7 @@ const VideoCard = memo(function VideoCard({
       .finally(() => {
         setMetadataRepairing(false);
       });
-  }, [metadataRepairing, video.id]);
+  }, [metadataRepairing, video.availability_status, video.id]);
 
   const triggerSubtitleRetry = useCallback(
     (preferredMethod: 'gemini' | 'piped' | 'bilibili-api') => {
@@ -698,6 +705,11 @@ const VideoCard = memo(function VideoCard({
               {accessBadge.label}
             </span>
           )}
+          {availabilityBadge && (
+            <span className="members-badge" title={availabilityBadge.title}>
+              {availabilityBadge.label}
+            </span>
+          )}
 
           {/* Removed play-overlay on hover */}
         </div>
@@ -848,11 +860,16 @@ const VideoCard = memo(function VideoCard({
                 closeContextMenu();
                 triggerMetadataRepair();
               }}
+              disabled={metadataRepairing || video.availability_status === 'abandoned'}
               style={contextMenuItemStyle}
             >
               修
               <span style={contextMenuHintStyle}>
-                {metadataRepairing ? '处理中…' : '元数据'}
+                {video.availability_status === 'abandoned'
+                  ? '已放弃'
+                  : metadataRepairing
+                    ? '处理中…'
+                    : '元数据'}
               </span>
             </button>
 

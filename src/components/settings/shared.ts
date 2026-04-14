@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useState } from 'react';
+import type { UnavailableVideoBehavior } from '@/types';
 
 export interface AiSummaryModelConfig {
   id: string;
@@ -124,6 +125,33 @@ export interface PlayerKeyboardModeSettings {
 
 export interface HomeIntentShortcutSettings {
   enabled: boolean;
+}
+
+export interface ErrorHandlingSettings {
+  hideUnavailableVideos: boolean;
+  unavailableVideoBehavior: UnavailableVideoBehavior;
+  updatedAt: string | null;
+  counts: {
+    unavailable: number;
+    abandoned: number;
+  };
+}
+
+export interface TrackedErrorVideo {
+  id: number;
+  video_id: string;
+  platform: 'youtube' | 'bilibili';
+  title: string;
+  thumbnail_url: string | null;
+  published_at: string | null;
+  duration: string | null;
+  channel_name: string;
+  channel_channel_id?: string;
+  avatar_url: string | null;
+  availability_status: 'unavailable' | 'abandoned';
+  availability_reason: string | null;
+  availability_checked_at: string | null;
+  created_at: string;
 }
 
 export interface PipelineSourceConfig {
@@ -257,6 +285,7 @@ export const settingsNavItems = [
   { id: 'subtitles', label: '字幕', icon: '📝' },
   { id: 'summary', label: '总结', icon: '🧠' },
   { id: 'models', label: '模型', icon: '✨' },
+  { id: 'errors', label: '错误处理', icon: '🚨' },
   { id: 'backup', label: '备份', icon: '💾' },
   { id: 'logs', label: '日志', icon: '📋' },
   { id: 'intents', label: '意图', icon: '🎯' },

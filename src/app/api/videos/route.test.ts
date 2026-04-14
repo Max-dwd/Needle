@@ -17,6 +17,13 @@ vi.mock('@/lib/refresh-history', () => ({
 vi.mock('@/lib/app-settings', () => ({
   getAppSetting: vi.fn().mockReturnValue(null),
 }));
+vi.mock('@/lib/video-error-handling', () => ({
+  getVideoErrorHandlingConfig: vi.fn().mockReturnValue({
+    hideUnavailableVideos: true,
+    unavailableVideoBehavior: 'keep',
+    updatedAt: null,
+  }),
+}));
 
 import { GET } from './route';
 
@@ -69,5 +76,37 @@ describe('GET /api/videos', () => {
     expect(query).toContain('LEFT JOIN research_favorites rf ON rf.video_id = v.id');
     expect(query).toContain('LEFT JOIN research_intent_types rit ON rit.id = rf.intent_type_id');
     expect(query).toContain('research_is_favorited');
+  });
+
+  it('hides tracked unavailable videos by default', async () => {
+    prepareMock
+      .mockReturnValueOnce(mockStmt({ all: vi.fn().mockReturnValue([]) }))
+      .mockReturnValueOnce(
+        mockStmt({ get: vi.fn().mockReturnValue({ count: 0 }) }),
+      );
+
+    const request = new Request('http://localhost/api/videos') as NextRequest;
+    await GET(request);
+
+    const query = prepareMock.mock.calls[0]?.[0] as string;
+    expect(query).toContain(
+      "v.availability_status IS NULL OR v.availability_status NOT IN ('unavailable', 'abandoned')",
+    );
+  });
+
+  it('allows unavailable videos when include_unavailable=1', async () => {
+    prepareMock
+      .mockReturnValueOnce(mockStmt({ all: vi.fn().mockReturnValue([]) }))
+      .mockReturnValueOnce(
+        mockStmt({ get: vi.fn().mockReturnValue({ count: 0 }) }),
+      );
+
+    const request = new Request(
+      'http://localhost/api/videos?include_unavailable=1',
+    ) as NextRequest;
+    await GET(request);
+
+    const query = prepareMock.mock.calls[0]?.[0] as string;
+    expect(query).not.toContain('availability_status NOT IN');
   });
 });
