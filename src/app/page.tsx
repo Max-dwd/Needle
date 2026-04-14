@@ -66,6 +66,7 @@ function FeedPageContent() {
   const topic = searchParams.get('topic');
   const platform = searchParams.get('platform');
   const channel_id = searchParams.get('channel_id');
+  const q = searchParams.get('q');
 
   const [videos, setVideos] = useState<VideoWithMeta[]>([]);
   const [loading, setLoading] = useState(true);
@@ -109,6 +110,45 @@ function FeedPageContent() {
   const [intents, setIntents] = useState<IntentOption[]>([]);
   const [homeIntentShortcutsEnabled, setHomeIntentShortcutsEnabled] =
     useState(true);
+
+  const [isSearchVisible, setIsSearchVisible] = useState(Boolean(q));
+  const [searchInput, setSearchInput] = useState(q || '');
+  const searchDebounceRef = useRef<ReturnType<typeof setTimeout>>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    setSearchInput(q || '');
+    if (q) setIsSearchVisible(true);
+  }, [q]);
+
+  // Focus input when it becomes visible
+  useEffect(() => {
+    if (isSearchVisible && searchInputRef.current) {
+      searchInputRef.current.focus();
+    }
+  }, [isSearchVisible]);
+
+  const handleSearchChange = useCallback((value: string) => {
+    setSearchInput(value);
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    searchDebounceRef.current = setTimeout(() => {
+      const params = new URLSearchParams(searchParams.toString());
+      if (value.trim()) {
+        params.set('q', value.trim());
+      } else {
+        params.delete('q');
+      }
+      router.replace(`/?${params.toString()}`, { scroll: false });
+    }, 300);
+  }, [router, searchParams]);
+
+  const handleSearchClear = useCallback(() => {
+    setSearchInput('');
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete('q');
+    router.replace(`/?${params.toString()}`, { scroll: false });
+  }, [router, searchParams]);
 
   const loadMoreRef = useRef<HTMLDivElement>(null);
   const loadedVideoCountRef = useRef(0);
@@ -280,6 +320,7 @@ function FeedPageContent() {
         if (intent) params.set('intent', intent);
         if (topic) params.set('topic', topic);
         if (channel_id) params.set('channel_id', channel_id);
+        if (q) params.set('q', q);
         params.set('page', pageNum.toString());
         params.set('limit', '30');
         params.set('include_research', '1');
@@ -308,7 +349,7 @@ function FeedPageContent() {
         else setLoadingMore(false);
       }
     },
-    [platform, intent, topic, channel_id, showToast],
+    [platform, intent, topic, channel_id, q, showToast],
   );
 
   const refreshLoadedVideos = useCallback(async () => {
@@ -323,6 +364,7 @@ function FeedPageContent() {
     if (intent) params.set('intent', intent);
     if (topic) params.set('topic', topic);
     if (channel_id) params.set('channel_id', channel_id);
+    if (q) params.set('q', q);
     params.set('page', '1');
     const requestedLimit = Math.max(loadedVideoCountRef.current, 30);
     params.set('limit', String(requestedLimit));
@@ -344,7 +386,7 @@ function FeedPageContent() {
     } catch {
       // keep stale list on polling failures
     }
-  }, [platform, intent, topic, channel_id]);
+  }, [platform, intent, topic, channel_id, q]);
 
   useEffect(() => {
     setPage(1);
@@ -453,6 +495,8 @@ function FeedPageContent() {
           if (channel_id) return;
           // Topic filter: skip insertion, rely on fallback (topic info not in payload)
           if (topic) return;
+          // Search filter: skip insertion
+          if (q) return;
 
           // Insert at top, avoid duplicates
           setVideos((prev) => {
@@ -547,7 +591,7 @@ function FeedPageContent() {
       es?.close();
       if (reconnectTimer) clearTimeout(reconnectTimer);
     };
-  }, [channel_id, intent, platform, refreshLoadedVideos, topic]);
+  }, [channel_id, intent, platform, refreshLoadedVideos, topic, q]);
 
   const loadMore = useCallback(() => {
     if (loadingMore || !hasMore) return;
@@ -1026,6 +1070,19 @@ function FeedPageContent() {
           </div>
           <div className="feed-header-actions">
             <button
+              className={`toolbar-icon-btn ${isSearchVisible ? 'active' : ''}`}
+              onClick={() => {
+                if (isSearchVisible && !searchInput) {
+                  setIsSearchVisible(false);
+                } else {
+                  setIsSearchVisible(true);
+                }
+              }}
+              title="搜索"
+            >
+              🔍
+            </button>
+            <button
               id="external-open-toggle"
               className="toolbar-icon-btn"
               onClick={toggleExternalOpen}
@@ -1034,6 +1091,57 @@ function FeedPageContent() {
               {externalOpen ? '🔗' : '⛓️'}
             </button>
           </div>
+
+          {isSearchVisible && (
+            <div
+              className="feed-header-search-floating"
+              onClick={(e) => e.stopPropagation()}
+              onBlur={(e) => {
+                // Only hide if focus is moving outside the entire search wrapper
+                if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                  if (!searchInput.trim()) {
+                    setIsSearchVisible(false);
+                  }
+                }
+              }}
+            >
+              <div className="search-input-wrapper">
+                <span className="search-input-icon">🔍</span>
+                <input
+                  ref={searchInputRef}
+                  type="text"
+                  className="search-input"
+                  placeholder="搜索视频或频道…"
+                  value={searchInput}
+                  onChange={(e) => handleSearchChange(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Escape') {
+                      if (searchInput) {
+                        handleSearchClear();
+                      } else {
+                        setIsSearchVisible(false);
+                      }
+                      (e.target as HTMLInputElement).blur();
+                    }
+                  }}
+                />
+                {searchInput && (
+                  <button
+                    className="search-input-clear"
+                    onClick={(e) => {
+                      handleSearchClear();
+                      // Keep focus on input after clearing
+                      searchInputRef.current?.focus();
+                    }}
+                    onMouseDown={(e) => e.preventDefault()} // Prevent blur when clicking
+                    aria-label="清除搜索"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="feed-header-middle">
@@ -1058,17 +1166,25 @@ function FeedPageContent() {
             加载中…
           </div>
         ) : videos.length === 0 ? (
-          <div className="empty-state">
-            <div className="empty-state-icon">📭</div>
-            <div className="empty-state-title">暂无视频</div>
-            <div className="empty-state-desc">
-              先去
-              <Link href="/channels" style={{ color: 'var(--accent-purple)' }}>
-                添加频道
-              </Link>
-              ，再点击刷新获取最新视频
+          q ? (
+            <div className="empty-state">
+              <div className="empty-state-icon">🔍</div>
+              <div className="empty-state-title">没有找到匹配的视频</div>
+              <button className="btn btn-ghost" onClick={handleSearchClear} style={{ marginTop: '16px' }}>清除搜索</button>
             </div>
-          </div>
+          ) : (
+            <div className="empty-state">
+              <div className="empty-state-icon">📭</div>
+              <div className="empty-state-title">暂无视频</div>
+              <div className="empty-state-desc">
+                先去
+                <Link href="/channels" style={{ color: 'var(--accent-purple)' }}>
+                  添加频道
+                </Link>
+                ，再点击刷新获取最新视频
+              </div>
+            </div>
+          )
         ) : (
           <div className="video-grid-container" style={{ paddingBottom: 40 }}>
             <div className={`video-grid${mobileActiveVideo ? ' has-mobile-active' : ''}`}>

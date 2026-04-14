@@ -94,6 +94,7 @@ export async function GET(req: NextRequest) {
   const intent = searchParams.get('intent');
   const topic = searchParams.get('topic');
   const channel_id = searchParams.get('channel_id');
+  const q = searchParams.get('q')?.trim() || null;
   const includeResearch = searchParams.get('include_research') === '1';
   const includeUnavailable = searchParams.get('include_unavailable') === '1';
   const page = parseInt(searchParams.get('page') || '1');
@@ -111,6 +112,10 @@ export async function GET(req: NextRequest) {
     conditions.push(
       "(v.availability_status IS NULL OR v.availability_status NOT IN ('unavailable', 'abandoned'))",
     );
+  }
+  if (q) {
+    conditions.push('(v.title LIKE ? OR c.name LIKE ?)');
+    args.push(`%${q}%`, `%${q}%`);
   }
   if (platform) {
     conditions.push('v.platform = ?');
