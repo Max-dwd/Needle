@@ -1,4 +1,5 @@
 import { getAiSummarySettings } from './ai-summary-settings';
+import type { BudgetStatusSnapshot, ModelBudgetSnapshot } from '@/types';
 
 export type SharedAiBudgetPriority =
   | 'manual-summary'
@@ -10,6 +11,8 @@ export interface SharedAiBudgetRequest {
   priority: SharedAiBudgetPriority;
   estimatedTokens: number;
   label: string;
+  /** Model id — used for per-model budget tracking. */
+  modelId?: string;
   onQueued?: (details: {
     queuePosition: number;
     waitMs: number;
@@ -25,6 +28,7 @@ interface BudgetUsageRecord {
   timestamp: number;
   requests: number;
   tokens: number;
+  modelId: string;
 }
 
 interface BudgetReservation extends BudgetUsageRecord {
@@ -54,6 +58,12 @@ function clampPositiveInteger(value: unknown, fallback: number): number {
   const parsed = Number(value);
   if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
   return Math.max(1, Math.floor(parsed));
+}
+
+interface ResolvedLimits {
+  rpm: number;
+  rpd: number;
+  tpm: number;
 }
 
 class SharedAiBudgetScheduler {
@@ -120,30 +130,105 @@ class SharedAiBudgetScheduler {
     });
   }
 
-  canAcquire(request: Pick<SharedAiBudgetRequest, 'estimatedTokens'>): boolean {
+  canAcquire(request: Pick<SharedAiBudgetRequest, 'estimatedTokens' | 'modelId'>): boolean {
     const now = Date.now();
     this.prune(now);
-    const { rpm, rpd, tpm } = this.getLimits();
-    const { requestCount, tokenCount } = this.getCurrentUsage(WINDOW_MS, now);
-    const { requestCount: dailyRequestCount } = this.getCurrentUsage(
-      DAY_WINDOW_MS,
-      now,
-    );
+    const globalLimits = this.getGlobalLimits();
+    const { requestCount, tokenCount } = this.getUsage(WINDOW_MS, now);
+    const { requestCount: dailyRequestCount } = this.getUsage(DAY_WINDOW_MS, now);
     const estimatedTokens = Math.max(1, Math.floor(request.estimatedTokens));
-    return (
-      requestCount + 1 <= rpm &&
-      dailyRequestCount + 1 <= rpd &&
-      tokenCount + estimatedTokens <= tpm
-    );
+
+    // Check global limits
+    if (
+      requestCount + 1 > globalLimits.rpm ||
+      dailyRequestCount + 1 > globalLimits.rpd ||
+      tokenCount + estimatedTokens > globalLimits.tpm
+    ) {
+      return false;
+    }
+
+    // Check per-model limits if modelId specified
+    if (request.modelId) {
+      const modelLimits = this.getModelLimits(request.modelId);
+      if (modelLimits) {
+        const modelUsage1m = this.getUsage(WINDOW_MS, now, request.modelId);
+        const modelUsage24h = this.getUsage(DAY_WINDOW_MS, now, request.modelId);
+        if (
+          (modelLimits.rpm && modelUsage1m.requestCount + 1 > modelLimits.rpm) ||
+          (modelLimits.rpd && modelUsage24h.requestCount + 1 > modelLimits.rpd) ||
+          (modelLimits.tpm && modelUsage1m.tokenCount + estimatedTokens > modelLimits.tpm)
+        ) {
+          return false;
+        }
+      }
+    }
+
+    return true;
   }
 
-  private getLimits() {
+  /** Get a snapshot of current budget usage for UI display. */
+  getSnapshot(): BudgetStatusSnapshot {
+    const now = Date.now();
+    this.prune(now);
+    const globalLimits = this.getGlobalLimits();
+    const globalUsage1m = this.getUsage(WINDOW_MS, now);
+    const globalUsage24h = this.getUsage(DAY_WINDOW_MS, now);
+
+    const settings = getAiSummarySettings();
+    const models: ModelBudgetSnapshot[] = settings.models.map((m) => {
+      const mLimits = this.getModelLimits(m.id);
+      const mUsage1m = this.getUsage(WINDOW_MS, now, m.id);
+      const mUsage24h = this.getUsage(DAY_WINDOW_MS, now, m.id);
+      return {
+        modelId: m.id,
+        modelName: m.name,
+        rpm: {
+          used: mUsage1m.requestCount,
+          limit: mLimits?.rpm || globalLimits.rpm,
+        },
+        rpd: {
+          used: mUsage24h.requestCount,
+          limit: mLimits?.rpd || globalLimits.rpd,
+        },
+        tpm: {
+          used: mUsage1m.tokenCount,
+          limit: mLimits?.tpm || globalLimits.tpm,
+        },
+      };
+    });
+
+    return {
+      global: {
+        rpm: { used: globalUsage1m.requestCount, limit: globalLimits.rpm },
+        rpd: { used: globalUsage24h.requestCount, limit: globalLimits.rpd },
+        tpm: { used: globalUsage1m.tokenCount, limit: globalLimits.tpm },
+      },
+      models,
+      queueLength: this.queue.length,
+    };
+  }
+
+  // ---- internal ----
+
+  private getGlobalLimits(): ResolvedLimits {
     const settings = getAiSummarySettings();
     return {
       rpm: clampPositiveInteger(settings.sharedRequestsPerMinute, 10),
       rpd: clampPositiveInteger(settings.sharedRequestsPerDay, 1_000),
       tpm: clampPositiveInteger(settings.sharedTokensPerMinute, 1_000_000),
     };
+  }
+
+  /** Returns per-model limits, or null if the model has no overrides. */
+  private getModelLimits(modelId: string): ResolvedLimits | null {
+    const settings = getAiSummarySettings();
+    const model = settings.models.find((m) => m.id === modelId);
+    if (!model) return null;
+    const rpm = model.requestsPerMinute && model.requestsPerMinute > 0 ? model.requestsPerMinute : 0;
+    const rpd = model.requestsPerDay && model.requestsPerDay > 0 ? model.requestsPerDay : 0;
+    const tpm = model.tokensPerMinute && model.tokensPerMinute > 0 ? model.tokensPerMinute : 0;
+    if (!rpm && !rpd && !tpm) return null;
+    return { rpm, rpd, tpm };
   }
 
   private prune(now = Date.now()) {
@@ -156,28 +241,64 @@ class SharedAiBudgetScheduler {
     );
   }
 
-  private getCurrentUsage(windowMs = WINDOW_MS, now = Date.now()) {
+  private getUsage(windowMs = WINDOW_MS, now = Date.now(), modelId?: string) {
     const minTs = now - windowMs;
-    const records = [...this.usageHistory, ...this.reservations].filter(
+    let records = [...this.usageHistory, ...this.reservations].filter(
       (item) => item.timestamp > minTs,
     );
+    if (modelId) {
+      records = records.filter((item) => item.modelId === modelId);
+    }
     const requestCount = records.reduce((sum, item) => sum + item.requests, 0);
     const tokenCount = records.reduce((sum, item) => sum + item.tokens, 0);
     return { requestCount, tokenCount };
   }
 
+  private canRunRequest(pending: PendingBudgetRequest, now: number): boolean {
+    const globalLimits = this.getGlobalLimits();
+    const { requestCount, tokenCount } = this.getUsage(WINDOW_MS, now);
+    const { requestCount: dailyRequestCount } = this.getUsage(DAY_WINDOW_MS, now);
+
+    // Global budget check
+    if (
+      requestCount + 1 > globalLimits.rpm ||
+      dailyRequestCount + 1 > globalLimits.rpd ||
+      tokenCount + pending.estimatedTokens > globalLimits.tpm
+    ) {
+      return false;
+    }
+
+    // Per-model budget check
+    if (pending.modelId) {
+      const modelLimits = this.getModelLimits(pending.modelId);
+      if (modelLimits) {
+        const mUsage1m = this.getUsage(WINDOW_MS, now, pending.modelId);
+        const mUsage24h = this.getUsage(DAY_WINDOW_MS, now, pending.modelId);
+        if (
+          (modelLimits.rpm && mUsage1m.requestCount + 1 > modelLimits.rpm) ||
+          (modelLimits.rpd && mUsage24h.requestCount + 1 > modelLimits.rpd) ||
+          (modelLimits.tpm && mUsage1m.tokenCount + pending.estimatedTokens > modelLimits.tpm)
+        ) {
+          return false;
+        }
+      }
+    }
+
+    return true;
+  }
+
   private estimateWaitMs(now = Date.now()): number {
-    const { rpm, rpd, tpm } = this.getLimits();
+    const globalLimits = this.getGlobalLimits();
     const minuteWaitMs = this.estimateWindowWaitMs({
       now,
       windowMs: WINDOW_MS,
-      requestLimit: rpm,
-      tokenLimit: tpm,
+      requestLimit: globalLimits.rpm,
+      tokenLimit: globalLimits.tpm,
     });
     const dailyWaitMs = this.estimateWindowWaitMs({
       now,
       windowMs: DAY_WINDOW_MS,
-      requestLimit: rpd,
+      requestLimit: globalLimits.rpd,
     });
     return Math.max(minuteWaitMs, dailyWaitMs);
   }
@@ -247,23 +368,11 @@ class SharedAiBudgetScheduler {
         return a.createdAt - b.createdAt;
       });
 
-      const { rpm, rpd, tpm } = this.getLimits();
       let grantedAny = false;
 
       for (let index = 0; index < this.queue.length; ) {
         const pending = this.queue[index];
-        const { requestCount, tokenCount } = this.getCurrentUsage(
-          WINDOW_MS,
-          now,
-        );
-        const { requestCount: dailyRequestCount } = this.getCurrentUsage(
-          DAY_WINDOW_MS,
-          now,
-        );
-        const canRun =
-          requestCount + 1 <= rpm &&
-          dailyRequestCount + 1 <= rpd &&
-          tokenCount + pending.estimatedTokens <= tpm;
+        const canRun = this.canRunRequest(pending, now);
 
         if (!canRun) {
           if (!pending.queuedNotified) {
@@ -285,6 +394,7 @@ class SharedAiBudgetScheduler {
           timestamp: now,
           requests: 1,
           tokens: pending.estimatedTokens,
+          modelId: pending.modelId || '',
         };
         this.reservations.push(reservation);
         pending.resolve({
@@ -294,6 +404,7 @@ class SharedAiBudgetScheduler {
               reservation.timestamp,
               pending.estimatedTokens,
               actualTokens,
+              pending.modelId || '',
             );
           },
         });
@@ -313,7 +424,8 @@ class SharedAiBudgetScheduler {
     id: number,
     timestamp: number,
     estimatedTokens: number,
-    actualTokens?: number,
+    actualTokens: number | undefined,
+    modelId: string,
   ) {
     this.prune();
     this.reservations = this.reservations.filter((item) => item.id !== id);
@@ -321,6 +433,7 @@ class SharedAiBudgetScheduler {
       timestamp,
       requests: 1,
       tokens: Math.max(1, Math.floor(actualTokens || estimatedTokens)),
+      modelId,
     });
     this.processQueue();
   }
@@ -346,9 +459,13 @@ export async function acquireSharedAiBudget(
 }
 
 export function hasAvailableAiBudget(
-  request: Pick<SharedAiBudgetRequest, 'estimatedTokens'>,
+  request: Pick<SharedAiBudgetRequest, 'estimatedTokens' | 'modelId'>,
 ): boolean {
   return getScheduler().canAcquire(request);
+}
+
+export function getAiBudgetSnapshot(): BudgetStatusSnapshot {
+  return getScheduler().getSnapshot();
 }
 
 export function estimateTextTokens(

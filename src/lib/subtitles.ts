@@ -939,6 +939,7 @@ async function generateGeminiSubtitle(
     priority,
     estimatedTokens: settings.subtitleFallbackTokenReserve,
     label,
+    modelId: selectedModel.id,
   });
 
   let totalTokens: number | undefined;

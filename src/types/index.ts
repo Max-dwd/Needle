@@ -242,6 +242,40 @@ export interface AiSummaryModelConfig {
   endpoint: string;
   apiKey: string;
   model: string;
+  /** Per-model RPM override. 0 or undefined = use global. */
+  requestsPerMinute?: number;
+  /** Per-model RPD override. 0 or undefined = use global. */
+  requestsPerDay?: number;
+  /** Per-model TPM override. 0 or undefined = use global. */
+  tokensPerMinute?: number;
+  /** Model to fall back to when this model's budget is exhausted. */
+  fallbackModelId?: string;
+}
+
+/** Snapshot of a single budget counter (used / limit). */
+export interface BudgetCounter {
+  used: number;
+  limit: number;
+}
+
+/** Per-model budget usage snapshot for the UI. */
+export interface ModelBudgetSnapshot {
+  modelId: string;
+  modelName: string;
+  rpm: BudgetCounter;
+  rpd: BudgetCounter;
+  tpm: BudgetCounter;
+}
+
+/** Full budget status snapshot pushed via SSE. */
+export interface BudgetStatusSnapshot {
+  global: {
+    rpm: BudgetCounter;
+    rpd: BudgetCounter;
+    tpm: BudgetCounter;
+  };
+  models: ModelBudgetSnapshot[];
+  queueLength: number;
 }
 
 export interface AiSummaryPromptTemplates {

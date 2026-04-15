@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getCrawlerRuntimeStatus } from '@/lib/crawler-status';
 import { getAutoPipelineStatus } from '@/lib/auto-pipeline';
+import { getAiBudgetSnapshot } from '@/lib/shared-ai-budget';
 import { appEvents } from '@/lib/events';
 import type {
   SummaryStartEvent,
@@ -194,6 +195,18 @@ export async function GET() {
       previousPipelineStatus = JSON.stringify(initialPipeline);
       send('pipeline-status', initialPipeline);
 
+      // Send initial budget status
+      let previousBudgetStatus = '';
+      const sendBudgetStatus = () => {
+        const snapshot = getAiBudgetSnapshot();
+        const serialized = JSON.stringify(snapshot);
+        if (serialized !== previousBudgetStatus) {
+          send('budget-status', snapshot);
+          previousBudgetStatus = serialized;
+        }
+      };
+      sendBudgetStatus();
+
       const tick = () => {
         if (closed) return;
         try {
@@ -238,6 +251,7 @@ export async function GET() {
           }
 
           sendSummaryStats();
+          sendBudgetStatus();
         } catch {
           // ignore
         }
