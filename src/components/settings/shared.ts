@@ -11,6 +11,10 @@ export interface AiSummaryModelConfig {
   apiKeyMasked?: string | null;
   hasApiKey?: boolean;
   model: string;
+  requestsPerMinute?: number;
+  requestsPerDay?: number;
+  tokensPerMinute?: number;
+  fallbackModelId?: string;
 }
 
 export interface AiSummaryConfig {

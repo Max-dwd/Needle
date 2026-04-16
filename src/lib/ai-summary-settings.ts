@@ -1,5 +1,6 @@
 import { getDb } from './db';
 import type { AiSummaryModelConfig } from '@/types';
+import { hasAvailableAiBudget } from './shared-ai-budget';
 
 const AI_CONFIG_KEY = 'ai_summary_config';
 const AI_ENDPOINT_KEY = 'ai_summary_api_endpoint';
@@ -130,6 +131,10 @@ export interface AiSummaryModelInput {
   endpoint?: string;
   apiKey?: string;
   model?: string;
+  requestsPerMinute?: number;
+  requestsPerDay?: number;
+  tokensPerMinute?: number;
+  fallbackModelId?: string;
 }
 
 export interface AiSummaryPromptTemplatesInput {
@@ -202,8 +207,10 @@ export interface ResolveAiSummaryGenerationOptions {
 export interface ResolvedAiSummaryGenerationSettings {
   promptTemplate: string;
   selectedModel: AiSummaryModelConfig;
-  modelSource: 'default' | 'auto-default' | 'intent' | 'override';
+  modelSource: 'default' | 'auto-default' | 'intent' | 'override' | 'fallback';
   triggerSource: SummaryTriggerSource;
+  /** The originally resolved model before budget fallback (only set when fallback was used). */
+  originalModelId?: string;
 }
 
 interface SettingRow {
@@ -275,12 +282,21 @@ function normalizeModelInput(
   );
   const name = normalizeText(value.name, fallback.name || `模型 ${index + 1}`);
 
+  const requestsPerMinute = Math.floor(Number((value as Record<string, unknown>).requestsPerMinute) || 0);
+  const requestsPerDay = Math.floor(Number((value as Record<string, unknown>).requestsPerDay) || 0);
+  const tokensPerMinute = Math.floor(Number((value as Record<string, unknown>).tokensPerMinute) || 0);
+  const fallbackModelId = normalizeText((value as Record<string, unknown>).fallbackModelId, '');
+
   return {
     id,
     name,
     endpoint,
     apiKey,
     model,
+    ...(requestsPerMinute > 0 ? { requestsPerMinute } : {}),
+    ...(requestsPerDay > 0 ? { requestsPerDay } : {}),
+    ...(tokensPerMinute > 0 ? { tokensPerMinute } : {}),
+    ...(fallbackModelId ? { fallbackModelId } : {}),
   };
 }
 
@@ -825,11 +841,52 @@ export function resolveAiSummaryGenerationSettings(
   const resolvedPrompt = resolvePromptTemplate(config);
   const resolvedModel = resolveSelectedModel(config, options);
 
+  // Budget-aware fallback: if the resolved model has per-model limits and is
+  // exhausted, walk the fallbackModelId chain (max 5 hops to avoid cycles).
+  let finalModel = resolvedModel.model;
+  let finalSource: 'default' | 'auto-default' | 'intent' | 'override' | 'fallback' = resolvedModel.source;
+  let originalModelId: string | undefined;
+
+  const hasPerModelLimits = (m: AiSummaryModelConfig) =>
+    (m.requestsPerMinute && m.requestsPerMinute > 0) ||
+    (m.requestsPerDay && m.requestsPerDay > 0) ||
+    (m.tokensPerMinute && m.tokensPerMinute > 0);
+
+  if (hasPerModelLimits(finalModel)) {
+    const visited = new Set<string>();
+    let current = finalModel;
+    // Use a rough estimate for budget check — the real check happens at acquire time
+    const estimatedTokens = 10_000;
+
+    for (let hop = 0; hop < 5; hop++) {
+      visited.add(current.id);
+      const available = hasAvailableAiBudget({
+        estimatedTokens,
+        modelId: current.id,
+      });
+      if (available) break;
+
+      // Try fallback
+      const fallbackId = current.fallbackModelId;
+      if (!fallbackId || visited.has(fallbackId)) break;
+      const fallbackModel = config.models.find((m) => m.id === fallbackId);
+      if (!fallbackModel) break;
+
+      if (!originalModelId) {
+        originalModelId = resolvedModel.model.id;
+      }
+      current = fallbackModel;
+      finalModel = fallbackModel;
+      finalSource = 'fallback';
+    }
+  }
+
   return {
     promptTemplate: resolvedPrompt.template,
-    selectedModel: resolvedModel.model,
-    modelSource: resolvedModel.source,
+    selectedModel: finalModel,
+    modelSource: finalSource,
     triggerSource: options?.triggerSource ?? 'manual',
+    ...(originalModelId ? { originalModelId } : {}),
   };
 }
 
