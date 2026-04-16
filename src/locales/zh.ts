@@ -29,7 +29,7 @@ export const zh = {
       { label: '完整还原', description: '替换数据库、字幕和摘要文件。' },
       { label: '仅数据库', description: '只替换 SQLite 数据库。' },
       { label: '仅文件', description: '只替换字幕和摘要文件目录。' },
-    ]
+    ],
   },
   settings: {
     nav: {
@@ -48,15 +48,39 @@ export const zh = {
     },
     appearance: {
       playerKeyboardBehavior: '播放器键盘行为',
+      enablePlayerKeyboard: '启用播放器键盘模式',
+      enablePlayerKeyboardDesc:
+        '桌面播放器弹层中由 Needle 接管倍速和跳转快捷键。',
+      shortcutBindings: '快捷键绑定',
+      actionPlayPause: '播放/暂停',
+      actionRateToggle: '倍速切换',
+      actionRateDecrement: '倍速降低',
+      actionRateIncrement: '倍速提高',
+      actionSeekBackward: '后退',
+      actionSeekForward: '前进',
+      duplicateKeyWarning: '快捷键不能重复。',
+      rateTogglePreset: '目标倍速',
+      rateTogglePresetDesc: '没有手动微调过倍速时，切换键会跳到这个速率。',
+      rateStep: '倍速步进',
+      rateStepDesc: '每次降低或提高倍速的增量。',
+      seekSeconds: '跳转秒数',
+      seekSecondsDesc: '每次前进或后退的秒数。',
+      rateRange: '倍速范围',
+      rateRangeDesc: '快捷键调整倍速时使用的下限和上限。',
+      resetDefaults: '恢复默认',
+      savePlayerKeyboard: '保存播放器快捷键',
+      saving: '正在保存...',
       defaultFocusPlayer: '默认焦点落在播放器',
-      defaultFocusPlayerDesc: '播放器打开后直接聚焦到真实播放器本身，`Space` 等按键由播放器原生处理。',
+      defaultFocusPlayerDesc:
+        '播放器打开后直接聚焦到真实播放器本身，`Space` 等按键由播放器原生处理。',
       currentConvention: '当前约定',
       conventionSpace: '由播放器原生处理播放 / 暂停',
       conventionEsc: '由页面关闭播放器弹层',
       conventionTab: '不再用于切换播放器内部焦点',
       homeIntentShortcutsSection: '首页快捷键',
       homeIntentShortcutsLabel: '首页 intent 快捷键',
-      homeIntentShortcutsDesc: '在首页视频流中按 Tab 切换到下一个 intent，按 ` / · 切换到上一个 intent。输入框聚焦时自动失效。',
+      homeIntentShortcutsDesc:
+        '在首页视频流中按 Tab 切换到下一个 intent，按 ` / · 切换到上一个 intent。输入框聚焦时自动失效。',
       shortcutInstruction: '快捷键说明',
       shortcutTab: '切换到下一个 intent',
       shortcutBacktick: '切换到上一个 intent',
@@ -70,6 +94,8 @@ export const zh = {
       toastPlayerOn: '播放器键盘优先已开启',
       toastPlayerOff: '播放器键盘优先已关闭',
       toastSwitchPlayerError: '切换播放器键盘模式失败，请稍后重试',
+      toastPlayerKeyboardSaved: '播放器快捷键已保存',
+      toastPlayerKeyboardSaveFailed: '保存播放器快捷键失败',
       toastSwitchHomeFailed: '切换首页 intent 快捷键失败',
       toastHomeOn: '首页 intent 快捷键已开启',
       toastHomeOff: '首页 intent 快捷键已关闭',
@@ -107,15 +133,18 @@ export const zh = {
     errors: {
       unavailableVideos: '不可用视频',
       hideUnavailableVideos: '默认隐藏已确认不可用的视频',
-      hideUnavailableVideosDesc: '对已确认下架、删除或不可访问的视频默认不在主视频流里展示。',
+      hideUnavailableVideosDesc:
+        '对已确认下架、删除或不可访问的视频默认不在主视频流里展示。',
       unavailableVideoBehavior: '确认不可用后的处理',
-      unavailableVideoBehaviorDesc: '保留模式仅隐藏并保留数据；完全放弃会把这类视频标记为放弃，不再继续修复。',
+      unavailableVideoBehaviorDesc:
+        '保留模式仅隐藏并保留数据；完全放弃会把这类视频标记为放弃，不再继续修复。',
       keepUnavailableVideos: '隐藏但保留',
       abandonUnavailableVideos: '完全放弃',
       currentStats: '当前统计',
       currentStatsDesc: '这里展示已经被标记为不可用或已放弃的视频数量。',
       trackedVideos: '错误视频列表',
-      trackedVideosDesc: '这里单独列出已确认不可用或已放弃的视频，方便查看标题、原因和原始链接。',
+      trackedVideosDesc:
+        '这里单独列出已确认不可用或已放弃的视频，方便查看标题、原因和原始链接。',
       trackedVideosLoading: '正在读取错误视频...',
       trackedVideosEmpty: '当前没有已追踪的错误视频。',
       reasonFallback: '暂无明确原因，通常表示平台详情接口返回为空。',
@@ -139,9 +168,11 @@ export const zh = {
       latestBackup: '最近一次备份：',
       noBackup: '还没有生成过备份包。',
       includeSummaryMd: '包含 `data/summary-md/`',
-      includeSummaryMdDesc: '任务文件可重新生成，默认不打包。需要完整迁移中间产物时再开启。',
+      includeSummaryMdDesc:
+        '任务文件可重新生成，默认不打包。需要完整迁移中间产物时再开启。',
       includeEnv: '包含 `.env.local`',
-      includeEnvDesc: '默认跳过敏感配置。只有在你明确需要跨机器迁移凭证时才建议开启。',
+      includeEnvDesc:
+        '默认跳过敏感配置。只有在你明确需要跨机器迁移凭证时才建议开启。',
       backupNow: '立即备份并下载',
       packing: '正在打包...',
       restoreSection: '上传还原',
@@ -171,7 +202,8 @@ export const zh = {
       subtitles: '字幕',
       summaries: '摘要',
       systemLogs: '系统日志',
-      systemLogsDesc: '日志自动轮询刷新，支持概览和详情查看。抓取今日统计也汇总在这里，方便集中排查。',
+      systemLogsDesc:
+        '日志自动轮询刷新，支持概览和详情查看。抓取今日统计也汇总在这里，方便集中排查。',
     },
     summary: {
       toastReadFailed: '无法读取 AI 总结设置',
@@ -231,7 +263,8 @@ export const zh = {
       tpm: '每分钟 Token 上限',
       tpmDesc: '总结和字幕 fallback 共享的 TPM。',
       subtitleFallbackReserve: '字幕 fallback 预留 Token',
-      subtitleFallbackReserveDesc: '字幕转录先按保守值占用预算，返回 usage 后自动校正。',
+      subtitleFallbackReserveDesc:
+        '字幕转录先按保守值占用预算，返回 usage 后自动校正。',
       saving: '正在保存...',
       saveConfig: '保存配置',
     },
@@ -247,7 +280,8 @@ export const zh = {
       toastToggleError: '切换 B 站 AI 总结开关失败，请稍后重试',
       bilibiliSummaryAuth: 'B 站 AI 总结登录态',
       enableBilibiliSummary: '启用 B 站 AI 总结',
-      enableBilibiliSummaryDesc: '关闭后不再携带 SESSDATA 请求 B 站 AI 总结接口。',
+      enableBilibiliSummaryDesc:
+        '关闭后不再携带 SESSDATA 请求 B 站 AI 总结接口。',
       currentState: '当前状态',
       currentStateDesc: '用于访问 B 站 AI 总结 API 的 SESSDATA 状态。',
       notConfigured: '未配置 SESSDATA',
@@ -260,7 +294,8 @@ export const zh = {
       updateSessdata: '更新 SESSDATA',
       clear: '清除',
       howToGet: '如何获取：',
-      howToGetStep: '1. 打开浏览器登录 B 站；2. 开发者工具 → Application → Cookies；3. 找到 SESSDATA 并复制值。',
+      howToGetStep:
+        '1. 打开浏览器登录 B 站；2. 开发者工具 → Application → Cookies；3. 找到 SESSDATA 并复制值。',
     },
     intents: {
       toastLoadFailed: '无法加载意图列表',
@@ -297,7 +332,8 @@ export const zh = {
       moveDown: '下移',
       agentConfig: 'Agent 配置',
       deleteConfirmTitle: '确认删除意图？',
-      deleteConfirmDesc: '确认要删除此意图吗？如果在其他地方有绑定或预设可能受到影响。此操作不可恢复。',
+      deleteConfirmDesc:
+        '确认要删除此意图吗？如果在其他地方有绑定或预设可能受到影响。此操作不可恢复。',
       confirmDelete: '确认删除',
       deleting: '删除中...',
       edit: '✎ 编辑',
@@ -331,7 +367,8 @@ export const zh = {
       delete: '🗑 删除',
       save: '保存',
       deleteConfirmTitle: '确认删除意图？',
-      deleteConfirmDesc: '确认要删除意图吗？与此意图关联的收藏项如果在清单中可能会受到影响。此操作不可恢复。',
+      deleteConfirmDesc:
+        '确认要删除意图吗？与此意图关联的收藏项如果在清单中可能会受到影响。此操作不可恢复。',
       confirmDelete: '确认删除',
       deleting: '删除中...',
     },
@@ -350,31 +387,39 @@ export const zh = {
       toastRestoreSegmentPrompt: '已恢复分块字幕补充模板，请保存配置以生效',
       browserFetch: '浏览器字幕抓取',
       baseInterval: '基础抓取间隔',
-      baseIntervalDesc: '所有 browser 字幕任务共享同一个串行队列，但 YouTube / Bilibili 会分别累积退避倍数和等待间隔。',
+      baseIntervalDesc:
+        '所有 browser 字幕任务共享同一个串行队列，但 YouTube / Bilibili 会分别累积退避倍数和等待间隔。',
       maxRetries: '最大重试次数',
-      maxRetriesDesc: 'browser 单次失败后会重新入队，不会阻塞后续视频。这里配置每个视频最多追加多少次 browser 重试。',
+      maxRetriesDesc:
+        'browser 单次失败后会重新入队，不会阻塞后续视频。这里配置每个视频最多追加多少次 browser 重试。',
       currentBackoff: '当前退避状态',
-      currentBackoffDesc: '连续 temporary-error 会按平台单独放大间隔；对应平台成功一次后自动重置。',
+      currentBackoffDesc:
+        '连续 temporary-error 会按平台单独放大间隔；对应平台成功一次后自动重置。',
       consecutiveErrors: '连续错误',
       apiFetch: 'API 提取字幕',
       enableApiFallback: '启用 API fallback',
-      enableApiFallbackDesc: '高价值视频等待超时且 AI budget 可用时可提前逃逸到 API；重试全部用完后也会走 API 兜底。',
+      enableApiFallbackDesc:
+        '高价值视频等待超时且 AI budget 可用时可提前逃逸到 API；重试全部用完后也会走 API 兜底。',
       scope: '生效范围',
       scopeDesc: '全局对所有视频生效；自定义只对列表中命中的频道或意图生效。',
       global: '全局',
       custom: '自定义',
       maxWait: '最大等待时间',
-      maxWaitDesc: '累计等待超过这个阈值后，如果 AI budget 有余量，就会提前逃逸到 API。',
+      maxWaitDesc:
+        '累计等待超过这个阈值后，如果 AI budget 有余量，就会提前逃逸到 API。',
       customRules: '自定义规则',
-      customRulesDesc: '只有命中的意图或频道，才会启用 API 逃逸与兜底。每条规则可独立配置最大等待时间和模型。',
+      customRulesDesc:
+        '只有命中的意图或频道，才会启用 API 逃逸与兜底。每条规则可独立配置最大等待时间和模型。',
       addRule: '添加规则',
       type: '类型',
       target: '对象',
       escapeWait: '逃逸等待',
-      escapeWaitDesc: '累计等待超过这个时间后，如果 AI budget 有余量，就允许直接改走 API。',
+      escapeWaitDesc:
+        '累计等待超过这个时间后，如果 AI budget 有余量，就允许直接改走 API。',
       model: '模型',
       actions: '操作',
-      noRules: '还没有自定义规则。未加入列表的频道和意图，默认不会使用 API 提取字幕。',
+      noRules:
+        '还没有自定义规则。未加入列表的频道和意图，默认不会使用 API 提取字幕。',
       intent: '意图',
       channel: '频道',
       delete: '删除',
