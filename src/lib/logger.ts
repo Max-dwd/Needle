@@ -75,6 +75,7 @@ function emptyScopeStats(): LogScopeStats {
     successRate: 0,
     byMethod: {},
     byPlatform: {},
+    byErrorType: {},
     recentErrors: [],
   };
 }
@@ -117,6 +118,7 @@ function cloneScopeStats(scope: LogScopeStats): LogScopeStats {
       ]),
     ),
     byPlatform: { ...scope.byPlatform },
+    byErrorType: { ...scope.byErrorType },
     recentErrors: scope.recentErrors.map((error) => ({ ...error })),
   };
 }
@@ -342,9 +344,13 @@ function updateStats(entry: LogEntry) {
       scopeStats.successes += 1;
       scopeStats.byMethod[method].successes += 1;
       break;
-    case 'failure':
+    case 'failure': {
       scopeStats.failures += 1;
       scopeStats.byMethod[method].failures += 1;
+      const errorType =
+        typeof entry.error_type === 'string' ? entry.error_type : 'unknown';
+      scopeStats.byErrorType[errorType] =
+        (scopeStats.byErrorType[errorType] || 0) + 1;
       scopeStats.recentErrors.unshift({
         time: formatTimestamp(entry.ts),
         method,
@@ -355,9 +361,11 @@ function updateStats(entry: LogEntry) {
             : typeof entry.message === 'string'
               ? entry.message
               : '',
+        error_type: errorType,
       });
       scopeStats.recentErrors = scopeStats.recentErrors.slice(0, MAX_RECENT_ERRORS);
       break;
+    }
     case 'fallback':
       scopeStats.fallbacks += 1;
       break;

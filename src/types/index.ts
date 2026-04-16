@@ -104,6 +104,7 @@ export interface LogRecentError {
   method: string;
   platform: string;
   error: string;
+  error_type?: string;
 }
 
 export interface LogScopeStats {
@@ -114,6 +115,7 @@ export interface LogScopeStats {
   successRate: number;
   byMethod: Record<string, LogMethodStats>;
   byPlatform: Record<string, number>;
+  byErrorType: Record<string, number>;
   recentErrors: LogRecentError[];
 }
 
