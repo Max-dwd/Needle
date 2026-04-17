@@ -28,10 +28,16 @@ export const en: typeof zh = {
   options: {
     crawlInterval: [],
     restoreMode: [
-      { label: 'Full Restore', description: 'Replaces database, subtitles, and summary files.' },
+      {
+        label: 'Full Restore',
+        description: 'Replaces database, subtitles, and summary files.',
+      },
       { label: 'Database Only', description: 'Replaces SQLite database only.' },
-      { label: 'Files Only', description: 'Replaces subtitles and summary files only.' },
-    ]
+      {
+        label: 'Files Only',
+        description: 'Replaces subtitles and summary files only.',
+      },
+    ],
   },
   settings: {
     nav: {
@@ -50,43 +56,76 @@ export const en: typeof zh = {
     },
     appearance: {
       playerKeyboardBehavior: 'Player Keyboard Behavior',
+      enablePlayerKeyboard: 'Enable Player Keyboard Mode',
+      enablePlayerKeyboardDesc:
+        'Let Needle handle rate and seek shortcuts inside the desktop player modal.',
+      shortcutBindings: 'Shortcut Bindings',
+      actionPlayPause: 'Play / Pause',
+      actionRateToggle: 'Toggle Rate',
+      actionRateDecrement: 'Decrease Rate',
+      actionRateIncrement: 'Increase Rate',
+      actionSeekBackward: 'Seek Backward',
+      actionSeekForward: 'Seek Forward',
+      duplicateKeyWarning: 'Shortcut keys cannot be duplicated.',
+      rateTogglePreset: 'Target Rate',
+      rateTogglePresetDesc:
+        'When no manual rate has been set, the toggle key jumps to this rate.',
+      rateStep: 'Rate Step',
+      rateStepDesc: 'Amount changed by each rate shortcut press.',
+      seekSeconds: 'Seek Seconds',
+      seekSecondsDesc: 'Seconds moved by each seek shortcut press.',
+      rateRange: 'Rate Range',
+      rateRangeDesc: 'Minimum and maximum rate used by shortcut changes.',
+      resetDefaults: 'Reset Defaults',
+      savePlayerKeyboard: 'Save Player Shortcuts',
+      saving: 'Saving...',
       defaultFocusPlayer: 'Default Focus on Player',
-      defaultFocusPlayerDesc: 'Focus on the actual player upon opening. Keys like `Space` will be handled natively by the player.',
+      defaultFocusPlayerDesc:
+        'Focus on the actual player upon opening. Keys like `Space` will be handled natively by the player.',
       currentConvention: 'Current Convention',
       conventionSpace: 'Natively handled by player for play/pause',
       conventionEsc: 'Close player modal by the page',
       conventionTab: 'No longer used to switch internal focus',
       homeIntentShortcutsSection: 'Home Shortcuts',
       homeIntentShortcutsLabel: 'Home Intent Shortcuts',
-      homeIntentShortcutsDesc: 'Press Tab in the home feed to switch to the next intent, ` / · to the previous intent. Disabled when input is focused.',
+      homeIntentShortcutsDesc:
+        'Press Tab in the home feed to switch to the next intent, ` / · to the previous intent. Disabled when input is focused.',
       shortcutInstruction: 'Shortcut Guide',
       shortcutTab: 'Switch to next intent',
       shortcutBacktick: 'Switch to previous intent',
       themeSection: 'Theme',
       themeLabel: 'Color Mode',
-      themeDesc: 'Automatically match the operating system settings when set to System.',
+      themeDesc:
+        'Automatically match the operating system settings when set to System.',
       languageSection: 'Language',
-      languageDesc: 'Change the application interface language. Does not affect saved video info.',
+      languageDesc:
+        'Change the application interface language. Does not affect saved video info.',
       toastReadFailed: 'Failed to read appearance settings',
       toastSwitchPlayerFailed: 'Failed to switch player keyboard mode',
       toastPlayerOn: 'Player keyboard priority enabled',
       toastPlayerOff: 'Player keyboard priority disabled',
-      toastSwitchPlayerError: 'Failed to switch player keyboard mode, try again later',
+      toastSwitchPlayerError:
+        'Failed to switch player keyboard mode, try again later',
+      toastPlayerKeyboardSaved: 'Player shortcuts saved',
+      toastPlayerKeyboardSaveFailed: 'Failed to save player shortcuts',
       toastSwitchHomeFailed: 'Failed to switch home intent shortcuts',
       toastHomeOn: 'Home intent shortcuts enabled',
       toastHomeOff: 'Home intent shortcuts disabled',
-      toastSwitchHomeError: 'Failed to switch home intent shortcuts, try again later',
+      toastSwitchHomeError:
+        'Failed to switch home intent shortcuts, try again later',
     },
     performance: {
       crawlingPerformance: 'Background Crawl',
       performanceProfile: 'Performance Profile',
-      performanceProfileDesc: 'Select resource usage level for background crawler.',
+      performanceProfileDesc:
+        'Select resource usage level for background crawler.',
       realtimeLoad: 'Realtime Load',
       realtimeLoadDesc: 'Current event loop lag and throttling state.',
       saveProfile: 'Save Profile',
       browserKeepalive: 'Browser Keepalive',
       keepaliveStrategy: 'Keepalive Strategy',
-      keepaliveStrategyDesc: 'Controls prewarming for daemon and controlled browser workspaces.',
+      keepaliveStrategyDesc:
+        'Controls prewarming for daemon and controlled browser workspaces.',
       currentBehavior: 'Current Behavior',
       saveStrategy: 'Save Strategy',
       frontendPerformance: 'Frontend Performance',
@@ -109,18 +148,23 @@ export const en: typeof zh = {
     errors: {
       unavailableVideos: 'Unavailable Videos',
       hideUnavailableVideos: 'Hide confirmed unavailable videos by default',
-      hideUnavailableVideosDesc: 'Confirmed removed, deleted, or inaccessible videos will be hidden from the main feed by default.',
+      hideUnavailableVideosDesc:
+        'Confirmed removed, deleted, or inaccessible videos will be hidden from the main feed by default.',
       unavailableVideoBehavior: 'What to do after confirmation',
-      unavailableVideoBehaviorDesc: 'Keep mode hides the video but preserves its data. Abandon mode marks it as given up and stops repair attempts.',
+      unavailableVideoBehaviorDesc:
+        'Keep mode hides the video but preserves its data. Abandon mode marks it as given up and stops repair attempts.',
       keepUnavailableVideos: 'Hide but keep',
       abandonUnavailableVideos: 'Fully abandon',
       currentStats: 'Current Stats',
-      currentStatsDesc: 'Counts for videos already marked unavailable or abandoned.',
+      currentStatsDesc:
+        'Counts for videos already marked unavailable or abandoned.',
       trackedVideos: 'Tracked error videos',
-      trackedVideosDesc: 'A dedicated list of confirmed unavailable or abandoned videos so you can inspect the title, reason, and original link.',
+      trackedVideosDesc:
+        'A dedicated list of confirmed unavailable or abandoned videos so you can inspect the title, reason, and original link.',
       trackedVideosLoading: 'Loading tracked error videos...',
       trackedVideosEmpty: 'There are no tracked error videos right now.',
-      reasonFallback: 'No explicit reason is available. Usually this means the platform detail API returned an empty payload.',
+      reasonFallback:
+        'No explicit reason is available. Usually this means the platform detail API returned an empty payload.',
       statusUnavailable: 'Unavailable',
       statusAbandoned: 'Abandoned',
       checkedAt: 'Last checked',
@@ -141,9 +185,11 @@ export const en: typeof zh = {
       latestBackup: 'Latest Backup:',
       noBackup: 'No backup generated yet.',
       includeSummaryMd: 'Include `data/summary-md/`',
-      includeSummaryMdDesc: 'Tasks can be regenerated, so they are excluded by default. Enable to migrate all intermediate artifacts.',
+      includeSummaryMdDesc:
+        'Tasks can be regenerated, so they are excluded by default. Enable to migrate all intermediate artifacts.',
       includeEnv: 'Include `.env.local`',
-      includeEnvDesc: 'Skips sensitive config by default. Enable only if migrating credentials to a new machine.',
+      includeEnvDesc:
+        'Skips sensitive config by default. Enable only if migrating credentials to a new machine.',
       backupNow: 'Backup & Download',
       packing: 'Packing...',
       restoreSection: 'Upload Restore',
@@ -151,7 +197,8 @@ export const en: typeof zh = {
       currentState: 'Current State:',
       systemIdle: 'System idle, ready to restore.',
       restoreMode: 'Restore Mode',
-      restoreModeDesc: '`full` replaces DB and files; others replace specific parts.',
+      restoreModeDesc:
+        '`full` replaces DB and files; others replace specific parts.',
       backupPackage: 'Backup Package',
       noFileSelected: 'No file selected',
       clearSelection: 'Clear',
@@ -161,7 +208,8 @@ export const en: typeof zh = {
       toastBackupStarted: 'Backup package generated and downloading',
       toastBackupFailed: 'Backup failed',
       toastSelectFileFirst: 'Please select a backup package first',
-      confirmFullRestore: 'This will override current database and local files, continue?',
+      confirmFullRestore:
+        'This will override current database and local files, continue?',
       confirmPartialRestore: 'Are you sure you want to restore?',
       toastRestoreFailed: 'Restore failed',
       toastRestoreScheduler: 'Restore complete, scheduler resumed',
@@ -173,29 +221,38 @@ export const en: typeof zh = {
       subtitles: 'Subtitles',
       summaries: 'Summaries',
       systemLogs: 'System Logs',
-      systemLogsDesc: 'Logs refresh automatically and support overview and detail views. Crawl stats are also aggregated here for easy debugging.',
+      systemLogsDesc:
+        'Logs refresh automatically and support overview and detail views. Crawl stats are also aggregated here for easy debugging.',
     },
     summary: {
       toastReadFailed: 'Failed to read AI summary settings',
-      toastRestoreDefault: 'Restored default summary prompt template, please save to apply',
-      toastRestoreDefaultObsidian: 'Restored default obsidian mode prompt template, please save to apply',
-      toastRestoreDefaultRoast: 'Restored default roast mode prompt template, please save to apply',
+      toastRestoreDefault:
+        'Restored default summary prompt template, please save to apply',
+      toastRestoreDefaultObsidian:
+        'Restored default obsidian mode prompt template, please save to apply',
+      toastRestoreDefaultRoast:
+        'Restored default roast mode prompt template, please save to apply',
       toastSaveSuccess: 'Settings saved',
       toastSaveError: 'Save failed, try again later',
       summaryTemplateSection: 'Summary Prompt Template',
       defaultSummary: 'Video Summary (Default)',
-      defaultSummaryDesc: 'Custom system prompt for video preview summary generation.',
+      defaultSummaryDesc:
+        'Custom system prompt for video preview summary generation.',
       restoreDefault: 'Restore Default',
       qaTemplateSection: 'Video Q&A Prompt Template',
       obsidianMode: 'Obsidian Mode',
-      obsidianModeDesc: 'System prompt for generating structured Markdown notes from clips.',
+      obsidianModeDesc:
+        'System prompt for generating structured Markdown notes from clips.',
       roastMode: 'Roast Mode',
-      roastModeDesc: 'System prompt for generating sarcastic critique prototypes from clips.',
+      roastModeDesc:
+        'System prompt for generating sarcastic critique prototypes from clips.',
       defaultModelSection: 'Default Model Settings',
       manualModel: 'Manual Summary Model',
-      manualModelDesc: 'Model used when clicking the "Generate Summary" button.',
+      manualModelDesc:
+        'Model used when clicking the "Generate Summary" button.',
       autoModel: 'Auto Summary Model',
-      autoModelDesc: 'Default model used for automated background summarization.',
+      autoModelDesc:
+        'Default model used for automated background summarization.',
       selectModel: '-- Select Model --',
       saving: 'Saving...',
       saveConfig: 'Save Config',
@@ -215,7 +272,8 @@ export const en: typeof zh = {
       show: 'Show',
       hide: 'Hide',
       defaultModelName: 'Default Model Name',
-      defaultModelNameDesc: 'Model name corresponding to the current default manual summary model.',
+      defaultModelNameDesc:
+        'Model name corresponding to the current default manual summary model.',
       testing: 'Testing...',
       testConnection: 'Test Connection',
       multiModelManagement: 'Multi-Model Management',
@@ -225,6 +283,8 @@ export const en: typeof zh = {
       delete: 'Delete',
       endpointPlaceholder: 'Endpoint',
       modelNamePlaceholder: 'Model Name',
+      multimodal: 'Multimodal model (usable for API subtitle extraction)',
+      protocol: 'Protocol',
       sharedBudget: 'Shared Budget',
       rpm: 'RPM Limit',
       rpmDesc: 'Shared RPM for summary and subtitle fallback.',
@@ -233,7 +293,8 @@ export const en: typeof zh = {
       tpm: 'TPM Limit',
       tpmDesc: 'Shared TPM for summary and subtitle fallback.',
       subtitleFallbackReserve: 'Subtitle Fallback Token Reserve',
-      subtitleFallbackReserveDesc: 'Transcriptions reserve a conservative budget first, then correct automatically upon usage return.',
+      subtitleFallbackReserveDesc:
+        'Transcriptions reserve a conservative budget first, then correct automatically upon usage return.',
       saving: 'Saving...',
       saveConfig: 'Save Config',
     },
@@ -249,7 +310,8 @@ export const en: typeof zh = {
       toastToggleError: 'Failed to toggle Bilibili AI summary, try again later',
       bilibiliSummaryAuth: 'Bilibili AI Summary Auth',
       enableBilibiliSummary: 'Enable Bilibili AI Summary',
-      enableBilibiliSummaryDesc: 'When disabled, stops attaching SESSDATA for Bilibili AI summary API requests.',
+      enableBilibiliSummaryDesc:
+        'When disabled, stops attaching SESSDATA for Bilibili AI summary API requests.',
       currentState: 'Current State',
       currentStateDesc: 'SESSDATA state for accessing Bilibili AI summary API.',
       notConfigured: 'SESSDATA not configured',
@@ -262,7 +324,8 @@ export const en: typeof zh = {
       updateSessdata: 'Update SESSDATA',
       clear: 'Clear',
       howToGet: 'How to obtain:',
-      howToGetStep: '1. Log into Bilibili; 2. DevTools → Application → Cookies; 3. Find and copy the value of SESSDATA.',
+      howToGetStep:
+        '1. Log into Bilibili; 2. DevTools → Application → Cookies; 3. Find and copy the value of SESSDATA.',
     },
     intents: {
       toastLoadFailed: 'Failed to load intents',
@@ -299,7 +362,8 @@ export const en: typeof zh = {
       moveDown: 'Move Down',
       agentConfig: 'Agent Config',
       deleteConfirmTitle: 'Confirm Delete?',
-      deleteConfirmDesc: 'Are you sure you want to delete this intent? Any associations will be affected. This action cannot be undone.',
+      deleteConfirmDesc:
+        'Are you sure you want to delete this intent? Any associations will be affected. This action cannot be undone.',
       confirmDelete: 'Confirm Delete',
       deleting: 'Deleting...',
       edit: '✎ Edit',
@@ -333,7 +397,8 @@ export const en: typeof zh = {
       delete: '🗑 Delete',
       save: 'Save',
       deleteConfirmTitle: 'Confirm Delete?',
-      deleteConfirmDesc: 'Are you sure you want to delete this intent? Sub-items in collections might be affected. This action cannot be undone.',
+      deleteConfirmDesc:
+        'Are you sure you want to delete this intent? Sub-items in collections might be affected. This action cannot be undone.',
       confirmDelete: 'Confirm Delete',
       deleting: 'Deleting...',
     },
@@ -343,40 +408,60 @@ export const en: typeof zh = {
       toastSaveSettingsSuccess: 'Subtitle settings saved',
       toastSaveSettingsError: 'Save failed, try again later',
       toastSavePipelineSuccess: 'Subtitle pipeline configuration saved',
-      toastSavePipelineError: 'Failed to save subtitle pipeline, try again later',
+      toastSavePipelineError:
+        'Failed to save subtitle pipeline, try again later',
       toastResetPipelineFailed: 'Failed to reset subtitle pipeline',
-      toastResetPipelineSuccess: 'Subtitle pipeline restored to default settings',
-      toastResetPipelineError: 'Failed to reset subtitle pipeline, try again later',
-      addRuleErrorModel: 'Please configure models first, and ensure at least one intent or channel exists',
-      toastRestoreApiPrompt: 'Restored subtitle API prompt template, please save to apply',
-      toastRestoreSegmentPrompt: 'Restored chunked subtitle prompt template, please save to apply',
+      toastResetPipelineSuccess:
+        'Subtitle pipeline restored to default settings',
+      toastResetPipelineError:
+        'Failed to reset subtitle pipeline, try again later',
+      addRuleErrorModel:
+        'Please configure at least one multimodal model, and ensure at least one intent or channel exists',
+      toastRestoreApiPrompt:
+        'Restored subtitle API prompt template, please save to apply',
+      toastRestoreSegmentPrompt:
+        'Restored chunked subtitle prompt template, please save to apply',
       browserFetch: 'Browser Subtitle Fetch',
       baseInterval: 'Base Fetch Interval',
-      baseIntervalDesc: 'All browser tasks share a single serial queue, but YouTube and Bilibili accumulate backoff multipliers and wait intervals separately.',
+      baseIntervalDesc:
+        'All browser tasks share a single serial queue, but YouTube and Bilibili accumulate backoff multipliers and wait intervals separately.',
       maxRetries: 'Max Retries',
-      maxRetriesDesc: 'After a browser task fails once, it will be re-queued without blocking subsequent videos. Configure how many times a browser task can be retried per video.',
+      maxRetriesDesc:
+        'After a browser task fails once, it will be re-queued without blocking subsequent videos. Configure how many times a browser task can be retried per video.',
       currentBackoff: 'Current Backoff Status',
-      currentBackoffDesc: 'Consecutive temporary errors will individually scale up the interval per platform; a single successful fetch will reset it.',
+      currentBackoffDesc:
+        'Consecutive temporary errors will individually scale up the interval per platform; a single successful fetch will reset it.',
       consecutiveErrors: 'Consecutive Errors',
       apiFetch: 'API Subtitle Extraction',
       enableApiFallback: 'Enable API Fallback',
-      enableApiFallbackDesc: 'High-value videos waiting too long can escape early to API if AI budget is available; API is also used as a fallback when all retries are exhausted.',
+      enableApiFallbackDesc:
+        'High-value videos waiting too long can escape early to API if AI budget is available; API is also used as a fallback when all retries are exhausted.',
       scope: 'Effective Scope',
-      scopeDesc: 'Global applies to all videos; custom applies only to the matched channels or intents in the list.',
+      scopeDesc:
+        'Global applies to all videos; custom applies only to the matched channels or intents in the list.',
       global: 'Global',
       custom: 'Custom',
       maxWait: 'Max Wait Time',
-      maxWaitDesc: 'After exceeding this wait time threshold, if AI budget is available, the video will escape early to the API.',
+      maxWaitDesc:
+        'After exceeding this wait time threshold, if AI budget is available, the video will escape early to the API.',
+      apiModel: 'API Model',
+      apiModelDesc:
+        'Only models marked as multimodal on the Models page are shown.',
+      noMultimodalModels:
+        'Mark a multimodal model on the Models page first',
       customRules: 'Custom Rules',
-      customRulesDesc: 'Only matched intents or channels will use API escape and fallback. Each rule can be independently configured with max wait time and model.',
+      customRulesDesc:
+        'Only matched intents or channels will use API escape and fallback. Each rule can be independently configured with max wait time and model.',
       addRule: 'Add Rule',
       type: 'Type',
       target: 'Target',
       escapeWait: 'Escape Wait',
-      escapeWaitDesc: 'After exceeding this wait time, if AI budget is available, it is allowed to immediately go to API.',
+      escapeWaitDesc:
+        'After exceeding this wait time, if AI budget is available, it is allowed to immediately go to API.',
       model: 'Model',
       actions: 'Actions',
-      noRules: 'No custom rules yet. Channels and intents not added to the list will not use API extraction by default.',
+      noRules:
+        'No custom rules yet. Channels and intents not added to the list will not use API extraction by default.',
       intent: 'Intent',
       channel: 'Channel',
       delete: 'Delete',
@@ -387,7 +472,8 @@ export const en: typeof zh = {
       apiPrompt: 'Subtitle API Prompt Template',
       apiPromptDesc: 'System prompt used for API subtitle extraction.',
       segmentPrompt: 'Chunked Subtitle Prompt',
-      segmentPromptDesc: 'Appended to the main template only when fetching subtitles by segment for long videos.',
+      segmentPromptDesc:
+        'Appended to the main template only when fetching subtitles by segment for long videos.',
       saveSettings: 'Save Config',
       savingSettings: 'Saving...',
     },

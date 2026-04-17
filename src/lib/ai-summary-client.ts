@@ -898,7 +898,7 @@ async function generateViaOpenAiCompatibleApi(
     triggerSource?: 'manual' | 'auto';
     onQueued?: (details: { queuePosition: number; waitMs: number }) => void;
   },
-): Promise<{ content: string; usage?: OpenAiCompatibleResponse['usage'] }> {
+): Promise<{ content: string; usage?: OpenAiCompatibleResponse['usage']; ttftSeconds?: number }> {
   if (!model.apiKey) {
     throw new Error('未配置 AI API Key，请先到设置页填写后再生成总结');
   }
@@ -923,6 +923,7 @@ async function generateViaOpenAiCompatibleApi(
 
   let parsed: AiProviderResponse | null = null;
   try {
+    const requestStartTime = Date.now();
     const response = await fetch(url, {
       method: 'POST',
       signal: createSummaryRequestSignal(options?.abortSignal),
@@ -930,6 +931,7 @@ async function generateViaOpenAiCompatibleApi(
       body: JSON.stringify(createAiApiRequest(prompt, model)),
     });
 
+    const ttftSeconds = (Date.now() - requestStartTime) / 1000;
     const raw = await response.text();
     try {
       parsed = JSON.parse(raw) as AiProviderResponse;
@@ -962,6 +964,7 @@ async function generateViaOpenAiCompatibleApi(
     return {
       content,
       usage,
+      ttftSeconds,
     };
   } catch (error) {
     budgetLease.release(extractUsage(parsed)?.total_tokens);
@@ -999,7 +1002,7 @@ export async function generateSummaryViaApi(
     channelId: context.channelId,
   });
   const startTime = Date.now();
-  const { content: markdown, usage } = await generateViaOpenAiCompatibleApi(
+  const { content: markdown, usage, ttftSeconds } = await generateViaOpenAiCompatibleApi(
     prompt,
     selectedModel,
     {
@@ -1035,6 +1038,7 @@ export async function generateSummaryViaApi(
     usage,
     generation_time: totalTimeSeconds,
     total_time_seconds: totalTimeSeconds,
+    ttft_seconds: ttftSeconds,
     output_tps: outputTps,
     trigger_source: triggerSource,
     model_source: modelSource,

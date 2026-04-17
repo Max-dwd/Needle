@@ -90,6 +90,7 @@ describe('createChatStream', () => {
         endpoint: 'https://example.com/v1',
         apiKey: 'secret',
         model: 'test-model',
+        protocol: 'openai-chat',
       },
       abortController.signal,
     );

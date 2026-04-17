@@ -7,11 +7,7 @@ import { promisify } from 'util';
 import { getDb, type Video } from './db';
 import { appEvents } from './events';
 import { getAiSummarySettings } from './ai-summary-settings';
-import { resolveAiSummaryGenerationSettings } from './ai-summary-settings';
-import {
-  acquireSharedAiBudget,
-  hasAvailableAiBudget,
-} from './shared-ai-budget';
+import { hasAvailableAiBudget } from './shared-ai-budget';
 import {
   resetCrawlerScopeStatus,
   updateCrawlerScopeStatus,
@@ -35,6 +31,11 @@ import {
   recordSubtitleSuccess,
 } from './subtitle-backoff';
 import { getSubtitleBrowserFetchConfig } from './subtitle-browser-fetch-settings';
+import { getTranscriber } from './subtitle-providers';
+import type {
+  MultimodalTranscriber,
+  TranscribePriority,
+} from './subtitle-providers';
 import type { AiSummaryModelConfig } from '@/types';
 
 const execFileAsync = promisify(execFile);
@@ -66,12 +67,11 @@ const FFPROBE_CANDIDATES = [
   '/usr/local/bin/ffprobe',
   'ffprobe',
 ].filter((value): value is string => Boolean(value && value.trim()));
-const AI_SUBTITLE_CHUNK_SECONDS = 15 * 60;
 
 // Tiered timeouts for subtitle fallback chain.
 const TIERED_TIMEOUTS = {
   first: 15_000, // 15s - Needle Browser
-  last: 45_000, // 45s - Gemini / yt-dlp extraction path
+  last: 45_000, // 45s - AI API / yt-dlp extraction path
 } as const;
 
 interface SubtitlePayload {
@@ -188,10 +188,6 @@ interface BilibiliSubtitleJson {
 interface TranscriptJsonPayload {
   language?: string;
   segments?: Array<{ start: number; duration: number; text: string }>;
-}
-
-interface GeminiUsageMetadata {
-  totalTokens?: number;
 }
 
 interface AiGeneratedSubtitlePayload {
@@ -863,215 +859,15 @@ function persistStructuredSubtitle(
   };
 }
 
-function deriveGeminiApiBase(endpoint: string): {
-  apiBase: string;
-  uploadBase: string;
-} {
-  const parsed = new URL(endpoint);
-  const versionMatch = parsed.pathname.match(/\/(v\d+(?:beta|alpha)?)/i);
-  const version = versionMatch?.[1] || 'v1beta';
-  return {
-    apiBase: `${parsed.origin}/${version}`,
-    uploadBase: `${parsed.origin}/upload/${version}`,
-  };
-}
 
-function normalizeGeminiModelName(model: string): string {
-  return model.replace(/^models\//, '').trim();
-}
-
-function extractGeminiText(payload: unknown): string {
-  if (!payload || typeof payload !== 'object') return '';
-  const value = payload as Record<string, unknown>;
-  const candidates = Array.isArray(value.candidates) ? value.candidates : [];
-  const parts: string[] = [];
-
-  for (const candidate of candidates) {
-    if (!candidate || typeof candidate !== 'object') continue;
-    const content = (candidate as Record<string, unknown>).content;
-    if (!content || typeof content !== 'object') continue;
-    const rawParts = (content as Record<string, unknown>).parts;
-    if (!Array.isArray(rawParts)) continue;
-    for (const part of rawParts) {
-      if (!part || typeof part !== 'object') continue;
-      const text = (part as Record<string, unknown>).text;
-      if (typeof text === 'string' && text.trim()) {
-        parts.push(text);
-      }
-    }
-  }
-
-  return parts.join('\n').trim();
-}
-
-async function uploadGeminiFile(
-  filePath: string,
-  mimeType: string,
-  apiKey: string,
-  uploadBase: string,
-): Promise<{ uri: string; mimeType: string }> {
-  const data = fs.readFileSync(filePath);
-  const startRes = await fetch(
-    `${uploadBase}/files?key=${encodeURIComponent(apiKey)}`,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Goog-Upload-Protocol': 'resumable',
-        'X-Goog-Upload-Command': 'start',
-        'X-Goog-Upload-Header-Content-Length': String(data.byteLength),
-        'X-Goog-Upload-Header-Content-Type': mimeType,
-      },
-      body: JSON.stringify({
-        file: {
-          display_name: path.basename(filePath),
-        },
-      }),
-    },
-  );
-  if (!startRes.ok) {
-    throw new Error(`Gemini file upload start failed: HTTP ${startRes.status}`);
-  }
-
-  const uploadUrl = startRes.headers.get('x-goog-upload-url');
-  if (!uploadUrl) {
-    throw new Error('Gemini file upload did not return upload URL');
-  }
-
-  const finalizeRes = await fetch(uploadUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Length': String(data.byteLength),
-      'X-Goog-Upload-Offset': '0',
-      'X-Goog-Upload-Command': 'upload, finalize',
-    },
-    body: data,
-  });
-  if (!finalizeRes.ok) {
-    throw new Error(
-      `Gemini file upload finalize failed: HTTP ${finalizeRes.status}`,
-    );
-  }
-
-  const uploaded = (await finalizeRes.json()) as {
-    file?: { uri?: string; mimeType?: string };
-  };
-  if (!uploaded.file?.uri) {
-    throw new Error('Gemini file upload response missing file URI');
-  }
-  return {
-    uri: uploaded.file.uri,
-    mimeType: uploaded.file.mimeType || mimeType,
-  };
-}
-
-async function generateGeminiSubtitle(
-  parts: Array<Record<string, unknown>>,
-  priority: 'manual-subtitle' | 'auto-subtitle',
-  label: string,
-  selectedModel: AiSummaryModelConfig,
-): Promise<{ text: string; usage?: GeminiUsageMetadata }> {
-  const settings = getAiSummarySettings();
-  if (!selectedModel.apiKey) {
-    throw new Error('未配置 AI API Key，无法执行 Gemini 字幕 fallback');
-  }
-  const { apiBase } = deriveGeminiApiBase(selectedModel.endpoint);
-  const modelName = normalizeGeminiModelName(selectedModel.model);
-  const budgetLease = await acquireSharedAiBudget({
-    priority,
-    estimatedTokens: settings.subtitleFallbackTokenReserve,
-    label,
-    modelId: selectedModel.id,
-  });
-
-  let totalTokens: number | undefined;
-  try {
-    const res = await fetch(
-      `${apiBase}/models/${encodeURIComponent(modelName)}:generateContent?key=${encodeURIComponent(selectedModel.apiKey)}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [
-            {
-              role: 'user',
-              parts,
-            },
-          ],
-        }),
-      },
-    );
-    const payload = (await res.json().catch(() => ({}))) as Record<
-      string,
-      unknown
-    >;
-    if (!res.ok) {
-      const message =
-        typeof payload.error === 'object' &&
-        payload.error &&
-        typeof (payload.error as Record<string, unknown>).message === 'string'
-          ? String((payload.error as Record<string, unknown>).message)
-          : `HTTP ${res.status}`;
-      throw new Error(`Gemini subtitle fallback failed: ${message}`);
-    }
-
-    const usageMetadata =
-      payload.usageMetadata && typeof payload.usageMetadata === 'object'
-        ? (payload.usageMetadata as Record<string, unknown>)
-        : {};
-    totalTokens =
-      Number(usageMetadata.totalTokenCount) ||
-      Number(usageMetadata.totalTokens) ||
-      undefined;
-    const text = extractGeminiText(payload);
-    if (!text) {
-      throw new Error('Gemini subtitle fallback returned empty content');
-    }
-    budgetLease.release(totalTokens);
-    return { text, usage: { totalTokens } };
-  } catch (error) {
-    budgetLease.release(totalTokens);
-    throw error;
-  }
-}
-
-async function generateGeminiSubtitleFromAudio(
-  audioPath: string,
-  prompt: string,
-  priority: 'manual-subtitle' | 'auto-subtitle',
-  label: string,
-  selectedModel: AiSummaryModelConfig,
-): Promise<{ text: string; usage?: GeminiUsageMetadata }> {
-  const { uploadBase } = deriveGeminiApiBase(selectedModel.endpoint);
-  const uploaded = await uploadGeminiFile(
-    audioPath,
-    'audio/mpeg',
-    selectedModel.apiKey,
-    uploadBase,
-  );
-  return generateGeminiSubtitle(
-    [
-      {
-        file_data: {
-          file_uri: uploaded.uri,
-          mime_type: uploaded.mimeType,
-        },
-      },
-      { text: prompt },
-    ],
-    priority,
-    label,
-    selectedModel,
-  );
-}
-
-async function fetchSubtitleViaGeminiSegmentedAudio(
+async function fetchSubtitleViaSegmentedAudio(
   video: Video,
   audioPath: string,
-  priority: 'manual-subtitle' | 'auto-subtitle',
+  priority: TranscribePriority,
   sourceMethod: string,
   respectPause: boolean,
   selectedModel: AiSummaryModelConfig,
+  transcriber: MultimodalTranscriber,
 ): Promise<AiGeneratedSubtitlePayload> {
   const settings = getAiSummarySettings();
   const estimatedDuration =
@@ -1079,37 +875,45 @@ async function fetchSubtitleViaGeminiSegmentedAudio(
     Math.ceil((await probeAudioDurationSeconds(audioPath)) || 0);
   if (!estimatedDuration || estimatedDuration <= 0) {
     throw new Error(
-      'Unable to determine audio duration for segmented Gemini subtitle generation',
+      'Unable to determine audio duration for segmented AI subtitle generation',
     );
   }
 
+  const chunkSeconds = transcriber.maxAudioChunkSeconds;
   const chunks = await splitAudioIntoChunks(
     audioPath,
     path.dirname(audioPath),
     estimatedDuration,
+    chunkSeconds,
   );
   const mergedSegments: SubtitleSegment[] = [];
   const rawBlocks: string[] = [];
   let totalTokens = 0;
+  let firstChunkTtft: number | undefined;
 
   for (const chunk of chunks) {
     await waitForCrawlerResumeIfNeeded(respectPause);
-    const raw = await generateGeminiSubtitleFromAudio(
-      chunk.filePath,
-      buildSegmentedSubtitlePrompt(
+    const raw = await transcriber.transcribeAudio(selectedModel, {
+      audioPath: chunk.filePath,
+      mediaType: 'audio/mpeg',
+      prompt: buildSegmentedSubtitlePrompt(
         settings.subtitleApiPromptTemplate,
         settings.subtitleSegmentPromptTemplate,
         chunk.startSeconds,
         chunk.endSeconds,
+        chunkSeconds,
       ),
       priority,
-      `${sourceMethod}:${video.video_id}:chunk-${chunk.index + 1}`,
-      selectedModel,
-    );
+      label: `${sourceMethod}:${video.video_id}:chunk-${chunk.index + 1}`,
+      estimatedTokens: settings.subtitleFallbackTokenReserve,
+    });
+    if (chunk.index === 0) {
+      firstChunkTtft = raw.ttftSeconds;
+    }
     const relativeSegments = parseAiRangeBlock(raw.text);
     if (relativeSegments.length === 0) {
       throw new Error(
-        `Gemini subtitle fallback returned unparseable content for chunk ${chunk.index + 1}`,
+        `AI subtitle fallback returned unparseable content for chunk ${chunk.index + 1}`,
       );
     }
     mergedSegments.push(
@@ -1133,10 +937,12 @@ async function fetchSubtitleViaGeminiSegmentedAudio(
       generated_model_name: selectedModel.name,
       generated_model: selectedModel.model,
       generated_endpoint: selectedModel.endpoint,
+      generated_protocol: selectedModel.protocol,
       trigger_source: priority,
       chunk_count: chunks.length,
-      chunk_seconds: AI_SUBTITLE_CHUNK_SECONDS,
+      chunk_seconds: chunkSeconds,
       ...(totalTokens > 0 ? { total_tokens: totalTokens } : {}),
+      ...(firstChunkTtft !== undefined ? { ttft_seconds: firstChunkTtft } : {}),
     },
   };
 }
@@ -1162,7 +968,7 @@ function buildAiSubtitlePayloadFromSegments(
   sourceMethod: string,
 ): AiGeneratedSubtitlePayload {
   if (segments.length === 0) {
-    throw new Error('Gemini subtitle fallback returned unparseable content');
+    throw new Error('AI subtitle fallback returned unparseable content');
   }
   return {
     language: 'zh',
@@ -1222,12 +1028,14 @@ function buildSegmentedSubtitlePrompt(
   segmentTemplate: string,
   startSeconds: number,
   endSeconds: number,
+  chunkSeconds: number,
 ): string {
+  const chunkMinutes = Math.max(1, Math.round(chunkSeconds / 60));
   return [
     baseTemplate.trim(),
     segmentTemplate.trim(),
     `当前只处理原视频 ${formatSecondsForAiRange(startSeconds)} 到 ${formatSecondsForAiRange(endSeconds)} 的片段。`,
-    '如果当前片段不足 15 分钟，以当前片段实际结尾为准。',
+    `如果当前片段不足 ${chunkMinutes} 分钟，以当前片段实际结尾为准。`,
   ].join('\n');
 }
 
@@ -1249,8 +1057,9 @@ async function splitAudioIntoChunks(
   audioPath: string,
   tempDir: string,
   totalDurationSeconds: number,
+  chunkSeconds: number,
 ): Promise<SegmentedAudioChunk[]> {
-  if (totalDurationSeconds <= AI_SUBTITLE_CHUNK_SECONDS) {
+  if (totalDurationSeconds <= chunkSeconds) {
     return [
       {
         index: 0,
@@ -1266,11 +1075,11 @@ async function splitAudioIntoChunks(
   for (
     let startSeconds = 0, index = 0;
     startSeconds < totalDurationSeconds;
-    startSeconds += AI_SUBTITLE_CHUNK_SECONDS, index += 1
+    startSeconds += chunkSeconds, index += 1
   ) {
     const endSeconds = Math.min(
       totalDurationSeconds,
-      startSeconds + AI_SUBTITLE_CHUNK_SECONDS,
+      startSeconds + chunkSeconds,
     );
     const outputPath = path.join(
       tempDir,
@@ -1560,72 +1369,115 @@ async function fetchBilibiliSubtitleViaBrowser(
   );
 }
 
-async function fetchYoutubeSubtitleViaGemini(
+function buildAiSubtitleMetadata(
+  selectedModel: AiSummaryModelConfig,
+  priority: TranscribePriority,
+  totalTokens: number | undefined,
+  ttftSeconds: number | undefined,
+): Record<string, string | number> {
+  const metadata: Record<string, string | number> = {
+    generated_at: new Date().toISOString(),
+    generated_model_name: selectedModel.name,
+    generated_model: selectedModel.model,
+    generated_endpoint: selectedModel.endpoint,
+    generated_protocol: selectedModel.protocol,
+    trigger_source: priority,
+  };
+  if (typeof totalTokens === 'number') metadata.total_tokens = totalTokens;
+  if (typeof ttftSeconds === 'number') metadata.ttft_seconds = ttftSeconds;
+  return metadata;
+}
+
+async function fetchYoutubeSubtitleViaAiApi(
   video: Video,
-  priority: 'manual-subtitle' | 'auto-subtitle',
+  priority: TranscribePriority,
   respectPause: boolean,
   selectedModel: AiSummaryModelConfig,
 ): Promise<AiGeneratedSubtitlePayload> {
   const settings = getAiSummarySettings();
+  const transcriber = getTranscriber(selectedModel);
+  const chunkSeconds = transcriber.maxAudioChunkSeconds;
   const durationSeconds = parseVideoDurationSeconds(video.duration);
-  if (durationSeconds && durationSeconds > AI_SUBTITLE_CHUNK_SECONDS) {
-    const bin = pickBinary();
-    const tempDir = fs.mkdtempSync(
-      path.join(os.tmpdir(), `folo-gemini-audio-${video.video_id}-`),
-    );
-    try {
-      const audioPath = await extractAudioViaYtDlp(video, bin, tempDir);
-      return await fetchSubtitleViaGeminiSegmentedAudio(
+
+  // Fast path: provider supports remote video URL and duration fits in a single request.
+  if (
+    transcriber.transcribeRemoteVideo &&
+    (!durationSeconds || durationSeconds <= chunkSeconds)
+  ) {
+    const raw = await transcriber.transcribeRemoteVideo(selectedModel, {
+      url: getVideoUrl(video),
+      mediaType: 'video/mp4',
+      prompt: settings.subtitleApiPromptTemplate,
+      priority,
+      label: `subtitle-youtube:${video.video_id}`,
+      estimatedTokens: settings.subtitleFallbackTokenReserve,
+    });
+    return {
+      ...buildAiSubtitlePayload(video, raw.text, 'ai-url'),
+      metadata: buildAiSubtitleMetadata(
+        selectedModel,
+        priority,
+        raw.usage?.totalTokens,
+        raw.ttftSeconds,
+      ),
+    };
+  }
+
+  // Otherwise download audio locally and go through (segmented) audio path.
+  const bin = pickBinary();
+  const tempDir = fs.mkdtempSync(
+    path.join(os.tmpdir(), `folo-ai-audio-${video.video_id}-`),
+  );
+  try {
+    const audioPath = await extractAudioViaYtDlp(video, bin, tempDir);
+    const resolvedDuration =
+      durationSeconds ??
+      Math.ceil((await probeAudioDurationSeconds(audioPath)) || 0);
+    if (resolvedDuration > chunkSeconds) {
+      return await fetchSubtitleViaSegmentedAudio(
         video,
         audioPath,
         priority,
-        'gemini-audio-segmented',
+        'ai-audio-segmented',
         respectPause,
         selectedModel,
+        transcriber,
       );
-    } finally {
-      fs.rmSync(tempDir, { recursive: true, force: true });
     }
+    const raw = await transcriber.transcribeAudio(selectedModel, {
+      audioPath,
+      mediaType: 'audio/mpeg',
+      prompt: settings.subtitleApiPromptTemplate,
+      priority,
+      label: `subtitle-youtube:${video.video_id}`,
+      estimatedTokens: settings.subtitleFallbackTokenReserve,
+    });
+    return {
+      ...buildAiSubtitlePayload(video, raw.text, 'ai-audio'),
+      metadata: buildAiSubtitleMetadata(
+        selectedModel,
+        priority,
+        raw.usage?.totalTokens,
+        raw.ttftSeconds,
+      ),
+    };
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
   }
-  const raw = await generateGeminiSubtitle(
-    [
-      {
-        file_data: {
-          file_uri: getVideoUrl(video),
-          mime_type: 'video/mp4',
-        },
-      },
-      { text: settings.subtitleApiPromptTemplate },
-    ],
-    priority,
-    `subtitle-youtube:${video.video_id}`,
-    selectedModel,
-  );
-  return {
-    ...buildAiSubtitlePayload(video, raw.text, 'gemini-url'),
-    metadata: {
-      generated_at: new Date().toISOString(),
-      generated_model_name: selectedModel.name,
-      generated_model: selectedModel.model,
-      generated_endpoint: selectedModel.endpoint,
-      trigger_source: priority,
-      ...(typeof raw.usage?.totalTokens === 'number'
-        ? { total_tokens: raw.usage.totalTokens }
-        : {}),
-    },
-  };
 }
 
-async function fetchBilibiliSubtitleViaGemini(
+async function fetchBilibiliSubtitleViaAiApi(
   video: Video,
-  priority: 'manual-subtitle' | 'auto-subtitle',
+  priority: TranscribePriority,
   respectPause: boolean,
   selectedModel: AiSummaryModelConfig,
 ): Promise<AiGeneratedSubtitlePayload> {
   const settings = getAiSummarySettings();
+  const transcriber = getTranscriber(selectedModel);
+  const chunkSeconds = transcriber.maxAudioChunkSeconds;
   const bin = pickBinary();
   const tempDir = fs.mkdtempSync(
-    path.join(os.tmpdir(), `folo-gemini-audio-${video.video_id}-`),
+    path.join(os.tmpdir(), `folo-ai-audio-${video.video_id}-`),
   );
 
   try {
@@ -1633,48 +1485,33 @@ async function fetchBilibiliSubtitleViaGemini(
     const durationSeconds =
       parseVideoDurationSeconds(video.duration) ??
       Math.ceil((await probeAudioDurationSeconds(audioPath)) || 0);
-    if (durationSeconds > AI_SUBTITLE_CHUNK_SECONDS) {
-      return await fetchSubtitleViaGeminiSegmentedAudio(
+    if (durationSeconds > chunkSeconds) {
+      return await fetchSubtitleViaSegmentedAudio(
         video,
         audioPath,
         priority,
-        'gemini-audio-segmented',
+        'ai-audio-segmented',
         respectPause,
         selectedModel,
+        transcriber,
       );
     }
-    const uploaded = await uploadGeminiFile(
+    const raw = await transcriber.transcribeAudio(selectedModel, {
       audioPath,
-      'audio/mpeg',
-      selectedModel.apiKey,
-      deriveGeminiApiBase(selectedModel.endpoint).uploadBase,
-    );
-    const raw = await generateGeminiSubtitle(
-      [
-        {
-          file_data: {
-            file_uri: uploaded.uri,
-            mime_type: uploaded.mimeType,
-          },
-        },
-        { text: settings.subtitleApiPromptTemplate },
-      ],
+      mediaType: 'audio/mpeg',
+      prompt: settings.subtitleApiPromptTemplate,
       priority,
-      `subtitle-bilibili:${video.video_id}`,
-      selectedModel,
-    );
+      label: `subtitle-bilibili:${video.video_id}`,
+      estimatedTokens: settings.subtitleFallbackTokenReserve,
+    });
     return {
-      ...buildAiSubtitlePayload(video, raw.text, 'gemini-audio'),
-      metadata: {
-        generated_at: new Date().toISOString(),
-        generated_model_name: selectedModel.name,
-        generated_model: selectedModel.model,
-        generated_endpoint: selectedModel.endpoint,
-        trigger_source: priority,
-        ...(typeof raw.usage?.totalTokens === 'number'
-          ? { total_tokens: raw.usage.totalTokens }
-          : {}),
-      },
+      ...buildAiSubtitlePayload(video, raw.text, 'ai-audio'),
+      metadata: buildAiSubtitleMetadata(
+        selectedModel,
+        priority,
+        raw.usage?.totalTokens,
+        raw.ttftSeconds,
+      ),
     };
   } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });
@@ -1844,12 +1681,27 @@ function getSubtitleRetryDelayMs(
 
 function resolveSubtitleApiModel(
   modelIdOverride: string | null | undefined,
-  triggerSource: 'manual' | 'auto',
 ): AiSummaryModelConfig {
-  return resolveAiSummaryGenerationSettings({
-    modelIdOverride: modelIdOverride || undefined,
-    triggerSource,
-  }).selectedModel;
+  const settings = getAiSummarySettings();
+  const multimodalModels = settings.models.filter(
+    (model) => model.isMultimodal !== false,
+  );
+  const requestedModel = modelIdOverride
+    ? multimodalModels.find((model) => model.id === modelIdOverride)
+    : null;
+
+  if (requestedModel) {
+    return requestedModel;
+  }
+
+  if (multimodalModels.length > 0) {
+    const preferredModel =
+      multimodalModels.find((model) => model.id === settings.defaultModelId) ||
+      multimodalModels[0];
+    return preferredModel;
+  }
+
+  throw new Error('未配置多模态 AI 模型，无法执行 API 字幕提取');
 }
 
 function classifySubtitleFailure(
@@ -1955,7 +1807,7 @@ export async function fetchAndStoreSubtitle(
   const requestedMethod = (options?.preferredMethod || '').trim().toLowerCase();
   const allowBrowser = options?.allowBrowser ?? options?.allowOpenCli ?? true;
   const respectPause = options?.respectPause !== false;
-  const geminiPriority: 'manual-subtitle' | 'auto-subtitle' =
+  const aiApiPriority: 'manual-subtitle' | 'auto-subtitle' =
     options?.force || options?.requestSource === 'player'
       ? 'manual-subtitle'
       : 'auto-subtitle';
@@ -1982,7 +1834,6 @@ export async function fetchAndStoreSubtitle(
     requestedMethod === 'gemini'
       ? options?.apiModelId || null
       : autoApiFallbackMatch?.modelId,
-    geminiPriority === 'manual-subtitle' ? 'manual' : 'auto',
   );
   const externalSignal = options?.signal;
   let innerWroteState = false;
@@ -2046,8 +1897,8 @@ export async function fetchAndStoreSubtitle(
   const getMethodMessage = (method: SubtitleMethod, isFallback: boolean) => {
     if (method === 'gemini') {
       return isFallback
-        ? 'Falling back to Gemini subtitle extraction'
-        : 'Extracting subtitles via Gemini API';
+        ? 'Falling back to AI subtitle extraction'
+        : 'Extracting subtitles via AI multimodal API';
     }
     if (method === BROWSER_METHOD_ID) {
       return video.platform === 'youtube'
@@ -2059,8 +1910,8 @@ export async function fetchAndStoreSubtitle(
           : 'Fetching Bilibili subtitle via Needle Browser';
     }
     return isFallback
-      ? 'Falling back to Gemini subtitle extraction'
-      : 'Extracting subtitles via Gemini API';
+      ? 'Falling back to AI subtitle extraction'
+      : 'Extracting subtitles via AI multimodal API';
   };
 
   const runMethod = async (
@@ -2082,15 +1933,15 @@ export async function fetchAndStoreSubtitle(
     if (method === 'gemini') {
       const payload =
         video.platform === 'youtube'
-          ? await fetchYoutubeSubtitleViaGemini(
+          ? await fetchYoutubeSubtitleViaAiApi(
               video,
-              geminiPriority,
+              aiApiPriority,
               respectPause,
               selectedApiModel,
             )
-          : await fetchBilibiliSubtitleViaGemini(
+          : await fetchBilibiliSubtitleViaAiApi(
               video,
-              geminiPriority,
+              aiApiPriority,
               respectPause,
               selectedApiModel,
             );

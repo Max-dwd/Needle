@@ -26,6 +26,7 @@ describe('ai-summary-client provider compatibility', () => {
       endpoint: 'https://opencode.ai/zen/go/v1/messages',
       apiKey: 'secret-key',
       model: 'minimax-m2.5',
+      protocol: 'anthropic-messages' as const,
     };
 
     expect(createAiApiHeaders(model)).toEqual({

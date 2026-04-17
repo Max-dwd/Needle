@@ -38,6 +38,7 @@ const DEFAULT_API_FALLBACK_CONFIG: SubtitleApiFallbackConfig = {
   enabled: false,
   scope: 'global',
   globalMaxWaitSeconds: 0,
+  globalModelId: '',
   customRules: [],
   updatedAt: null,
 };
@@ -220,7 +221,11 @@ function SubtitlesTabForm({
     );
   const t = useT();
 
-  const models = config.models || [];
+  const models = useMemo(() => config.models || [], [config.models]);
+  const multimodalModels = useMemo(
+    () => models.filter((model) => model.isMultimodal !== false),
+    [models],
+  );
   const apiFallback = pipelineConfig.apiFallback || DEFAULT_API_FALLBACK_CONFIG;
   const browserFetch =
     pipelineConfig.browserFetch || DEFAULT_BROWSER_FETCH_CONFIG;
@@ -305,6 +310,7 @@ function SubtitlesTabForm({
             enabled: apiFallback.enabled,
             scope: apiFallback.scope,
             globalMaxWaitSeconds: apiFallback.globalMaxWaitSeconds,
+            globalModelId: apiFallback.globalModelId,
             customRules: apiFallback.customRules,
           },
         }),
@@ -373,7 +379,7 @@ function SubtitlesTabForm({
   const addRule = () => {
     const defaultIntent = intents[0];
     const defaultChannel = channelOptions[0];
-    const defaultModel = models[0];
+    const defaultModel = multimodalModels[0];
     if (!defaultModel || (!defaultIntent && !defaultChannel)) {
       showToast(t.settings.subtitles.addRuleErrorModel, 'error');
       return;
@@ -635,6 +641,35 @@ function SubtitlesTabForm({
                   ))}
                 </select>
               </div>
+              <div className="setting-row">
+                <div className="setting-info">
+                  <span className="setting-label">{t.settings.subtitles.apiModel}</span>
+                  <span className="setting-description">
+                    {t.settings.subtitles.apiModelDesc}
+                  </span>
+                </div>
+                <select
+                  className="premium-select"
+                  value={apiFallback.globalModelId || ''}
+                  onChange={(event) =>
+                    updateApiFallback({ globalModelId: event.target.value })
+                  }
+                  disabled={
+                    pipelineSaving ||
+                    !apiFallback.enabled ||
+                    multimodalModels.length === 0
+                  }
+                >
+                  {multimodalModels.length === 0 ? (
+                    <option value="">{t.settings.subtitles.noMultimodalModels}</option>
+                  ) : null}
+                  {multimodalModels.map((model) => (
+                    <option key={model.id} value={model.id}>
+                      {model.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </>
           ) : (
             <>
@@ -792,7 +827,20 @@ function SubtitlesTabForm({
                         }
                         disabled={pipelineSaving || !apiFallback.enabled}
                       >
-                        {models.map((model) => (
+                        {!multimodalModels.some(
+                          (model) => model.id === rule.modelId,
+                        ) ? (
+                          <option value={rule.modelId} disabled>
+                            {models.find((model) => model.id === rule.modelId)
+                              ?.name || t.settings.subtitles.noMultimodalModels}
+                          </option>
+                        ) : null}
+                        {multimodalModels.length === 0 ? (
+                          <option value="" disabled>
+                            {t.settings.subtitles.noMultimodalModels}
+                          </option>
+                        ) : null}
+                        {multimodalModels.map((model) => (
                           <option key={model.id} value={model.id}>
                             {model.name}
                           </option>

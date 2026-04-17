@@ -1,24 +1,40 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import React, {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+} from 'react';
+
 import MarkdownRenderer from '@/components/MarkdownRenderer';
 import ChatPanel from '@/components/ChatPanel';
 import { formatSecondsLabel, normalizeCommentUrl } from '@/lib/format';
+import { Info, RefreshCw, Cpu, BrainCircuit, History, BarChart3, Languages, FileText } from 'lucide-react';
 import ResearchFavoriteModal from '@/components/ResearchFavoriteModal';
 import type {
   SubtitleData,
+  AiSummaryModelConfig,
   VideoCommentsData,
   VideoSummaryData,
   VideoWithMeta,
 } from '@/types';
 
+export interface VideoInfoPanelRef {
+  scrollToChapterSeconds: (seconds: number) => void;
+}
+
 interface VideoInfoPanelProps {
+
   video: VideoWithMeta;
   onTimestampClick: (seconds: number) => void;
   currentPlayerSeconds?: number;
   playerDuration?: number;
   bilibiliAid?: number | null;
   bilibiliCid?: number | null;
+  onSummaryChange?: (markdown: string) => void;
 }
 
 function formatToken(n: number | string | undefined | null): string {
@@ -71,15 +87,92 @@ const colors = {
   dangerBorder: 'rgba(220, 38, 38, 0.2)',
 } as const;
 
-export default function VideoInfoPanel({
-  video,
-  onTimestampClick,
-  currentPlayerSeconds = 0,
-  playerDuration = 0,
-  bilibiliAid,
-  bilibiliCid,
-}: VideoInfoPanelProps) {
+function InfoActionPopover({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const handleMouseEnter = () => {
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    setIsOpen(true);
+  };
+
+  const handleMouseLeave = () => {
+    timeoutRef.current = setTimeout(() => setIsOpen(false), 50);
+  };
+
+  return (
+    <div
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+      style={{ position: 'relative', display: 'inline-block' }}
+    >
+      <button
+        type="button"
+        style={{
+          background: 'transparent',
+          border: 'none',
+          color: isOpen ? 'var(--accent-purple)' : 'var(--text-muted)',
+          padding: '6px',
+          borderRadius: '8px',
+          cursor: 'pointer',
+          transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          opacity: isOpen ? 1 : 0.6,
+        }}
+        title="设置"
+      >
+        <Info size={18} strokeWidth={2.5} />
+      </button>
+
+      {isOpen && (
+        <div
+          style={{
+            position: 'absolute',
+            top: 'calc(100% + 6px)',
+            right: 0,
+            width: 300,
+            background: 'var(--bg-elevated, var(--bg-secondary))',
+            backdropFilter: 'blur(16px)',
+            WebkitBackdropFilter: 'blur(16px)',
+            border: '1px solid var(--border)',
+            borderRadius: 16,
+            boxShadow: 'var(--shadow-lg)',
+            zIndex: 1000,
+            padding: '16px',
+            color: 'var(--text-primary)',
+            fontSize: 13,
+            lineHeight: 1.5,
+          }}
+        >
+          {children}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default forwardRef<VideoInfoPanelRef, VideoInfoPanelProps>(
+  function VideoInfoPanel(
+    {
+      video,
+      onTimestampClick,
+      currentPlayerSeconds = 0,
+      playerDuration = 0,
+      bilibiliAid,
+      bilibiliCid,
+      onSummaryChange,
+    }: VideoInfoPanelProps,
+    ref,
+  ) {
+
   const [subtitle, setSubtitle] = useState<SubtitleData | null>(null);
+
   const [subtitleLoading, setSubtitleLoading] = useState(true);
   const [subtitleRetrying, setSubtitleRetrying] = useState(false);
   const [subtitleApiExtracting, setSubtitleApiExtracting] = useState(false);
@@ -96,8 +189,12 @@ export default function VideoInfoPanel({
   const abortRef = useRef<AbortController | null>(null);
   const [comments, setComments] = useState<VideoCommentsData | null>(null);
   const [commentsLoading, setCommentsLoading] = useState(true);
-  const [models, setModels] = useState<{ id: string; name: string }[]>([]);
+  const [models, setModels] = useState<
+    Pick<AiSummaryModelConfig, 'id' | 'name' | 'isMultimodal'>[]
+  >([]);
   const [selectedModel, setSelectedModel] = useState<string>('');
+  const [selectedSubtitleModel, setSelectedSubtitleModel] =
+    useState<string>('');
   const [viewingHistory, setViewingHistory] = useState(false);
   const [researchModalState, setResearchModalState] = useState<{
     mode: 'add' | 'edit';
@@ -107,6 +204,32 @@ export default function VideoInfoPanel({
     'subtitle' | 'summary' | 'comments' | 'chat'
   >('summary');
   const activeSegmentRef = useRef<HTMLButtonElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+
+  const effectiveMarkdown = viewingHistory && summary?.previous?.markdown
+    ? summary.previous.markdown
+    : summary?.markdown || '';
+
+  useEffect(() => {
+    onSummaryChange?.(effectiveMarkdown);
+  }, [effectiveMarkdown, onSummaryChange]);
+
+  useImperativeHandle(ref, () => ({
+    scrollToChapterSeconds: (seconds: number) => {
+      const container = scrollContainerRef.current;
+      if (!container) return;
+      const target = container.querySelector<HTMLElement>(
+        `[data-summary-seconds="${seconds}"]`,
+      );
+      if (target) {
+        container.scrollTo({
+          top: target.offsetTop - container.offsetTop - 8,
+          behavior: 'smooth',
+        });
+      }
+    },
+  }));
+
 
   // Keep refs to latest bilibili ids for use inside SSE handler
   const bilibiliAidRef = useRef<number | null | undefined>(bilibiliAid);
@@ -134,6 +257,9 @@ export default function VideoInfoPanel({
       if (options?.force) {
         params.set('force', '1');
       }
+      if (preferredMethod === 'gemini' && selectedSubtitleModel) {
+        params.set('modelId', selectedSubtitleModel);
+      }
       if (!isYt) {
         if (typeof bilibiliAid === 'number' && bilibiliAid > 0) {
           params.set('aid', String(bilibiliAid));
@@ -144,7 +270,7 @@ export default function VideoInfoPanel({
       }
       return params;
     },
-    [bilibiliAid, bilibiliCid, isYt],
+    [bilibiliAid, bilibiliCid, isYt, selectedSubtitleModel],
   );
 
   const startSubtitleFetch = useCallback(
@@ -214,18 +340,21 @@ export default function VideoInfoPanel({
     };
   }, [buildSubtitleParams, defaultSubtitleMethod, startSubtitleFetch, video.id]);
 
-  const loadSummary = useCallback(async () => {
-    setSummaryLoading(true);
-    try {
-      const res = await fetch(`/api/videos/${video.id}/summary?history=1`);
-      const data = await res.json();
-      setSummary(data);
-    } catch {
-      setSummary({ error: '总结加载失败' });
-    } finally {
-      setSummaryLoading(false);
-    }
-  }, [video.id]);
+  const loadSummary = useCallback(
+    async (isRefresh = false) => {
+      if (!isRefresh) setSummaryLoading(true);
+      try {
+        const res = await fetch(`/api/videos/${video.id}/summary?history=1`);
+        const data = await res.json();
+        setSummary(data);
+      } catch {
+        setSummary({ error: '总结加载失败' });
+      } finally {
+        setSummaryLoading(false);
+      }
+    },
+    [video.id],
+  );
 
   useEffect(() => {
     void loadSummary();
@@ -242,7 +371,10 @@ export default function VideoInfoPanel({
   }, [video.id, video.summary_status]);
 
   useEffect(() => {
-    if (activePanel === 'summary' && models.length === 0) {
+    if (
+      (activePanel === 'summary' || activePanel === 'subtitle') &&
+      models.length === 0
+    ) {
       fetch('/api/settings/ai-summary')
         .then((r) => r.json())
         .then((d) => setModels(d.models || []))
@@ -301,7 +433,6 @@ export default function VideoInfoPanel({
       setSummaryGenerating(true);
       setSummaryError(null);
       setSummaryProgressMessage('正在开始生成总结...');
-      setActivePanel('summary');
     };
 
     const onSummaryProgress = (event: MessageEvent) => {
@@ -312,7 +443,6 @@ export default function VideoInfoPanel({
       setSummaryProgressMessage(
         typeof data?.message === 'string' ? data.message : '正在生成总结...',
       );
-      setActivePanel('summary');
     };
 
     const onSummaryComplete = (event: MessageEvent) => {
@@ -321,9 +451,9 @@ export default function VideoInfoPanel({
       setSummaryGenerating(false);
       setSummaryError(null);
       setSummaryProgressMessage(null);
-      setStreamingMarkdown(null);
-      setActivePanel('summary');
-      void loadSummary();
+      void loadSummary(true).then(() => {
+        setStreamingMarkdown(null);
+      });
     };
 
     const onSummaryError = (event: MessageEvent) => {
@@ -335,7 +465,6 @@ export default function VideoInfoPanel({
       setSummaryError(
         typeof data?.error === 'string' ? data.error : '总结生成失败',
       );
-      setActivePanel('summary');
     };
 
     const onSubtitleStatus = (event: MessageEvent) => {
@@ -370,7 +499,6 @@ export default function VideoInfoPanel({
         ...(activeMethod ? { activeMethod } : {}),
         ...(message ? { message } : {}),
       }));
-      setActivePanel('subtitle');
 
       if (status === 'fetching') {
         setSubtitleLoading(false);
@@ -595,6 +723,13 @@ export default function VideoInfoPanel({
     ttft !== null ||
     outputTps !== null;
 
+  const summaryGeneratedModelName =
+    typeof summaryMetadata?.generated_model_name === 'string'
+      ? summaryMetadata.generated_model_name
+      : typeof summaryMetadata?.generated_model === 'string'
+        ? summaryMetadata.generated_model
+        : null;
+
   const subtitleMetadata = subtitle?.metadata;
   const subtitleTotalTokens = parseMetricNumber(subtitleMetadata?.total_tokens);
   const subtitleGeneratedAt =
@@ -607,6 +742,9 @@ export default function VideoInfoPanel({
       : typeof subtitleMetadata?.generated_model === 'string'
         ? subtitleMetadata.generated_model
         : null;
+  const multimodalModels = models.filter(
+    (model) => model.isMultimodal !== false,
+  );
   const subtitleTriggerSource =
     typeof subtitleMetadata?.trigger_source === 'string'
       ? subtitleMetadata.trigger_source
@@ -700,7 +838,11 @@ export default function VideoInfoPanel({
                 if (fav) {
                   setResearchModalState({
                     mode: 'edit',
-                    existingFavorite: { id: fav.id, intent_type_id: fav.intent_type_id, note: fav.note }
+                    existingFavorite: {
+                      id: fav.id,
+                      intent_type_id: fav.intent_type_id,
+                      note: fav.note || '',
+                    },
                   });
                   return;
                 }
@@ -728,14 +870,299 @@ export default function VideoInfoPanel({
         </button>
       </div>
 
-      <div
-        style={{
-          minWidth: 0,
-          flex: 1,
-          overflowY: 'auto',
-          paddingRight: 4,
-        }}
-      >
+      <div style={{ position: 'relative', flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+        {/* Floating Info Icon Controls */}
+        <div 
+          style={{ 
+            position: 'absolute', 
+            top: 0, 
+            right: 4, 
+            zIndex: 100,
+            display: (activePanel === 'summary' && !summaryLoading && (summary?.markdown || summary?.previous?.markdown)) || 
+                     (activePanel === 'subtitle' && !subtitleLoading && subtitle?.text) ? 'block' : 'none'
+          }}
+        >
+          {activePanel === 'summary' && (
+            <InfoActionPopover>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                {/* Stats Section */}
+                <div>
+                  <div style={{ color: colors.textSoft, fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <BarChart3 size={12} />
+                    统计信息
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span style={{ color: colors.textMuted }}>输入 Token</span>
+                      <span style={{ fontWeight: 500 }}>{formatToken(summaryMetadata?.prompt_tokens)}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span style={{ color: colors.textMuted }}>输出 Token</span>
+                      <span style={{ fontWeight: 500 }}>{formatToken(summaryMetadata?.completion_tokens)}</span>
+                    </div>
+                    {ttft !== null && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span style={{ color: colors.textMuted }}>首包耗时 (TTFT)</span>
+                        <span style={{ fontWeight: 500 }}>{formatMetricNumber(ttft)}s</span>
+                      </div>
+                    )}
+                    {outputTps !== null && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span style={{ color: colors.textMuted }}>输出速度 (TPS)</span>
+                        <span style={{ fontWeight: 500 }}>{formatMetricNumber(outputTps)} tok/s</span>
+                      </div>
+                    )}
+                    {totalTime !== null && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span style={{ color: colors.textMuted }}>总耗时</span>
+                        <span style={{ fontWeight: 500 }}>{formatMetricNumber(totalTime)}s</span>
+                      </div>
+                    )}
+                    <div style={{ marginTop: 4, paddingTop: 4, borderTop: '1px solid rgba(255,255,255,0.05)', fontSize: 11, color: colors.textSoft }}>
+                      ✨ 生成于 {summaryMetadata?.generated_at ? new Date(summaryMetadata.generated_at).toLocaleString() : '未知时间'}
+                      {summaryGeneratedModelName ? ` · ${summaryGeneratedModelName}` : ''}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Model Selector Section */}
+                {models.length > 0 && (
+                  <div>
+                    <div style={{ color: colors.textSoft, fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <BrainCircuit size={12} />
+                      模型选择
+                    </div>
+                    <select
+                      value={selectedModel}
+                      onChange={(e) => setSelectedModel(e.target.value)}
+                      style={{
+                        width: '100%',
+                        background: 'rgba(255, 255, 255, 0.05)',
+                        color: colors.textStrong,
+                        border: '1px solid rgba(255, 255, 255, 0.1)',
+                        borderRadius: 8,
+                        fontSize: 12,
+                        padding: '8px 10px',
+                        outline: 'none',
+                      }}
+                    >
+                      <option value="" style={{ background: 'var(--bg-secondary)' }}>使用默认模型</option>
+                      {models.map((m) => (
+                        <option key={m.id} value={m.id} style={{ background: 'var(--bg-secondary)' }}>
+                          {m.name || m.id}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {/* Actions Section */}
+                <div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                    {!summaryGenerating && (
+                      <button
+                        onClick={() => handleGenerateSummary(true)}
+                        style={{
+                          flex: 1,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: 6,
+                          background: 'var(--accent-purple)',
+                          border: 'none',
+                          borderRadius: 8,
+                          color: 'white',
+                          cursor: 'pointer',
+                          fontSize: 12,
+                          fontWeight: 600,
+                          padding: '8px 12px',
+                          transition: 'all 0.2s',
+                        }}
+                      >
+                        <RefreshCw size={14} />
+                        重新生成
+                      </button>
+                    )}
+                    {summary?.previous?.markdown && (
+                      <button
+                        onClick={() => setViewingHistory(!viewingHistory)}
+                        style={{
+                          flex: 1,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: 6,
+                          background: 'rgba(255,255,255,0.05)',
+                          border: '1px solid rgba(255,255,255,0.1)',
+                          borderRadius: 8,
+                          color: colors.textMuted,
+                          cursor: 'pointer',
+                          fontSize: 12,
+                          padding: '8px 12px',
+                        }}
+                      >
+                        <History size={14} />
+                        {viewingHistory ? '查看最新' : '查看过往'}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </InfoActionPopover>
+          )}
+
+          {activePanel === 'subtitle' && (
+            <InfoActionPopover>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                {/* Stats Section */}
+                <div>
+                  <div style={{ color: colors.textSoft, fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <Languages size={12} />
+                    字幕信息
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span style={{ color: colors.textMuted }}>语言</span>
+                      <span style={{ fontWeight: 500 }}>{subtitle?.language || '未知'}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span style={{ color: colors.textMuted }}>格式</span>
+                      <span style={{ fontWeight: 500 }}>{subtitle?.format || 'txt'}</span>
+                    </div>
+                    {subtitleSegments.length > 0 && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span style={{ color: colors.textMuted }}>分段数量</span>
+                        <span style={{ fontWeight: 500 }}>{subtitleSegments.length} 段</span>
+                      </div>
+                    )}
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span style={{ color: colors.textMuted }}>来源</span>
+                      <span style={{ fontWeight: 500 }}>{subtitleSourceLabel || '未知'}</span>
+                    </div>
+                    {subtitleTotalTokens !== null && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span style={{ color: colors.textMuted }}>总 Token</span>
+                        <span style={{ fontWeight: 500 }}>{Math.round(subtitleTotalTokens)}</span>
+                      </div>
+                    )}
+                    {parseMetricNumber(subtitleMetadata?.ttft_seconds) !== null && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span style={{ color: colors.textMuted }}>首包耗时 (TTFT)</span>
+                        <span style={{ fontWeight: 500 }}>{formatMetricNumber(subtitleMetadata?.ttft_seconds)}s</span>
+                      </div>
+                    )}
+                    <div style={{ marginTop: 4, paddingTop: 4, borderTop: '1px solid rgba(255,255,255,0.05)', fontSize: 11, color: colors.textSoft }}>
+                      {subtitleGeneratedAt ? `生成于 ${new Date(subtitleGeneratedAt).toLocaleString()}` : '已写入缓存'}
+                      {subtitleGeneratedModelName ? ` · ${subtitleGeneratedModelName}` : ''}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Configuration Section */}
+                {(subtitleTriggerSource || subtitle?.segmentStyle) && (
+                  <div>
+                    <div style={{ color: colors.textSoft, fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <FileText size={12} />
+                      配置详情
+                    </div>
+                    <div style={{ fontSize: 12, color: colors.textMuted }}>
+                      {subtitleTriggerSource && (
+                        <div>触发：{subtitleTriggerSource === 'manual-subtitle' ? '手动 API 提取' : subtitleTriggerSource}</div>
+                      )}
+                      {subtitle?.segmentStyle && (
+                        <div>分段策略：{subtitle.segmentStyle === 'coarse' ? '粗粒度' : '细粒度'}</div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Actions Section */}
+                <div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <select
+                      value={selectedSubtitleModel}
+                      onChange={(event) =>
+                        setSelectedSubtitleModel(event.target.value)
+                      }
+                      disabled={subtitleApiExtracting || multimodalModels.length === 0}
+                      style={{
+                        width: '100%',
+                        background: 'rgba(255, 255, 255, 0.05)',
+                        color: colors.textStrong,
+                        border: '1px solid rgba(255, 255, 255, 0.1)',
+                        borderRadius: 8,
+                        fontSize: 12,
+                        padding: '8px 10px',
+                        outline: 'none',
+                      }}
+                    >
+                      {multimodalModels.length === 0 ? (
+                        <option value="" style={{ background: 'var(--bg-secondary)' }}>
+                          无多模态模型
+                        </option>
+                      ) : (
+                        <option value="" style={{ background: 'var(--bg-secondary)' }}>
+                          默认多模态模型
+                        </option>
+                      )}
+                      {multimodalModels.map((model) => (
+                        <option
+                          key={model.id}
+                          value={model.id}
+                          style={{ background: 'var(--bg-secondary)' }}
+                        >
+                          {model.name || model.id}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      onClick={() => void handleExtractSubtitleViaApi(true)}
+                      disabled={
+                        subtitleApiExtracting ||
+                        subtitleRetrying ||
+                        multimodalModels.length === 0
+                      }
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: 6,
+                        background: 'var(--accent-purple)',
+                        border: 'none',
+                        borderRadius: 8,
+                        color: 'white',
+                        cursor:
+                          subtitleApiExtracting ||
+                          subtitleRetrying ||
+                          multimodalModels.length === 0
+                            ? 'progress'
+                            : 'pointer',
+                        fontSize: 12,
+                        fontWeight: 600,
+                        padding: '8px 12px',
+                        transition: 'all 0.2s',
+                      }}
+                    >
+                      <RefreshCw size={14} className={subtitleApiExtracting ? 'animate-spin' : ''} />
+                      {subtitleApiExtracting ? '重新生成中...' : '重新生成'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </InfoActionPopover>
+          )}
+        </div>
+
+        <div
+          ref={scrollContainerRef}
+          style={{
+            minWidth: 0,
+            flex: 1,
+            overflowY: 'auto',
+            paddingRight: 4,
+            position: 'relative',
+          }}
+        >
         {activePanel !== 'summary' && activePanel !== 'chat' && (
           <div
             style={{
@@ -794,7 +1221,7 @@ export default function VideoInfoPanel({
           !summaryLoading &&
           streamingMarkdown === null &&
           (summary?.markdown || summary?.previous?.markdown) && (
-            <div>
+            <div style={{ position: 'relative' }}>
               {summaryError && (
                 <div
                   style={{
@@ -821,150 +1248,6 @@ export default function VideoInfoPanel({
                 onTimestampClick={onTimestampClick}
                 tone="dark"
               />
-
-              {summary?.metadata &&
-                Object.keys(summary.metadata).length > 0 &&
-                !viewingHistory && (
-                  <div
-                    style={{
-                      fontSize: 11,
-                      color: colors.textMuted,
-                      marginTop: 16,
-                      textAlign: 'right',
-                      opacity: 0.95,
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: 2,
-                    }}
-                  >
-                    {hasSummaryStats && (
-                      <div
-                        style={{
-                          display: 'flex',
-                          flexDirection: 'column',
-                          gap: 2,
-                        }}
-                      >
-                        <div>
-                          In:{' '}
-                          {formatToken(summaryMetadata?.prompt_tokens)}{' '}
-                          tokens &nbsp;Out:{' '}
-                          {formatToken(
-                            summaryMetadata?.completion_tokens,
-                          )}{' '}
-                          tokens
-                        </div>
-                        <div>
-                          {ttft !== null && (
-                            <>
-                              <span>
-                                TTFT: {formatMetricNumber(ttft)} s
-                              </span>
-                            </>
-                          )}
-                          {outputTps !== null && (
-                            <>
-                              <span>
-                                &nbsp;TPS: {formatMetricNumber(outputTps)}{' '}
-                                tok/s
-                              </span>
-                            </>
-                          )}
-                          {totalTime !== null && (
-                            <>
-                              <span>
-                                &nbsp;Total Time:{' '}
-                                {formatMetricNumber(totalTime)} s
-                              </span>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                    <div>
-                      ✨ 生成于{' '}
-                      {summaryMetadata?.generated_at
-                        ? new Date(
-                            summaryMetadata.generated_at,
-                          ).toLocaleString()
-                        : '未知时间'}
-                      {summaryMetadata?.generated_model_name ||
-                      summaryMetadata?.model_name
-                        ? `，使用 ${summaryMetadata.generated_model_name || summaryMetadata.model_name}`
-                        : ''}
-                    </div>
-                  </div>
-                )}
-
-              {!summaryGenerating && (
-                <div
-                  style={{
-                    display: 'flex',
-                    gap: 12,
-                    alignItems: 'center',
-                    marginTop: 16,
-                    paddingTop: 16,
-                    borderTop: `1px solid ${colors.border}`,
-                  }}
-                >
-                  <button
-                    onClick={() => handleGenerateSummary(true)}
-                    style={{
-                      background: 'var(--bg-hover)',
-                      border: `1px solid ${colors.border}`,
-                      borderRadius: 6,
-                      color: colors.textStrong,
-                      cursor: 'pointer',
-                      fontSize: 12,
-                      padding: '6px 12px',
-                    }}
-                  >
-                    重新生成
-                  </button>
-
-                  {models.length > 0 && (
-                    <select
-                      value={selectedModel}
-                      onChange={(e) => setSelectedModel(e.target.value)}
-                      style={{
-                        background: colors.inputBg,
-                        color: colors.textStrong,
-                        border: `1px solid ${colors.borderStrong}`,
-                        borderRadius: 4,
-                        fontSize: 12,
-                        padding: '4px 8px',
-                      }}
-                    >
-                      <option value="">使用默认模型</option>
-                      {models.map((m) => (
-                        <option key={m.id} value={m.id}>
-                          {m.name || m.id}
-                        </option>
-                      ))}
-                    </select>
-                  )}
-
-                  {summary.previous?.markdown && (
-                    <button
-                      onClick={() => setViewingHistory(!viewingHistory)}
-                      style={{
-                        background: 'transparent',
-                        border: `1px solid ${colors.border}`,
-                        borderRadius: 6,
-                        color: colors.textMuted,
-                        cursor: 'pointer',
-                        fontSize: 12,
-                        padding: '6px 12px',
-                        marginLeft: 'auto',
-                      }}
-                    >
-                      {viewingHistory
-                        ? '查看最新版本'
-                        : '查看上一版 (.prev)'}
-                    </button>
-                  )}
-                </div>
-              )}
             </div>
           )}
         {activePanel === 'summary' &&
@@ -1081,55 +1364,8 @@ export default function VideoInfoPanel({
         {activePanel === 'subtitle' &&
           !subtitleLoading &&
           subtitle?.text && (
-            <>
-              <div
-                style={{
-                  color: colors.textMuted,
-                  fontSize: 12,
-                  marginBottom: 12,
-                }}
-              >
-                {subtitle.language || 'unknown'} ·{' '}
-                {subtitle.format || 'txt'}
-                {subtitleSegments.length > 0
-                  ? ` · ${subtitleSegments.length} 段`
-                  : ''}
-                {subtitleSourceLabel ? ` · ${subtitleSourceLabel}` : ''}
-              </div>
-              {(subtitleMetadata &&
-                Object.keys(subtitleMetadata).length > 0) ||
-              subtitle?.sourceMethod ? (
-                <div
-                  style={{
-                    color: colors.textFaint,
-                    fontSize: 11,
-                    marginBottom: 12,
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: 6,
-                  }}
-                >
-                  <div>
-                    {subtitleGeneratedAt
-                      ? `生成于 ${new Date(subtitleGeneratedAt).toLocaleString()}`
-                      : '已写入字幕缓存'}
-                    {subtitleGeneratedModelName
-                      ? `，使用 ${subtitleGeneratedModelName}`
-                      : ''}
-                  </div>
-                  <div>
-                    {subtitleTriggerSource
-                      ? `触发方式：${subtitleTriggerSource === 'manual-subtitle' ? '手动 API 提取' : subtitleTriggerSource}`
-                      : '触发方式：常规抓取'}
-                    {subtitle?.segmentStyle
-                      ? `，分段：${subtitle.segmentStyle === 'coarse' ? '粗粒度' : '细粒度'}`
-                      : ''}
-                    {subtitleTotalTokens !== null
-                      ? `，总 Token：${Math.round(subtitleTotalTokens)}`
-                      : ''}
-                  </div>
-                </div>
-              ) : null}
+            <div style={{ position: 'relative' }}>
+              {/* Subtitle Content */}
               {subtitleSegments.length > 0 ? (
                 <div className="subtitle-segment-list">
                   {subtitleSegments.map((segment, index) => {
@@ -1165,41 +1401,7 @@ export default function VideoInfoPanel({
                   {subtitle.text}
                 </div>
               )}
-              <div
-                style={{
-                  display: 'flex',
-                  gap: 12,
-                  alignItems: 'center',
-                  marginTop: 16,
-                  paddingTop: 16,
-                  borderTop: `1px solid ${colors.border}`,
-                }}
-              >
-                <button
-                  onClick={() => void handleExtractSubtitleViaApi(true)}
-                  disabled={subtitleApiExtracting || subtitleRetrying}
-                  style={{
-                    background: 'var(--bg-hover)',
-                    border: `1px solid ${colors.border}`,
-                    borderRadius: 6,
-                    color: colors.textStrong,
-                    cursor:
-                      subtitleApiExtracting || subtitleRetrying
-                        ? 'progress'
-                        : 'pointer',
-                    fontSize: 12,
-                    padding: '6px 12px',
-                  }}
-                >
-                  {subtitleApiExtracting ? '重新生成中...' : '重新生成'}
-                </button>
-                <div
-                  style={{ color: colors.textFaint, fontSize: 11 }}
-                >
-                  重新生成会覆盖当前字幕缓存，并继续通过 SSE 更新状态。
-                </div>
-              </div>
-            </>
+            </div>
           )}
         {activePanel === 'subtitle' &&
           !subtitleLoading &&
@@ -1244,17 +1446,50 @@ export default function VideoInfoPanel({
                     {subtitleRetrying ? '重试中...' : '立即重试'}
                   </button>
                 )}
+                <select
+                  value={selectedSubtitleModel}
+                  onChange={(event) =>
+                    setSelectedSubtitleModel(event.target.value)
+                  }
+                  disabled={subtitleApiExtracting || multimodalModels.length === 0}
+                  style={{
+                    background: colors.inputBg,
+                    border: `1px solid ${colors.borderStrong}`,
+                    borderRadius: 8,
+                    color: colors.textStrong,
+                    fontSize: 13,
+                    minWidth: 150,
+                    padding: '9px 12px',
+                  }}
+                >
+                  {multimodalModels.length === 0 ? (
+                    <option value="">无多模态模型</option>
+                  ) : (
+                    <option value="">默认多模态模型</option>
+                  )}
+                  {multimodalModels.map((model) => (
+                    <option key={model.id} value={model.id}>
+                      {model.name || model.id}
+                    </option>
+                  ))}
+                </select>
                 <button
                   type="button"
                   onClick={() => void handleExtractSubtitleViaApi()}
-                  disabled={subtitleRetrying || subtitleApiExtracting}
+                  disabled={
+                    subtitleRetrying ||
+                    subtitleApiExtracting ||
+                    multimodalModels.length === 0
+                  }
                   style={{
                     background: colors.accentSoft,
                     border: `1px solid ${colors.accentBorder}`,
                     borderRadius: 8,
                     color: colors.accent,
                     cursor:
-                      subtitleRetrying || subtitleApiExtracting
+                      subtitleRetrying ||
+                      subtitleApiExtracting ||
+                      multimodalModels.length === 0
                         ? 'progress'
                         : 'pointer',
                     fontSize: 13,
@@ -1266,7 +1501,7 @@ export default function VideoInfoPanel({
                 </button>
               </div>
               <div style={{ color: colors.textFaint, fontSize: 11 }}>
-                API 提取会调用当前 AI 模型并使用设置页中的字幕提示词模板。
+                API 提取会调用多模态模型并使用设置页中的字幕提示词模板。
               </div>
             </div>
           )}
@@ -1380,6 +1615,7 @@ export default function VideoInfoPanel({
             playerDuration={playerDuration}
           />
         )}
+        </div>
       </div>
 
       {researchModalState && (
@@ -1396,4 +1632,4 @@ export default function VideoInfoPanel({
       )}
     </>
   );
-}
+});

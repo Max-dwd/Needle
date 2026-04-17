@@ -1,8 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import {
+  DEFAULT_PLAYER_KEYBOARD_BINDINGS,
   isTypingContextTarget,
   resolvePlayerKeyboardAction,
 } from './player-keyboard-arbiter';
+
+const shortcutSettings = {
+  enabled: true,
+  bindings: DEFAULT_PLAYER_KEYBOARD_BINDINGS,
+  rateStep: 0.1,
+  seekSeconds: 10,
+};
 
 describe('isTypingContextTarget', () => {
   it('detects form fields and contentEditable targets', () => {
@@ -23,56 +31,101 @@ describe('resolvePlayerKeyboardAction', () => {
     expect(
       resolvePlayerKeyboardAction(
         { key: 'Escape' },
-        { isTypingContext: true },
+        { isTypingContext: true, settings: shortcutSettings },
       ),
-    ).toBe('none');
+    ).toEqual({ type: 'none' });
     expect(
       resolvePlayerKeyboardAction(
         { key: ' ', code: 'Space' },
-        { isTypingContext: true },
+        { isTypingContext: true, settings: shortcutSettings },
       ),
-    ).toBe('none');
+    ).toEqual({ type: 'none' });
   });
 
   it('only keeps escape at app level in non-typing mode', () => {
     expect(
       resolvePlayerKeyboardAction(
         { key: 'Escape' },
-        { isTypingContext: false },
+        { isTypingContext: false, settings: shortcutSettings },
       ),
-    ).toBe('close-modal');
+    ).toEqual({ type: 'close-modal' });
     expect(
       resolvePlayerKeyboardAction(
         { key: 'Tab' },
-        { isTypingContext: false },
+        { isTypingContext: false, settings: shortcutSettings },
       ),
-    ).toBe('none');
+    ).toEqual({ type: 'none' });
     expect(
       resolvePlayerKeyboardAction(
         { key: '`', code: 'Backquote' },
-        { isTypingContext: false },
+        { isTypingContext: false, settings: shortcutSettings },
       ),
-    ).toBe('none');
+    ).toEqual({ type: 'none' });
     expect(
       resolvePlayerKeyboardAction(
         { key: ' ', code: 'Space' },
-        { isTypingContext: false },
+        { isTypingContext: false, settings: shortcutSettings },
       ),
-    ).toBe('none');
+    ).toEqual({ type: 'play-pause' });
   });
 
   it('ignores modified and already-handled events', () => {
     expect(
       resolvePlayerKeyboardAction(
         { key: 'Tab', metaKey: true },
-        { isTypingContext: false },
+        { isTypingContext: false, settings: shortcutSettings },
       ),
-    ).toBe('none');
+    ).toEqual({ type: 'none' });
     expect(
       resolvePlayerKeyboardAction(
         { key: 'Tab', defaultPrevented: true },
-        { isTypingContext: false },
+        { isTypingContext: false, settings: shortcutSettings },
       ),
-    ).toBe('none');
+    ).toEqual({ type: 'none' });
+  });
+
+  it('dispatches configured shortcut bindings', () => {
+    expect(
+      resolvePlayerKeyboardAction(
+        { key: 'a' },
+        { isTypingContext: false, settings: shortcutSettings },
+      ),
+    ).toEqual({ type: 'rate-toggle' });
+    expect(
+      resolvePlayerKeyboardAction(
+        { key: 'S' },
+        { isTypingContext: false, settings: shortcutSettings },
+      ),
+    ).toEqual({ type: 'rate-step', delta: -0.1 });
+    expect(
+      resolvePlayerKeyboardAction(
+        { key: 'd' },
+        { isTypingContext: false, settings: shortcutSettings },
+      ),
+    ).toEqual({ type: 'rate-step', delta: 0.1 });
+    expect(
+      resolvePlayerKeyboardAction(
+        { key: 'z' },
+        { isTypingContext: false, settings: shortcutSettings },
+      ),
+    ).toEqual({ type: 'seek-step', seconds: -10 });
+    expect(
+      resolvePlayerKeyboardAction(
+        { key: 'x' },
+        { isTypingContext: false, settings: shortcutSettings },
+      ),
+    ).toEqual({ type: 'seek-step', seconds: 10 });
+  });
+
+  it('does not dispatch bindings when disabled', () => {
+    expect(
+      resolvePlayerKeyboardAction(
+        { key: 'a' },
+        {
+          isTypingContext: false,
+          settings: { ...shortcutSettings, enabled: false },
+        },
+      ),
+    ).toEqual({ type: 'none' });
   });
 });

@@ -220,6 +220,7 @@ describe('segmented ai subtitle helpers', () => {
       '只处理当前切片，时间戳从 00:00 开始。',
       0,
       900,
+      15 * 60,
     );
 
     expect(prompt).toContain('输出完整字幕');

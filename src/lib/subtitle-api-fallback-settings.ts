@@ -23,6 +23,7 @@ export interface SubtitleApiFallbackConfig {
   enabled: boolean;
   scope: SubtitleApiFallbackScope;
   globalMaxWaitSeconds: number;
+  globalModelId: string;
   customRules: SubtitleApiFallbackRule[];
   updatedAt: string | null;
 }
@@ -40,6 +41,7 @@ interface StoredSubtitleApiFallbackConfig {
   enabled?: unknown;
   scope?: unknown;
   globalMaxWaitSeconds?: unknown;
+  globalModelId?: unknown;
   customRules?: unknown;
 }
 
@@ -95,7 +97,14 @@ function normalizeConfig(
   raw: unknown,
 ): Omit<SubtitleApiFallbackConfig, 'updatedAt'> {
   const settings = getAiSummarySettings();
-  const validModelIds = new Set(settings.models.map((model) => model.id));
+  const multimodalModels = settings.models.filter(
+    (model) => model.isMultimodal !== false,
+  );
+  const validModelIds = new Set(multimodalModels.map((model) => model.id));
+  const preferredGlobalModelId =
+    multimodalModels.find((model) => model.id === settings.defaultModelId)?.id ||
+    multimodalModels[0]?.id ||
+    '';
   const value =
     raw && typeof raw === 'object'
       ? (raw as StoredSubtitleApiFallbackConfig)
@@ -111,6 +120,9 @@ function normalizeConfig(
       value.globalMaxWaitSeconds,
       0,
     ),
+    globalModelId: validModelIds.has(normalizeText(value.globalModelId))
+      ? normalizeText(value.globalModelId)
+      : preferredGlobalModelId,
     customRules: customRulesRaw
       .map((rule, index) =>
         normalizeRule(
@@ -155,6 +167,7 @@ export function setSubtitleApiFallbackConfig(
       enabled: normalized.enabled,
       scope: normalized.scope,
       globalMaxWaitSeconds: normalized.globalMaxWaitSeconds,
+      globalModelId: normalized.globalModelId,
       customRules: normalized.customRules,
     }),
   );
@@ -171,7 +184,7 @@ export function resolveSubtitleApiFallbackMatch(
     return {
       source: 'global',
       maxWaitSeconds: config.globalMaxWaitSeconds,
-      modelId: null,
+      modelId: config.globalModelId || null,
       ruleId: null,
     };
   }

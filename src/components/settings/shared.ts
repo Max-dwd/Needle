@@ -1,7 +1,9 @@
 'use client';
 
 import { useCallback, useState } from 'react';
-import type { UnavailableVideoBehavior } from '@/types';
+import type { AiModelProtocol, UnavailableVideoBehavior } from '@/types';
+
+export type { AiModelProtocol };
 
 export interface AiSummaryModelConfig {
   id: string;
@@ -11,6 +13,8 @@ export interface AiSummaryModelConfig {
   apiKeyMasked?: string | null;
   hasApiKey?: boolean;
   model: string;
+  isMultimodal?: boolean;
+  protocol: AiModelProtocol;
   requestsPerMinute?: number;
   requestsPerDay?: number;
   tokensPerMinute?: number;
@@ -123,8 +127,31 @@ export interface CrawlRuntimePayload {
   status: CrawlRuntimeStatus;
 }
 
+export type PlayerKeyboardActionId =
+  | 'play-pause'
+  | 'rate-toggle'
+  | 'rate-decrement'
+  | 'rate-increment'
+  | 'seek-backward'
+  | 'seek-forward'
+  | 'toggle-summary-follow'
+  | 'toggle-mute';
+
+
+
+export interface PlayerKeyboardBinding {
+  action: PlayerKeyboardActionId;
+  key: string;
+}
+
 export interface PlayerKeyboardModeSettings {
   enabled: boolean;
+  bindings: PlayerKeyboardBinding[];
+  rateTogglePreset: number;
+  rateStep: number;
+  seekSeconds: number;
+  rateMin: number;
+  rateMax: number;
 }
 
 export interface HomeIntentShortcutSettings {
@@ -193,6 +220,7 @@ export interface SubtitleApiFallbackConfig {
   enabled: boolean;
   scope: SubtitleApiFallbackScope;
   globalMaxWaitSeconds: number;
+  globalModelId: string;
   customRules: SubtitleApiFallbackRule[];
   updatedAt: string | null;
 }

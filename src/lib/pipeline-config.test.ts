@@ -108,11 +108,11 @@ describe('pipeline config normalization', () => {
         {
           platform: 'youtube',
           label: 'YouTube',
-          description: '字幕提取优先走 Needle Browser，失败时可回退到 Gemini。',
+          description: '字幕提取优先走 Needle Browser，失败时可回退到 AI 多模态 API。',
           sources: [
             {
               id: 'gemini',
-              label: 'Gemini',
+              label: 'AI 多模态 API',
               description: 'AI 提取 fallback，适合无字幕或字幕失效场景。',
               enabled: false,
             },
@@ -127,7 +127,7 @@ describe('pipeline config normalization', () => {
         {
           platform: 'bilibili',
           label: 'Bilibili',
-          description: '字幕提取优先走 Needle Browser，失败时可回退到 Gemini。',
+          description: '字幕提取优先走 Needle Browser，失败时可回退到 AI 多模态 API。',
           sources: [
             {
               id: 'browser',
@@ -137,7 +137,7 @@ describe('pipeline config normalization', () => {
             },
             {
               id: 'gemini',
-              label: 'Gemini',
+              label: 'AI 多模态 API',
               description: 'AI 字幕补全或提取兜底。',
               enabled: true,
             },

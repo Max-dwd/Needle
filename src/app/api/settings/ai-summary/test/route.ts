@@ -33,6 +33,7 @@ export async function POST() {
         endpoint: settings.endpoint,
         apiKey: settings.apiKey,
         model: settings.model,
+        protocol: settings.selectedModel.protocol,
       }),
       body: JSON.stringify(
         createAiApiRequest(
@@ -46,6 +47,7 @@ export async function POST() {
             endpoint: settings.endpoint,
             apiKey: settings.apiKey,
             model: settings.model,
+            protocol: settings.selectedModel.protocol,
           },
         ),
       ),
