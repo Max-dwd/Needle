@@ -5,6 +5,7 @@ import VideoInfoPanel from '@/components/VideoInfoPanel';
 import { timeAgo, getSubtitleBadgeLabel } from '@/lib/format';
 import type { VideoWithMeta } from '@/types';
 import EmbeddedPlayer from '@/components/player/EmbeddedPlayer';
+import type { EmbeddedPlayerSeekRequest } from '@/components/player/EmbeddedPlayer';
 import AudioModeOverlay from '@/components/AudioModeOverlay';
 
 interface MobileVideoSheetProps {
@@ -19,17 +20,9 @@ interface MobileVideoSheetProps {
   initialAudioMode?: boolean;
 }
 
-function getExternalUrl(video: VideoWithMeta): string {
-  if (video.platform === 'youtube')
-    return `https://www.youtube.com/watch?v=${video.video_id}`;
-  return `https://www.bilibili.com/video/${video.video_id}`;
-}
-
 export default function MobileVideoSheet({
   video,
   onClose,
-  onPlay,
-  onPlayAudio,
   onNext,
   onPrev,
   hasNext,
@@ -47,7 +40,14 @@ export default function MobileVideoSheet({
   const [isAudioPlaying, setIsAudioPlaying] = useState(initialAudioMode);
   const [isVideoPlaying, setIsVideoPlaying] = useState(false);
   const [isPickerActive, setIsPickerActive] = useState(false);
-  const [selectedIndex, setSelectedIndex] = useState(null as number | null);
+  const [playerState, setPlayerState] = useState({
+    videoId: video.id,
+    seconds: 0,
+    duration: 0,
+  });
+  const [seekRequest, setSeekRequest] = useState<
+    (EmbeddedPlayerSeekRequest & { videoId: number }) | null
+  >(null);
   
   const touchStartTime = useRef(0);
   const touchStartY = useRef(0);
@@ -56,6 +56,7 @@ export default function MobileVideoSheet({
   const lastDragX = useRef(0);
   
   const lastVideoId = useRef(video.id);
+  const seekNonceRef = useRef(0);
 
   // Lock body scroll
   useEffect(() => {
@@ -71,21 +72,28 @@ export default function MobileVideoSheet({
   // Handle Video Transition Animation
   useEffect(() => {
     if (lastVideoId.current !== video.id) {
-        const direction = lastDragX.current > 0 ? 'prev' : 'next';
-        
+      const direction = lastDragX.current > 0 ? 'prev' : 'next';
+      let settleFrame = 0;
+      const startFrame = requestAnimationFrame(() => {
         setIsTransitioning(true);
         // Start from the edge (snap to side instantly)
         setDragX(direction === 'prev' ? -window.innerWidth : window.innerWidth);
-        
+
         // Immediate animation back to center
-        requestAnimationFrame(() => {
-            setIsTransitioning(false);
-            setDragX(0);
-            if (contentRef.current) contentRef.current.scrollTop = 0;
-            lastDragX.current = 0; // Reset for next transition
+        settleFrame = requestAnimationFrame(() => {
+          setIsTransitioning(false);
+          setDragX(0);
+          if (contentRef.current) contentRef.current.scrollTop = 0;
+          lastDragX.current = 0; // Reset for next transition
         });
-        
+
         lastVideoId.current = video.id;
+      });
+
+      return () => {
+        cancelAnimationFrame(startFrame);
+        if (settleFrame) cancelAnimationFrame(settleFrame);
+      };
     }
   }, [video.id]);
 
@@ -193,7 +201,7 @@ export default function MobileVideoSheet({
     }
     
     setDragDirection('none');
-  }, [dragDirection, hasNext, hasPrev, isDragging, onClose, onNext, onPrev]);
+  }, [dragDirection, hasNext, hasPrev, isDragging, isFullHeight, onClose, onNext, onPrev]);
 
   const executePickerAction = useCallback((index: number) => {
     switch(index) {
@@ -225,6 +233,13 @@ export default function MobileVideoSheet({
   }, [video]);
 
   const isYt = video.platform === 'youtube';
+  const isMediaActive = isAudioPlaying || isVideoPlaying;
+  const activeSeekRequest =
+    seekRequest?.videoId === video.id ? seekRequest : null;
+  const activePlayerSeconds =
+    playerState.videoId === video.id ? playerState.seconds : 0;
+  const activePlayerDuration =
+    playerState.videoId === video.id ? playerState.duration : 0;
   const channelName = (video as { channel_name?: string }).channel_name ?? '';
   const subtitleBadge = getSubtitleBadgeLabel(video);
   const accessBadge =
@@ -233,6 +248,28 @@ export default function MobileVideoSheet({
       : video.access_status === 'members_only' || video.is_members_only === 1
         ? { label: '👑 会员', title: '会员专属视频' }
         : null;
+
+  const handlePlayerTimeUpdate = useCallback(
+    (seconds: number) => {
+      setPlayerState((prev) => ({
+        videoId: video.id,
+        seconds,
+        duration: prev.videoId === video.id ? prev.duration : 0,
+      }));
+    },
+    [video.id],
+  );
+
+  const handlePlayerDurationChange = useCallback(
+    (duration: number) => {
+      setPlayerState((prev) => ({
+        videoId: video.id,
+        seconds: prev.videoId === video.id ? prev.seconds : 0,
+        duration,
+      }));
+    },
+    [video.id],
+  );
 
   const sheetStyle = useMemo(() => {
     const windowH = typeof window !== 'undefined' ? window.innerHeight : 800;
@@ -262,7 +299,7 @@ export default function MobileVideoSheet({
       animationOrigin: 'bottom',
       willChange: 'transform',
     };
-  }, [dragX, dragY, isDragging, isFirstOpen, isFullHeight]);
+  }, [dragY, isDragging, isFirstOpen, isFullHeight]);
 
   return (
     <>
@@ -394,7 +431,14 @@ export default function MobileVideoSheet({
               }}
             >
               {(isAudioPlaying || isVideoPlaying) ? (
-                <EmbeddedPlayer video={video} isAudioMode={isAudioPlaying} isVisible={isVideoPlaying}>
+                <EmbeddedPlayer
+                  video={video}
+                  isAudioMode={isAudioPlaying}
+                  isVisible={isVideoPlaying}
+                  seekRequest={activeSeekRequest}
+                  onTimeUpdate={handlePlayerTimeUpdate}
+                  onDurationChange={handlePlayerDurationChange}
+                >
                   {({ isPlaying, currentTime, duration, togglePlay, seek }) => (
                     isAudioPlaying ? (
                       <AudioModeOverlay
@@ -478,16 +522,27 @@ export default function MobileVideoSheet({
             <VideoInfoPanel
               video={video}
               onTimestampClick={(seconds) => {
+                if (isMediaActive) {
+                  seekNonceRef.current += 1;
+                  setSeekRequest({
+                    seconds,
+                    nonce: seekNonceRef.current,
+                    videoId: video.id,
+                  });
+                  return;
+                }
+
                 const isYt = video.platform === 'youtube';
                 // Use standard web URLs with 1:1 location.href mapping
                 // to trigger Universal Links in iOS/Android Safari for a direct app jump.
-                const webUrl = isYt 
+                const webUrl = isYt
                   ? `https://www.youtube.com/watch?v=${video.video_id}&t=${seconds}s`
                   : `https://www.bilibili.com/video/${video.video_id}/?t=${seconds}`;
-                
+
                 window.location.href = webUrl;
               }}
-              currentPlayerSeconds={0}
+              currentPlayerSeconds={isMediaActive ? activePlayerSeconds : 0}
+              playerDuration={isMediaActive ? activePlayerDuration : 0}
             />
           </div>
         </div>
