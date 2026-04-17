@@ -132,7 +132,7 @@ interface GeneratedSummaryMetadata {
   ttft_seconds?: number;
   output_tps?: number;
   trigger_source?: 'manual' | 'auto';
-  model_source?: 'default' | 'auto-default' | 'intent' | 'override';
+  model_source?: 'default' | 'auto-default' | 'intent' | 'override' | 'fallback';
 }
 
 interface ResolvedSummaryGenerationContext {
@@ -141,7 +141,7 @@ interface ResolvedSummaryGenerationContext {
   prompt: string;
   selectedModel: AiSummaryModelConfig;
   triggerSource: 'manual' | 'auto';
-  modelSource: 'default' | 'auto-default' | 'intent' | 'override';
+  modelSource: 'default' | 'auto-default' | 'intent' | 'override' | 'fallback';
 }
 
 const SUBTITLE_CHAR_LIMIT = 60000;
@@ -913,6 +913,7 @@ async function generateViaOpenAiCompatibleApi(
       options?.triggerSource === 'auto' ? 'auto-summary' : 'manual-summary',
     estimatedTokens: estimateTextTokens(prompt),
     label: `summary:${model.id}`,
+    modelId: model.id,
     onQueued: options?.onQueued
       ? ({ queuePosition, waitMs }) => {
           options.onQueued?.({ queuePosition, waitMs });
@@ -1093,6 +1094,7 @@ export async function* generateSummaryStream(
     priority: triggerSource === 'auto' ? 'auto-summary' : 'manual-summary',
     estimatedTokens: estimateTextTokens(prompt),
     label: `summary-stream:${selectedModel.id}`,
+    modelId: selectedModel.id,
     onQueued: ({ queuePosition, waitMs }) => {
       emitSummaryProgress(videoId, {
         stage: 'calling_api',

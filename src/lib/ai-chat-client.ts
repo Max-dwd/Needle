@@ -227,6 +227,7 @@ export function createChatStream(
             `${prompt.system}\n\n${prompt.user}`,
           ),
           label: `chat-stream:${model.id}`,
+          modelId: model.id,
         }, signal);
 
         const response = await fetch(url, {

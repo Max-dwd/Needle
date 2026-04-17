@@ -2,6 +2,7 @@
 
 import type {
   AutoPipelineStatus,
+  BudgetStatusSnapshot,
   CrawlerRuntimeStatus,
   SchedulerStatus,
   SummaryQueueState,
@@ -836,6 +837,87 @@ function SummarySection({
   );
 }
 
+function BudgetSection({
+  budgetStatus,
+}: {
+  budgetStatus: BudgetStatusSnapshot | null;
+}) {
+  if (!budgetStatus) return null;
+
+  const { global, models, queueLength } = budgetStatus;
+
+  const rpdPct = global.rpd.limit > 0 ? (global.rpd.used / global.rpd.limit) * 100 : 0;
+  const rpdColor =
+    rpdPct >= 90 ? 'var(--accent-yt)' : rpdPct >= 60 ? 'var(--status-warn)' : 'var(--status-ok)';
+
+  return (
+    <div className="task-panel-section">
+      <div className="section-header">
+        <span>⚡</span>
+        <span>AI 预算</span>
+        <span className="section-meta">
+          {global.rpd.used}/{formatNumber(global.rpd.limit)} 今日
+        </span>
+      </div>
+      <div className="section-body">
+        {/* Global counters */}
+        <div className="section-row">
+          <span className="section-row-label">每分钟请求：</span>
+          <span className="section-row-value">
+            {global.rpm.used}/{global.rpm.limit}
+          </span>
+        </div>
+        <div className="section-row">
+          <span className="section-row-label">每分钟 Token：</span>
+          <span className="section-row-value">
+            {formatNumber(global.tpm.used)}/{formatNumber(global.tpm.limit)}
+          </span>
+        </div>
+        <div className="section-row">
+          <span className="section-row-label">今日请求：</span>
+          <span className="section-row-value" style={{ color: rpdColor }}>
+            {global.rpd.used}/{formatNumber(global.rpd.limit)}
+          </span>
+        </div>
+        {/* RPD progress bar */}
+        <div style={{ margin: '4px 0 6px', height: 4, borderRadius: 2, background: 'var(--surface-2)', overflow: 'hidden' }}>
+          <div style={{ width: `${Math.min(100, rpdPct)}%`, height: '100%', borderRadius: 2, background: rpdColor, transition: 'width 0.3s ease' }} />
+        </div>
+
+        {queueLength > 0 && (
+          <div className="section-row">
+            <span className="section-row-label">排队中：</span>
+            <span className="section-row-value">{queueLength} 个任务</span>
+          </div>
+        )}
+
+        {/* Per-model breakdown */}
+        {models.length > 1 && (
+          <>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6, marginBottom: 2 }}>
+              各模型用量
+            </div>
+            {models.map((m) => {
+              const mRpdPct = m.rpd.limit > 0 ? (m.rpd.used / m.rpd.limit) * 100 : 0;
+              const mColor = mRpdPct >= 90 ? 'var(--accent-yt)' : mRpdPct >= 60 ? 'var(--status-warn)' : 'var(--text-secondary)';
+              return (
+                <div key={m.modelId} className="section-row" style={{ alignItems: 'flex-start' }}>
+                  <span className="section-row-label" style={{ minWidth: 'auto', flex: 'none' }}>
+                    {m.modelName}：
+                  </span>
+                  <span className="section-row-value" style={{ color: mColor, fontSize: 11 }}>
+                    {m.rpm.used}/{m.rpm.limit} rpm · {m.rpd.used}/{formatNumber(m.rpd.limit)} rpd
+                  </span>
+                </div>
+              );
+            })}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Main component
 // ---------------------------------------------------------------------------
@@ -849,6 +931,7 @@ export interface TaskStatusBarProps {
   onRefresh: () => void;
   summaryQueueState: SummaryQueueState | null;
   summaryProgress: SummaryProgressEvent | null;
+  budgetStatus: BudgetStatusSnapshot | null;
   onTogglePause: () => void;
   pausePending: boolean;
   externalOpen: boolean;
@@ -867,6 +950,7 @@ export default function TaskStatusBar({
   onRefresh,
   summaryQueueState,
   summaryProgress,
+  budgetStatus,
   onTogglePause,
   pausePending,
   externalOpen,
@@ -1186,6 +1270,8 @@ export default function TaskStatusBar({
               if (videoId) void openVideoById(videoId);
             }}
           />
+          <div className="task-panel-divider" />
+          <BudgetSection budgetStatus={budgetStatus} />
         </div>
       </div>
     </div>

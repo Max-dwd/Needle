@@ -2666,6 +2666,46 @@ a.feed-channel-link:hover {
   white-space: nowrap;
 }
 
+/* ─── Error Type Breakdown ────────────────────────────────────────────────── */
+
+.log-error-type-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.log-error-type-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.log-error-type-badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 4px;
+  letter-spacing: 0.02em;
+  background: color-mix(in srgb, var(--text-muted) 12%, transparent);
+  color: var(--text-muted);
+}
+
+.log-error-type-count {
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+}
+
+.error-type-no_subtitle { background: color-mix(in srgb, #6b7280 18%, transparent); color: #9ca3af; }
+.error-type-members_only { background: color-mix(in srgb, #a855f7 18%, transparent); color: #c084fc; }
+.error-type-empty { background: color-mix(in srgb, #6b7280 18%, transparent); color: #9ca3af; }
+.error-type-rate_limit { background: color-mix(in srgb, #f59e0b 18%, transparent); color: #fbbf24; }
+.error-type-timeout { background: color-mix(in srgb, #6b7280 18%, transparent); color: #9ca3af; }
+.error-type-no_pipeline { background: color-mix(in srgb, #f59e0b 18%, transparent); color: #fbbf24; }
+.error-type-api_error { background: color-mix(in srgb, #ef4444 18%, transparent); color: #f87171; }
+.error-type-unknown { background: color-mix(in srgb, #6b7280 18%, transparent); color: #9ca3af; }
+
 /* ─── Detail Tab ──────────────────────────────────────────────────────────── */
 
 .log-detail {

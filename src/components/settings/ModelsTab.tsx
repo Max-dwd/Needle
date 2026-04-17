@@ -405,6 +405,84 @@ function ModelsTabForm({
                     </select>
                   </label>
                 </div>
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: '1fr 1fr 1fr',
+                    gap: 8,
+                    marginTop: 4,
+                  }}
+                >
+                  <div style={{ fontSize: 11 }}>
+                    <span style={{ color: 'var(--text-muted)', display: 'block', marginBottom: 2 }}>RPM (0=全局)</span>
+                    <input
+                      className="premium-input"
+                      type="number"
+                      min={0}
+                      placeholder="0"
+                      value={item.requestsPerMinute || ''}
+                      onChange={(e) => {
+                        const v = Math.max(0, Math.floor(Number(e.target.value) || 0));
+                        handleUpdateModel(index, 'requestsPerMinute', v || undefined);
+                      }}
+                      style={{ fontSize: 12 }}
+                    />
+                  </div>
+                  <div style={{ fontSize: 11 }}>
+                    <span style={{ color: 'var(--text-muted)', display: 'block', marginBottom: 2 }}>RPD (0=全局)</span>
+                    <input
+                      className="premium-input"
+                      type="number"
+                      min={0}
+                      placeholder="0"
+                      value={item.requestsPerDay || ''}
+                      onChange={(e) => {
+                        const v = Math.max(0, Math.floor(Number(e.target.value) || 0));
+                        handleUpdateModel(index, 'requestsPerDay', v || undefined);
+                      }}
+                      style={{ fontSize: 12 }}
+                    />
+                  </div>
+                  <div style={{ fontSize: 11 }}>
+                    <span style={{ color: 'var(--text-muted)', display: 'block', marginBottom: 2 }}>TPM (0=全局)</span>
+                    <input
+                      className="premium-input"
+                      type="number"
+                      min={0}
+                      placeholder="0"
+                      value={item.tokensPerMinute || ''}
+                      onChange={(e) => {
+                        const v = Math.max(0, Math.floor(Number(e.target.value) || 0));
+                        handleUpdateModel(index, 'tokensPerMinute', v || undefined);
+                      }}
+                      style={{ fontSize: 12 }}
+                    />
+                  </div>
+                </div>
+                {models.length > 1 && (
+                  <div style={{ fontSize: 11, marginTop: 4 }}>
+                    <span style={{ color: 'var(--text-muted)', display: 'block', marginBottom: 2 }}>
+                      预算耗尽时降级到
+                    </span>
+                    <select
+                      className="premium-input"
+                      value={item.fallbackModelId || ''}
+                      onChange={(e) =>
+                        handleUpdateModel(index, 'fallbackModelId', e.target.value || undefined)
+                      }
+                      style={{ fontSize: 12 }}
+                    >
+                      <option value="">不降级</option>
+                      {models
+                        .filter((_, otherIndex) => otherIndex !== index)
+                        .map((other) => (
+                          <option key={other.id} value={other.id}>
+                            {other.name}
+                          </option>
+                        ))}
+                    </select>
+                  </div>
+                )}
               </div>
             ))
           )}
@@ -475,7 +553,9 @@ function ModelsTabForm({
           </div>
           <div className="setting-row">
             <div className="setting-info">
-              <span className="setting-label">{t.settings.models.subtitleFallbackReserve}</span>
+              <span className="setting-label">
+                {t.settings.models.subtitleFallbackReserve}
+              </span>
               <span className="setting-description">
                 {t.settings.models.subtitleFallbackReserveDesc}
               </span>

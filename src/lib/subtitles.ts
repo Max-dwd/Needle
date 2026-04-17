@@ -282,21 +282,63 @@ function logSubtitleSuccess(
   });
 }
 
+function classifySubtitleErrorType(message: string): string {
+  const m = message.toLowerCase();
+  if (
+    /members?[- ]only|requires membership|仅限会员|会员专享|大会员|付费|试看|limited free/.test(m)
+  ) {
+    return 'members_only';
+  }
+  if (
+    /no subtitle|no subtitles|no transcript|transcript unavailable|subtitle.*not found|caption.*not found|no subtitle file found|empty result|returned no data|没有发现外挂或智能字幕/.test(
+      m,
+    )
+  ) {
+    return 'no_subtitle';
+  }
+  if (/empty after parsing/.test(m)) {
+    return 'empty';
+  }
+  if (/http\s*(error)?\s*429|too many requests|rate limit/.test(m)) {
+    return 'rate_limit';
+  }
+  if (/aborted|aborterror|operation was aborted|timed out|timeout/.test(m)) {
+    return 'timeout';
+  }
+  if (/no enabled.*pipeline/.test(m)) {
+    return 'no_pipeline';
+  }
+  return 'api_error';
+}
+
 function logSubtitleFailure(
   video: Video,
   method: string,
   reason: string,
   status: 'failure' | 'cooldown' = 'failure',
 ) {
-  log.error('subtitle', 'failure', {
+  const errorType = classifySubtitleErrorType(reason);
+  // Expected/content outcomes use warn; actual system errors use error
+  const isExpected =
+    errorType === 'no_subtitle' ||
+    errorType === 'members_only' ||
+    errorType === 'empty' ||
+    errorType === 'timeout';
+  const fields = {
     platform: video.platform,
     method,
     target: video.video_id,
     status,
+    error_type: errorType,
     error: compactLogValue(reason),
     channel_id: video.channel_id,
     channel_name: video.channel_name ?? null,
-  });
+  };
+  if (isExpected) {
+    log.warn('subtitle', 'failure', fields);
+  } else {
+    log.error('subtitle', 'failure', fields);
+  }
 }
 
 function ensureSubtitleDir(platform: Video['platform']): string {

@@ -11,6 +11,7 @@ import MobileIntentBar from '@/components/MobileIntentBar';
 import MobileVideoSheet from '@/components/MobileVideoSheet';
 import type {
   AutoPipelineStatus,
+  BudgetStatusSnapshot,
   CrawlerRuntimeStatus,
   SummaryQueueState,
   VideoWithMeta,
@@ -107,6 +108,7 @@ function FeedPageContent() {
     modelId?: string;
     modelName?: string;
   } | null>(null);
+  const [budgetStatus, setBudgetStatus] = useState<BudgetStatusSnapshot | null>(null);
   const [intents, setIntents] = useState<IntentOption[]>([]);
   const [homeIntentShortcutsEnabled, setHomeIntentShortcutsEnabled] =
     useState(true);
@@ -433,6 +435,13 @@ function FeedPageContent() {
         try {
           const data = JSON.parse(event.data);
           setSummaryProgress(data);
+        } catch {}
+      });
+
+      // AI budget status
+      es.addEventListener('budget-status', (event) => {
+        try {
+          setBudgetStatus(JSON.parse(event.data));
         } catch {}
       });
 
@@ -1056,6 +1065,7 @@ function FeedPageContent() {
                 onRefresh={handleRefresh}
                 summaryQueueState={summaryQueueState}
                 summaryProgress={summaryProgress}
+                budgetStatus={budgetStatus}
                 onTogglePause={handleTogglePause}
                 pausePending={pausePending}
                 externalOpen={externalOpen}

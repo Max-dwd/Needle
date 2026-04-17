@@ -28,6 +28,17 @@ interface MethodStats {
 }
 
 const CORE_LOG_KEYS = new Set(['ts', 'level', 'scope', 'event']);
+
+const ERROR_TYPE_LABELS: Record<string, string> = {
+  no_subtitle: '无字幕',
+  members_only: '会员限定',
+  empty: '内容为空',
+  rate_limit: '频率限制',
+  timeout: '超时',
+  no_pipeline: '无来源',
+  api_error: 'API错误',
+  unknown: '未知',
+};
 const ENTRY_LIMIT = 200;
 
 const SCOPE_META: Array<{ key: LogScope; label: string; icon: string }> = [
@@ -247,6 +258,26 @@ function ScopeStatsCard({
           </div>
         )}
 
+        {Object.keys(stats.byErrorType).length > 0 && (
+          <div className="log-scope-section">
+            <div className="log-scope-section-title">失败类型</div>
+            <div className="log-error-type-list">
+              {Object.entries(stats.byErrorType)
+                .sort((a, b) => b[1] - a[1])
+                .map(([type, count]) => (
+                  <div key={type} className="log-error-type-row">
+                    <span
+                      className={`log-error-type-badge error-type-${type}`}
+                    >
+                      {ERROR_TYPE_LABELS[type] ?? type}
+                    </span>
+                    <span className="log-error-type-count">{count}</span>
+                  </div>
+                ))}
+            </div>
+          </div>
+        )}
+
         {stats.recentErrors.length > 0 && (
           <div className="log-scope-section">
             <div className="log-scope-section-title">最近错误</div>
@@ -255,6 +286,13 @@ function ScopeStatsCard({
                 <div key={`${err.time}-${index}`} className="log-error-row">
                   <span className="log-error-time">{err.time}</span>
                   <span className="log-error-method">{err.method}</span>
+                  {err.error_type && (
+                    <span
+                      className={`log-error-type-badge error-type-${err.error_type}`}
+                    >
+                      {ERROR_TYPE_LABELS[err.error_type] ?? err.error_type}
+                    </span>
+                  )}
                   <span className="log-error-msg">{err.error}</span>
                 </div>
               ))}

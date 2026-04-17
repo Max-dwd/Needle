@@ -15,6 +15,10 @@ export interface AiSummaryModelConfig {
   model: string;
   isMultimodal?: boolean;
   protocol: AiModelProtocol;
+  requestsPerMinute?: number;
+  requestsPerDay?: number;
+  tokensPerMinute?: number;
+  fallbackModelId?: string;
 }
 
 export interface AiSummaryConfig {
