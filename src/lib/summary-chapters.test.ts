@@ -37,6 +37,40 @@ Valid text
     expect(chapters[0].body).toBe('Valid text');
   });
 
+  it('uses the first timestamp in a section body when the heading has none', () => {
+    const markdown = `
+## Section From Body
+- First point [01:10](https://youtube.com/watch?v=12345&t=70s)
+- Later point [02:20](https://youtube.com/watch?v=12345&t=140s)
+`;
+    const chapters = extractSummaryChapters(markdown, dummyVideo);
+    expect(chapters).toHaveLength(1);
+    expect(chapters[0].seconds).toBe(70);
+    expect(chapters[0].title).toBe('Section From Body');
+    expect(chapters[0].body).toContain('First point');
+  });
+
+  it('prefers heading timestamps over body timestamps in the same section', () => {
+    const markdown = `
+## [00:30](https://youtube.com/watch?v=12345&t=30s) Heading Time
+- Body point [01:10](https://youtube.com/watch?v=12345&t=70s)
+`;
+    const chapters = extractSummaryChapters(markdown, dummyVideo);
+    expect(chapters).toHaveLength(1);
+    expect(chapters[0].seconds).toBe(30);
+    expect(chapters[0].title).toBe('Heading Time');
+  });
+
+  it('keeps non-timestamp heading links as text while stripping timestamp links', () => {
+    const markdown = `
+## **[Topic](https://example.com/topic)** • [01:00](https://youtube.com/watch?v=12345&t=60s)
+Body
+`;
+    const chapters = extractSummaryChapters(markdown, dummyVideo);
+    expect(chapters).toHaveLength(1);
+    expect(chapters[0].title).toBe('Topic');
+  });
+
   it('multiple headings and sorting', () => {
     const markdown = `
 ### [05:00](https://youtube.com/watch?v=12345&t=300s) Late Chapter
@@ -52,9 +86,46 @@ Early text
     expect(chapters[1].title).toBe('Late Chapter');
   });
 
+  it('cuts parent body at child headings and emits child chapters independently', () => {
+    const markdown = `
+## Parent
+Parent body [01:00](https://youtube.com/watch?v=12345&t=60s)
+### Child
+Child body [02:00](https://youtube.com/watch?v=12345&t=120s)
+## Sibling
+Sibling body [03:00](https://youtube.com/watch?v=12345&t=180s)
+`;
+    const chapters = extractSummaryChapters(markdown, dummyVideo);
+    expect(chapters).toHaveLength(3);
+    expect(chapters.map((chapter) => chapter.title)).toEqual([
+      'Parent',
+      'Child',
+      'Sibling',
+    ]);
+    expect(chapters[0].body).toBe(
+      'Parent body [01:00](https://youtube.com/watch?v=12345&t=60s)',
+    );
+    expect(chapters[0].body).not.toContain('Child body');
+  });
+
+  it('keeps document order when sections share the same first timestamp', () => {
+    const markdown = `
+## First
+Same time [01:00](https://youtube.com/watch?v=12345&t=60s)
+## Second
+Same time [01:00](https://youtube.com/watch?v=12345&t=60s)
+`;
+    const chapters = extractSummaryChapters(markdown, dummyVideo);
+    expect(chapters.map((chapter) => chapter.title)).toEqual([
+      'First',
+      'Second',
+    ]);
+  });
+
   it('platform mismatch is ignored', () => {
     const markdown = `
-## [01:00](https://bilibili.com/video/BV123?t=60) Bilibili Chapter
+## Bilibili Chapter
+[01:00](https://bilibili.com/video/BV123?t=60)
 `;
     const chapters = extractSummaryChapters(markdown, dummyVideo);
     expect(chapters).toHaveLength(0); // empty because link doesn't match youtube
@@ -62,7 +133,8 @@ Early text
 
   it('multiple timestamps take the first one', () => {
     const markdown = `
-## [01:00](https://youtube.com/watch?v=12345&t=60s) - [02:00](https://youtube.com/watch?v=12345&t=120s) Dual Chapter
+## Dual Chapter
+[01:00](https://youtube.com/watch?v=12345&t=60s) - [02:00](https://youtube.com/watch?v=12345&t=120s)
 `;
     const chapters = extractSummaryChapters(markdown, dummyVideo);
     expect(chapters).toHaveLength(1);

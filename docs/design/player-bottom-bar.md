@@ -19,7 +19,7 @@
 
 ## 依赖与前置约定
 
-- **章节时间戳来源**：摘要 markdown 的 `##` / `###` / `####` 标题里包含至少一个指向本视频的时间链接（YouTube `?t=` 或 Bilibili `?t=`），由 `parseSeekSeconds` 解析出秒数。这个约定会由用户后续在 prompt 模板侧强制（`chatObsidian` / `subtitleSegment` 等），本组件只做消费。
+- **章节时间戳来源**：摘要 markdown 的 `##` / `###` / `####` section 下只要出现至少一个指向本视频的时间链接（YouTube `?t=` 或 Bilibili `?t=`），就把该 section 作为一个章节；章节起始时间取 section 内第一个可由 `parseSeekSeconds` 解析出的时间戳。标题本身可以不带时间戳。
 - **没有章节时**：进度条退化为一整段，仍支持点击跳转，hover 不出 tooltip。
 - **摘要尚未生成时**：底部条仍渲染（播放按钮 + 时间 + 倍速 + 无分段的进度条），只是没有章节信息。
 - **键盘焦点**：键盘快捷键继续由 `player-keyboard-arbiter` 统一管理；底部条的按钮使用鼠标点击，不抢焦点（`onMouseDown` 里 `e.preventDefault()` 避免焦点从 `modalContentRef` 漂走）。
@@ -50,8 +50,8 @@ PlayerModal
 
 ```ts
 export interface SummaryChapter {
-  seconds: number;   // 起始时间（来自标题里的时间戳链接）
-  title: string;     // 去掉时间戳 markdown 后的纯文本标题
+  seconds: number;   // 起始时间（来自 section 内第一个可解析时间戳链接）
+  title: string;     // 去掉 Markdown 装饰后的纯文本标题
   body: string;      // 到下一个同级/更高级标题之前的正文（原文，可能含行内 markdown）
 }
 
@@ -64,18 +64,22 @@ export function extractSummaryChapters(
 规则：
 
 1. 先剥离 YAML frontmatter（`---\n...\n---\n`）。
-2. 扫描所有 `^(#{1,4})\s+(.+)$` 行；对标题文本里的 `[label](href)` 逐个试 `parseSeekSeconds`，取第一个命中的时间作为 `seconds`。
-3. 标题里的时间戳 markdown 从显示文本中抠掉；前后残留的分隔符（`·•-—|`）修掉。
-4. `body` = 本标题下、直到下一个 `#{1,4}` 标题之前的所有行（`join('\n')` 后 `trim`）。
-5. 结果按 `seconds` 升序排序；过滤掉负数或 `NaN`。
-6. 不解析 `>` 引用、嵌套列表；`body` 直接是原文，由消费方按需 truncate。
+2. 扫描所有 `^(#{1,4})\s+(.+)$` 行，把每个标题到下一个同级或更高级标题之前的内容视为一个 section。子标题仍属于自己的 section；父 section 的 `body` 到子标题前结束。
+3. 对 section 标题和正文里的 `[label](href)` 逐个试 `parseSeekSeconds`，按文档出现顺序取第一个命中的时间作为 `seconds`。这样“标题无时间戳、正文有时间戳”的现有摘要也能生成章节。
+4. `title` = 标题文本去掉行内 Markdown 链接、粗体等轻量装饰后的纯文本；前后残留的分隔符（`·•-—|`）修掉。若标题里的链接就是章节时间戳，也从显示文本中抠掉。
+5. `body` = 本 section 标题下、直到下一个同级/更高级标题之前的所有正文行（`join('\n')` 后 `trim`）。如果 section 下出现更深一级子标题，父 section 的 `body` 不吞掉子标题及其正文。
+6. 结果按 `seconds` 升序排序；过滤掉负数或 `NaN`。如果多个 section 的第一个时间戳相同，保留文档中更早出现的 section。
+7. 不解析 `>` 引用、嵌套列表的结构语义；只按文本顺序找 Markdown 链接。`body` 直接是原文，由消费方按需 truncate。
 
 单测放在 `src/lib/summary-chapters.test.ts`，覆盖：
 - frontmatter 剥离
-- 标题无时间戳 → 返回空
-- 多个标题 + 排序
+- 标题无时间戳、section 正文有时间戳 → 使用正文第一个时间戳作为章节起点
+- section 标题里有时间戳 → 仍可解析，且优先于该 section 正文里的时间戳
+- section 内多个时间戳 → 取文档顺序第一个可解析时间戳
+- 多个 section + 按 `seconds` 排序
+- 父 section 遇到子标题时 body 截断；子标题若有自己的时间戳则生成独立章节
 - 平台错配（Bilibili 摘要里有 YouTube 链接）→ 忽略
-- 标题里包含多个时间戳链接 → 取最早那个
+- section 无任何可解析时间戳 → 不生成章节
 
 ### `src/components/player/PlayerBottomBar.tsx`（新）
 
@@ -231,6 +235,6 @@ interface PlayerBottomBarProps {
 
 ## 后续
 
-- 强制摘要模板里 `##` 标题必须带时间戳（不在本次 scope，改 `ai-summary-settings.ts` 的 `chatObsidian` / `subtitleSegment` 默认模板 + 可选的后处理校验）。
+- 可选优化摘要模板：鼓励每个可导航 section 至少在正文首段放一个完整时间戳链接，便于章节进度条稳定生成。
 - 章节深链：URL hash `#t=123` 打开 PlayerModal 时自动 seek 到最近章节起点（未来 nice-to-have）。
 - 进度条拖拽（非点击）：当前版本只支持点击跳转；拖拽 scrub 需要单独设计手势 + iframe 节流。
