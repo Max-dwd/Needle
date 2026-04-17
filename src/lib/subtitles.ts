@@ -31,12 +31,16 @@ import {
   recordSubtitleSuccess,
 } from './subtitle-backoff';
 import { getSubtitleBrowserFetchConfig } from './subtitle-browser-fetch-settings';
+import { getSubtitleWhisperAiConfig } from './subtitle-whisper-ai-settings';
 import { getTranscriber } from './subtitle-providers';
 import type {
   MultimodalTranscriber,
   TranscribePriority,
 } from './subtitle-providers';
 import type { AiSummaryModelConfig } from '@/types';
+import { getSubtitlePipelineSourceOrder } from './pipeline-config';
+import { getMlxWhisperStatus, runWhisper } from './whisper-runtime';
+import { runWhisperAiCorrection } from './subtitle-whisper-correction';
 
 const execFileAsync = promisify(execFile);
 
@@ -142,7 +146,7 @@ export async function waitForCrawlerResumeIfNeeded(
   await waitIfCrawlerPaused();
 }
 
-type SubtitleMethod = 'browser' | 'gemini';
+type SubtitleMethod = 'browser' | 'whisper-ai' | 'gemini';
 
 interface YtDlpAttemptResult {
   selected: SubtitleSourceFile | null;
@@ -197,7 +201,7 @@ interface AiGeneratedSubtitlePayload {
   segments: SubtitleSegment[];
   rawText: string;
   sourceMethod: string;
-  segmentStyle: 'coarse';
+  segmentStyle: 'coarse' | 'fine';
   metadata?: Record<string, string | number>;
 }
 
@@ -285,7 +289,9 @@ function logSubtitleSuccess(
 function classifySubtitleErrorType(message: string): string {
   const m = message.toLowerCase();
   if (
-    /members?[- ]only|requires membership|仅限会员|会员专享|大会员|付费|试看|limited free/.test(m)
+    /members?[- ]only|requires membership|仅限会员|会员专享|大会员|付费|试看|limited free/.test(
+      m,
+    )
   ) {
     return 'members_only';
   }
@@ -859,7 +865,6 @@ function persistStructuredSubtitle(
   };
 }
 
-
 async function fetchSubtitleViaSegmentedAudio(
   video: Video,
   audioPath: string,
@@ -966,6 +971,7 @@ function buildAiSubtitlePayloadFromSegments(
   segments: SubtitleSegment[],
   rawText: string,
   sourceMethod: string,
+  segmentStyle: 'coarse' | 'fine' = 'coarse',
 ): AiGeneratedSubtitlePayload {
   if (segments.length === 0) {
     throw new Error('AI subtitle fallback returned unparseable content');
@@ -982,7 +988,7 @@ function buildAiSubtitlePayloadFromSegments(
     segments,
     rawText,
     sourceMethod,
-    segmentStyle: 'coarse',
+    segmentStyle,
   };
 }
 
@@ -1518,6 +1524,105 @@ async function fetchBilibiliSubtitleViaAiApi(
   }
 }
 
+async function fetchSubtitleViaWhisperAi(
+  video: Video,
+  priority: TranscribePriority,
+  respectPause: boolean,
+  selectedModel: AiSummaryModelConfig,
+  signal?: AbortSignal,
+): Promise<AiGeneratedSubtitlePayload> {
+  const whisperConfig = getSubtitleWhisperAiConfig();
+  if (!whisperConfig.enabled) {
+    throw new Error('whisper-ai source is disabled');
+  }
+  if (selectedModel.isMultimodal === false) {
+    throw new Error('whisper-ai requires a multimodal AI subtitle model');
+  }
+
+  const whisperStatus = await getMlxWhisperStatus();
+  if (!whisperStatus.available) {
+    throw new Error(
+      `mlx-whisper is unavailable${whisperStatus.error ? `: ${whisperStatus.error}` : ''}`,
+    );
+  }
+
+  const ytDlpBin = pickBinary();
+  const tempDir = fs.mkdtempSync(
+    path.join(os.tmpdir(), `needle-whisper-ai-${video.video_id}-`),
+  );
+  const whisperOutputDir = path.join(tempDir, 'whisper');
+  const sliceOutputDir = path.join(tempDir, 'batches');
+  const transcriber = getTranscriber(selectedModel);
+
+  try {
+    const audioPath = await extractAudioViaYtDlp(video, ytDlpBin, tempDir);
+    const audioDurationSeconds =
+      parseVideoDurationSeconds(video.duration) ??
+      Math.ceil((await probeAudioDurationSeconds(audioPath)) || 0);
+    const whisperStartedAt = Date.now();
+    const whisper = await runWhisper(audioPath, {
+      modelId: whisperConfig.whisperModelId,
+      outputDir: whisperOutputDir,
+      audioDurationSeconds,
+      signal,
+    });
+    const whisperDurationMs = Date.now() - whisperStartedAt;
+    const correction = await runWhisperAiCorrection({
+      audioPath,
+      sliceOutputDir,
+      whisperSegments: whisper.segments,
+      batchConfig: whisperConfig.batch,
+      hallucinationConfig: whisperConfig.hallucination,
+      model: selectedModel,
+      transcriber,
+      video,
+      priority,
+      signal,
+      beforeBatch: () => waitForCrawlerResumeIfNeeded(respectPause),
+    });
+
+    log.info('subtitle', 'whisper_ai_metrics', {
+      platform: video.platform,
+      target: video.video_id,
+      whisper_duration_ms: whisperDurationMs,
+      whisper_segment_count: whisper.segments.length,
+      batch_count: correction.metadata.batch_count,
+      batch_avg_seconds: correction.metadata.batch_avg_seconds,
+      hallucination_filtered_count:
+        correction.metadata.hallucination_filtered_count,
+      correction_failed_batch_count:
+        correction.metadata.correction_failed_batch_count,
+      correction_raw_fallback_ratio:
+        correction.metadata.correction_raw_fallback_ratio,
+    });
+
+    return {
+      ...buildAiSubtitlePayloadFromSegments(
+        video,
+        correction.segments,
+        correction.rawText,
+        'whisper-ai',
+        'fine',
+      ),
+      language: whisper.language || 'unknown',
+      metadata: {
+        ...buildAiSubtitleMetadata(
+          selectedModel,
+          priority,
+          Number(correction.metadata.total_tokens) || undefined,
+          Number(correction.metadata.ttft_seconds) || undefined,
+        ),
+        whisper_model: whisperConfig.whisperModelId,
+        whisper_duration_ms: whisperDurationMs,
+        whisper_segment_count: whisper.segments.length,
+        ...correction.metadata,
+      },
+    };
+  } finally {
+    cleanupTempDirBestEffort(tempDir);
+  }
+}
+
 function shouldRefetchLegacyBilibiliSubtitle(video: Video): boolean {
   if (video.platform !== 'bilibili') return false;
   if (video.subtitle_status !== 'fetched') return false;
@@ -1765,9 +1870,13 @@ export function shouldEscapeToApi(
 }
 
 type AutoApiFallbackPhase = 'before-browser' | 'after-browser';
+const API_FALLBACK_METHOD_ID = 'api-fallback';
 
 function getAutoApiFallbackReason(
-  video: Pick<Video, 'created_at' | 'subtitle_last_attempt_at' | 'subtitle_retry_count'>,
+  video: Pick<
+    Video,
+    'created_at' | 'subtitle_last_attempt_at' | 'subtitle_retry_count'
+  >,
   apiFallbackMatch: SubtitleApiFallbackMatch | null,
   phase: AutoApiFallbackPhase,
 ): string | null {
@@ -1787,6 +1896,46 @@ function getAutoApiFallbackReason(
   return null;
 }
 
+function normalizeRequestedSubtitleMethod(
+  method: string,
+): SubtitleMethod | null {
+  const normalized = method.trim().toLowerCase();
+  if (!normalized) return null;
+  if (normalized === 'gemini') return 'gemini';
+  if (normalized === 'whisper-ai' || normalized === 'whisper_ai') {
+    return 'whisper-ai';
+  }
+  if (
+    normalized === BROWSER_METHOD_ID ||
+    normalized === 'piped' ||
+    normalized === 'bilibili-api' ||
+    normalized === 'opencli'
+  ) {
+    return BROWSER_METHOD_ID;
+  }
+  return null;
+}
+
+function isApiFallbackPreferredMethod(method: string): boolean {
+  const normalized = method.trim().toLowerCase();
+  return (
+    normalized === API_FALLBACK_METHOD_ID ||
+    normalized === 'api_fallback' ||
+    normalized === 'api'
+  );
+}
+
+function buildSubtitleMethodOrder(
+  video: Pick<Video, 'platform'>,
+  requestedMethod: SubtitleMethod | null,
+  allowBrowser: boolean,
+): SubtitleMethod[] {
+  if (requestedMethod) return [requestedMethod];
+  return getSubtitlePipelineSourceOrder(video.platform).filter(
+    (method) => allowBrowser || method !== BROWSER_METHOD_ID,
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Subtitle fetch helper
 // ---------------------------------------------------------------------------
@@ -1804,8 +1953,13 @@ export async function fetchAndStoreSubtitle(
   });
   let tempDirToCleanup: string | null = null;
   const attemptAt = new Date().toISOString();
-  const requestedMethod = (options?.preferredMethod || '').trim().toLowerCase();
-  const allowBrowser = options?.allowBrowser ?? options?.allowOpenCli ?? true;
+  const rawPreferredMethod = options?.preferredMethod || '';
+  const requestedMethod = normalizeRequestedSubtitleMethod(
+    rawPreferredMethod,
+  );
+  const apiFallbackOnly = isApiFallbackPreferredMethod(rawPreferredMethod);
+  const allowBrowser =
+    options?.allowBrowser ?? options?.allowOpenCli ?? !apiFallbackOnly;
   const respectPause = options?.respectPause !== false;
   const aiApiPriority: 'manual-subtitle' | 'auto-subtitle' =
     options?.force || options?.requestSource === 'player'
@@ -1820,21 +1974,23 @@ export async function fetchAndStoreSubtitle(
       : null;
   const upfrontAutoApiFallbackReason =
     !requestedMethod && options?.requestSource !== 'player'
-      ? getAutoApiFallbackReason(
-          video,
-          autoApiFallbackMatch,
-          'before-browser',
-        )
+      ? getAutoApiFallbackReason(video, autoApiFallbackMatch, 'before-browser')
       : null;
-  const statusPreferredMethod =
-    requestedMethod === 'gemini' || upfrontAutoApiFallbackReason
-      ? 'gemini'
-      : BROWSER_METHOD_ID;
-  const selectedApiModel = resolveSubtitleApiModel(
-    requestedMethod === 'gemini'
-      ? options?.apiModelId || null
-      : autoApiFallbackMatch?.modelId,
+  const effectiveAllowBrowser =
+    allowBrowser && !Boolean(upfrontAutoApiFallbackReason);
+  const methodOrder = buildSubtitleMethodOrder(
+    video,
+    requestedMethod,
+    effectiveAllowBrowser,
   );
+  const statusPreferredMethod = methodOrder[0] || BROWSER_METHOD_ID;
+  let selectedApiModel: AiSummaryModelConfig | null = null;
+  const getSelectedApiModel = () => {
+    selectedApiModel ??= resolveSubtitleApiModel(
+      options?.apiModelId || autoApiFallbackMatch?.modelId,
+    );
+    return selectedApiModel;
+  };
   const externalSignal = options?.signal;
   let innerWroteState = false;
 
@@ -1900,6 +2056,11 @@ export async function fetchAndStoreSubtitle(
         ? 'Falling back to AI subtitle extraction'
         : 'Extracting subtitles via AI multimodal API';
     }
+    if (method === 'whisper-ai') {
+      return isFallback
+        ? 'Falling back to Whisper anchored AI subtitles'
+        : 'Extracting Whisper anchored AI subtitles';
+    }
     if (method === BROWSER_METHOD_ID) {
       return video.platform === 'youtube'
         ? isFallback
@@ -1930,6 +2091,18 @@ export async function fetchAndStoreSubtitle(
       getMethodMessage(method, isFallback),
     );
 
+    if (method === 'whisper-ai') {
+      const payload = await fetchSubtitleViaWhisperAi(
+        video,
+        aiApiPriority,
+        respectPause,
+        getSelectedApiModel(),
+        externalSignal,
+      );
+      persistStructuredSuccess('whisper-ai', payload);
+      return true;
+    }
+
     if (method === 'gemini') {
       const payload =
         video.platform === 'youtube'
@@ -1937,13 +2110,13 @@ export async function fetchAndStoreSubtitle(
               video,
               aiApiPriority,
               respectPause,
-              selectedApiModel,
+              getSelectedApiModel(),
             )
           : await fetchBilibiliSubtitleViaAiApi(
               video,
               aiApiPriority,
               respectPause,
-              selectedApiModel,
+              getSelectedApiModel(),
             );
       persistStructuredSuccess('gemini', payload);
       return true;
@@ -1969,41 +2142,9 @@ export async function fetchAndStoreSubtitle(
     return false;
   };
 
-  const runBrowserAttempt = async (
-    isFallback: boolean,
-  ): Promise<string | null> => {
-    try {
-      if (await runMethod(BROWSER_METHOD_ID, isFallback)) {
-        return null;
-      }
-      return 'No subtitle file found';
-    } catch (error) {
-      if (isAbortError(error)) {
-        throw error;
-      }
-      return formatStageError(BROWSER_METHOD_ID, normalizeBrowserError(error));
-    }
-  };
-
   try {
     throwIfAborted(externalSignal);
-    if (requestedMethod === 'gemini') {
-      await runMethod('gemini', false);
-      return;
-    }
-
-    if (upfrontAutoApiFallbackReason) {
-      logSubtitleFallback(
-        video,
-        BROWSER_METHOD_ID,
-        'gemini',
-        upfrontAutoApiFallbackReason,
-      );
-      await runMethod('gemini', true);
-      return;
-    }
-
-    if (!allowBrowser) {
+    if (methodOrder.length === 0) {
       const message = `No enabled ${video.platform} subtitle pipeline sources configured`;
       updateSubtitleStateAndTrack({
         ...buildFailureState(video, 'error', message, attemptAt),
@@ -2019,85 +2160,60 @@ export async function fetchAndStoreSubtitle(
       return;
     }
 
-    const firstBrowserError = await runBrowserAttempt(false);
-    if (!firstBrowserError) {
-      return;
-    }
-
-    let firstFailureStatus: 'missing' | 'error' =
-      firstBrowserError === 'No subtitle file found' ? 'missing' : 'error';
-    let firstFailureClass: SubtitleRetryClass = classifySubtitleFailure(
-      firstFailureStatus,
-      firstBrowserError,
-    );
-
-    const postBrowserAutoApiFallbackReason =
-      !requestedMethod && options?.requestSource !== 'player'
-        ? getAutoApiFallbackReason(
-            video,
-            autoApiFallbackMatch,
-            'after-browser',
-          )
-        : null;
-    if (postBrowserAutoApiFallbackReason) {
+    if (upfrontAutoApiFallbackReason && methodOrder[0]) {
       logSubtitleFallback(
         video,
         BROWSER_METHOD_ID,
-        'gemini',
-        `${firstBrowserError} | ${postBrowserAutoApiFallbackReason}`,
+        methodOrder[0],
+        upfrontAutoApiFallbackReason,
       );
+    }
+
+    const errors: string[] = [];
+    for (const [index, method] of methodOrder.entries()) {
+      const isFallback = index > 0 || Boolean(upfrontAutoApiFallbackReason);
       try {
-        await runMethod('gemini', true);
-        return;
+        if (await runMethod(method, isFallback)) {
+          return;
+        }
+        errors.push(
+          method === BROWSER_METHOD_ID
+            ? 'No subtitle file found'
+            : `${method}: no subtitle produced`,
+        );
       } catch (error) {
         if (isAbortError(error)) {
           throw error;
         }
-        const geminiError = formatStageError('gemini', error);
-        firstFailureStatus = 'error';
-        firstFailureClass = classifySubtitleFailure(
-          firstFailureStatus,
-          `${firstBrowserError} | ${geminiError}`,
-        );
-        updateSubtitleStateAndTrack({
-          ...buildFailureState(
-            video,
-            firstFailureStatus,
-            `${firstBrowserError} | ${geminiError}`,
-            attemptAt,
+        errors.push(
+          formatStageError(
+            method,
+            method === BROWSER_METHOD_ID ? normalizeBrowserError(error) : error,
           ),
-        });
-        logSubtitleFailure(
-          video,
-          'gemini',
-          `${firstBrowserError} | ${geminiError}`,
         );
-        markSubtitleError(
+      }
+
+      const nextMethod = methodOrder[index + 1];
+      if (nextMethod) {
+        logSubtitleFallback(
           video,
-          statusPreferredMethod,
-          'gemini',
-          true,
-          `${firstBrowserError} | ${geminiError}`,
+          method,
+          nextMethod,
+          errors[errors.length - 1],
         );
-        if (
-          firstFailureClass === 'temporary-error' &&
-          shouldRecordSubtitleBackoff(geminiError)
-        ) {
-          if (isRateLimitError(geminiError)) {
-            recordSubtitleRateLimit(video.platform);
-          } else {
-            recordSubtitleError(video.platform);
-          }
-        }
-        return;
       }
     }
 
+    const combinedError = errors.join(' | ') || 'No subtitle file found';
+    const failureStatus: 'missing' | 'error' =
+      combinedError === 'No subtitle file found' ? 'missing' : 'error';
+    const failureClass = classifySubtitleFailure(failureStatus, combinedError);
+
     if (
-      firstFailureClass === 'temporary-error' &&
-      shouldRecordSubtitleBackoff(firstBrowserError)
+      failureClass === 'temporary-error' &&
+      shouldRecordSubtitleBackoff(combinedError)
     ) {
-      if (isRateLimitError(firstBrowserError)) {
+      if (isRateLimitError(combinedError)) {
         recordSubtitleRateLimit(video.platform);
       } else {
         recordSubtitleError(video.platform);
@@ -2105,20 +2221,15 @@ export async function fetchAndStoreSubtitle(
     }
 
     updateSubtitleStateAndTrack({
-      ...buildFailureState(
-        video,
-        firstFailureStatus,
-        firstBrowserError,
-        attemptAt,
-      ),
+      ...buildFailureState(video, failureStatus, combinedError, attemptAt),
     });
-    logSubtitleFailure(video, BROWSER_METHOD_ID, firstBrowserError);
+    logSubtitleFailure(video, statusPreferredMethod, combinedError);
     markSubtitleError(
       video,
       statusPreferredMethod,
-      BROWSER_METHOD_ID,
+      methodOrder[methodOrder.length - 1] || statusPreferredMethod,
       false,
-      firstBrowserError,
+      combinedError,
     );
   } catch (error) {
     if (!innerWroteState) {
@@ -2168,13 +2279,6 @@ export async function ensureSubtitleForVideo(
     .get(videoId) as SubtitleVideoContext | undefined;
   if (!video) return null;
   await waitForCrawlerResumeIfNeeded(options?.respectPause !== false);
-  const apiFallbackMatch =
-    !options?.preferredMethod && options?.requestSource !== 'player'
-      ? resolveSubtitleApiFallbackMatch({
-          channelId: video.channel_id,
-          intentId: video.intent_id,
-        })
-      : null;
   const shouldFetch = options?.force
     ? video.subtitle_status !== 'fetching'
     : shouldRetrySubtitleFetch(video);
@@ -2258,6 +2362,7 @@ export const __subtitleRetryTestUtils = {
   cleanupTempDirBestEffort,
   getAutoApiFallbackReason,
   getSubtitleRetryDelayMs,
+  isApiFallbackPreferredMethod,
   parseVideoDurationSeconds,
   isRateLimitError,
   shouldRecordSubtitleBackoff,

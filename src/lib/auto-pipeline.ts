@@ -440,7 +440,7 @@ async function runSubtitleJob(
       job.videoDbId,
       shouldUseApiFirst
         ? {
-            preferredMethod: 'gemini',
+            preferredMethod: 'api-fallback',
             apiModelId: apiFallbackMatch?.modelId || undefined,
             signal,
             force: true,
@@ -480,7 +480,7 @@ async function runSubtitleJob(
         return { success: true, durationMs: Date.now() - startTime };
       } else if (apiFallbackMatch) {
         const apiResult = await ensureSubtitleForVideo(job.videoDbId, {
-          preferredMethod: 'gemini',
+          preferredMethod: 'api-fallback',
           apiModelId: apiFallbackMatch.modelId || undefined,
           signal,
           force: true,

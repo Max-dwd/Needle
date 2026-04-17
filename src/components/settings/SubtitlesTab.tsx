@@ -7,6 +7,7 @@ import type {
   SubtitleApiFallbackConfig,
   SubtitleApiFallbackRule,
   SubtitleBrowserFetchConfig,
+  SubtitleWhisperAiConfig,
   SubtitlePipelineSettingsResponse,
 } from './shared';
 import {
@@ -45,6 +46,23 @@ const DEFAULT_API_FALLBACK_CONFIG: SubtitleApiFallbackConfig = {
 
 const DEFAULT_BROWSER_FETCH_CONFIG: SubtitleBrowserFetchConfig = {
   maxRetries: 2,
+  updatedAt: null,
+};
+
+const DEFAULT_WHISPER_CONFIG: SubtitleWhisperAiConfig = {
+  enabled: true,
+  whisperModelId: 'mlx-community/whisper-base-mlx-q4',
+  batch: {
+    targetSeconds: 180,
+    maxSeconds: 300,
+    maxSegments: 60,
+    silenceWindow: 30,
+    minSeconds: 30,
+  },
+  hallucination: {
+    noSpeechProbThreshold: 0.8,
+    avgLogprobThreshold: -1.0,
+  },
   updatedAt: null,
 };
 
@@ -158,11 +176,12 @@ export default function SubtitlesTab({ showToast }: SubtitlesTabProps) {
   if (!config || !pipelineConfig) return null;
 
   return (
-    <SubtitlesTabForm
+      <SubtitlesTabForm
       key={[
         config.updatedAt || 'subtitles',
         pipelineConfig.apiFallback.updatedAt || 'fallback',
         pipelineConfig.browserFetch.updatedAt || 'browser',
+        pipelineConfig.whisperAi.updatedAt || 'whisper',
         pipelineConfig.subtitleInterval,
         pipelineConfig.backoff.youtube.multiplier,
         pipelineConfig.backoff.bilibili.multiplier,
@@ -229,6 +248,8 @@ function SubtitlesTabForm({
   const apiFallback = pipelineConfig.apiFallback || DEFAULT_API_FALLBACK_CONFIG;
   const browserFetch =
     pipelineConfig.browserFetch || DEFAULT_BROWSER_FETCH_CONFIG;
+  const whisperAi = pipelineConfig.whisperAi || DEFAULT_WHISPER_CONFIG;
+  const [checkingWhisper, setCheckingWhisper] = useState(false);
   const backoffFlows = useMemo(
     () =>
       Object.fromEntries(
@@ -262,6 +283,7 @@ function SubtitlesTabForm({
   const updatePipeline = (next: {
     apiFallback?: Partial<SubtitleApiFallbackConfig>;
     browserFetch?: Partial<SubtitleBrowserFetchConfig>;
+    whisperAi?: Partial<SubtitleWhisperAiConfig>;
     subtitleInterval?: number;
   }) => {
     onPipelineConfigChange({
@@ -269,7 +291,12 @@ function SubtitlesTabForm({
       ...next,
       apiFallback: { ...apiFallback, ...(next.apiFallback || {}) },
       browserFetch: { ...browserFetch, ...(next.browserFetch || {}) },
+      whisperAi: { ...whisperAi, ...(next.whisperAi || {}) },
     });
+  };
+
+  const updateWhisperAi = (next: Partial<SubtitleWhisperAiConfig>) => {
+    updatePipeline({ whisperAi: next });
   };
 
   const updateApiFallback = (next: Partial<SubtitleApiFallbackConfig>) => {
@@ -306,6 +333,12 @@ function SubtitlesTabForm({
           browserFetch: {
             maxRetries: browserFetch.maxRetries,
           },
+          whisperAi: {
+            enabled: whisperAi.enabled,
+            whisperModelId: whisperAi.whisperModelId,
+            batch: whisperAi.batch,
+            hallucination: whisperAi.hallucination,
+          },
           apiFallback: {
             enabled: apiFallback.enabled,
             scope: apiFallback.scope,
@@ -340,6 +373,7 @@ function SubtitlesTabForm({
         body: JSON.stringify({
           subtitleInterval: 10,
           browserFetch: DEFAULT_BROWSER_FETCH_CONFIG,
+          whisperAi: DEFAULT_WHISPER_CONFIG,
           apiFallback: DEFAULT_API_FALLBACK_CONFIG,
         }),
       });
@@ -441,6 +475,29 @@ function SubtitlesTabForm({
       config.defaults.subtitleSegmentPromptTemplate || '',
     );
     showToast(t.settings.subtitles.toastRestoreSegmentPrompt);
+  };
+
+  const checkWhisperStatus = async () => {
+    setCheckingWhisper(true);
+    try {
+      const res = await fetch('/api/settings/whisper-status');
+      const data = await res.json();
+      if (data.available) {
+        showToast(
+          `${t.settings.subtitles.toastCheckWhisperSuccess} (v${data.version || '?'})`,
+          'success',
+        );
+      } else {
+        showToast(
+          `${t.settings.subtitles.toastCheckWhisperError}: ${data.error || 'not found'}`,
+          'error',
+        );
+      }
+    } catch {
+      showToast(t.settings.subtitles.toastCheckWhisperError, 'error');
+    } finally {
+      setCheckingWhisper(false);
+    }
   };
 
   return (
@@ -567,6 +624,131 @@ function SubtitlesTabForm({
               ))}
             </div>
           </div>
+        </div>
+      </div>
+
+      <div className="settings-group">
+        <h2 className="settings-group-title">{t.settings.subtitles.whisperAi}</h2>
+        <div className="settings-card-group">
+          <div className="setting-row">
+            <div className="setting-info">
+              <span className="setting-label">{t.settings.subtitles.enableWhisperAi}</span>
+              <span className="setting-description">
+                {t.settings.subtitles.enableWhisperAiDesc}
+              </span>
+            </div>
+            <label className="switch">
+              <input
+                type="checkbox"
+                checked={whisperAi.enabled}
+                onChange={(event) =>
+                  updateWhisperAi({ enabled: event.target.checked })
+                }
+                disabled={pipelineSaving}
+              />
+              <span className="slider" />
+            </label>
+          </div>
+
+          <div className="setting-row">
+            <div className="setting-info">
+              <span className="setting-label">{t.settings.subtitles.checkWhisperStatus}</span>
+            </div>
+            <button
+              className="premium-button"
+              type="button"
+              onClick={checkWhisperStatus}
+              disabled={checkingWhisper || pipelineSaving}
+            >
+              {checkingWhisper
+                ? t.settings.subtitles.whisperChecking
+                : t.settings.subtitles.checkWhisperStatus}
+            </button>
+          </div>
+
+          <div className="setting-row">
+            <div className="setting-info">
+              <span className="setting-label">{t.settings.subtitles.whisperTargetSeconds}</span>
+              <span className="setting-description">
+                {t.settings.subtitles.whisperTargetSecondsDesc} ({whisperAi.batch.targetSeconds}s)
+              </span>
+            </div>
+            <input
+              type="range"
+              min="60"
+              max="300"
+              step="30"
+              value={whisperAi.batch.targetSeconds}
+              onChange={(e) =>
+                updateWhisperAi({
+                  batch: {
+                    ...whisperAi.batch,
+                    targetSeconds: Number(e.target.value),
+                  },
+                })
+              }
+              disabled={pipelineSaving || !whisperAi.enabled}
+              style={{ width: '150px' }}
+            />
+          </div>
+
+          <div className="setting-row">
+            <div className="setting-info">
+              <span className="setting-label">{t.settings.subtitles.whisperModelId}</span>
+              <span className="setting-description">
+                {t.settings.subtitles.whisperModelIdDesc}
+              </span>
+            </div>
+            <select
+              className="premium-select"
+              value={whisperAi.whisperModelId}
+              onChange={(event) =>
+                updateWhisperAi({ whisperModelId: event.target.value })
+              }
+              disabled={pipelineSaving || !whisperAi.enabled}
+            >
+              <option value="mlx-community/whisper-tiny-mlx-q4">tiny-q4 (极速)</option>
+              <option value="mlx-community/whisper-base-mlx-q4">base-q4 (平衡)</option>
+              <option value="mlx-community/whisper-small-mlx-q4">small-q4 (精准)</option>
+              <option value="mlx-community/whisper-turbo">turbo (极速精准)</option>
+            </select>
+          </div>
+
+          <div className="setting-row">
+            <div className="setting-info" style={{ width: '100%' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <div>
+                  <span className="setting-label">{t.settings.subtitles.whisperPrompt}</span>
+                  <span className="setting-description">
+                    {t.settings.subtitles.whisperPromptDesc}
+                  </span>
+                </div>
+              </div>
+              <textarea
+                className="premium-textarea"
+                value={[
+                  '你是精准字幕校对助手。',
+                  '视频标题:{title}',
+                  '频道:{channel_name}',
+                  '描述摘要:{description}',
+                  '规则:',
+                  '1. 你会收到音频片段和每个 segment 的 whisper_text 初稿。',
+                  '2. 听音频,对照 whisper_text 校正错字、漏字、专有名词和标点。',
+                  '3. 不要盲从 whisper_text；如果音频和初稿冲突,以音频为准。',
+                  '4. 严格保留 segment 数量和 id 一对一,不合并/不拆分/不新增。',
+                  '5. 静音/音乐/无人声段将 drop 设为 true,text 可留空。',
+                  '6. 出现专有名词优先参考视频标题和描述。',
+                  '7. 音频前后各有 0.5 秒边界余量,不在任何 segment 范围内,忽略即可。',
+                  '8. 只输出 JSON,不要任何解释。',
+                  '输出 JSON 结构: {"corrections":[{"id":1,"text":"校正后的文本","drop":false}]}',
+                ].join('\n')}
+                disabled
+                rows={11}
+                style={{ marginTop: '12px', fontSize: '13px', fontFamily: 'monospace' }}
+              />
+            </div>
+          </div>
+
         </div>
       </div>
 

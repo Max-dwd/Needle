@@ -56,7 +56,7 @@ export type SubtitlePipelinePlatform = 'youtube' | 'bilibili';
 
 export type CrawlPipelineSourceId = 'browser';
 
-export type SubtitlePipelineSourceId = 'browser' | 'gemini';
+export type SubtitlePipelineSourceId = 'browser' | 'whisper-ai' | 'gemini';
 
 const CRAWL_PIPELINE_DEFINITIONS: PipelinePlatformDefinition[] = [
   {
@@ -89,12 +89,18 @@ const SUBTITLE_PIPELINE_DEFINITIONS: PipelinePlatformDefinition[] = [
   {
     platform: 'youtube',
     label: 'YouTube',
-    description: '字幕提取优先走 Needle Browser，失败时可回退到 AI 多模态 API。',
+    description:
+      '字幕提取优先走 Needle Browser，失败时可回退到 AI 多模态 API。',
     sources: [
       {
         id: 'browser',
         label: 'Needle Browser',
         description: '当前默认主链路，优先提取现成字幕。',
+      },
+      {
+        id: 'whisper-ai',
+        label: 'Whisper + AI 校对',
+        description: '本地 Whisper 提供时间戳，多模态 AI 听音频校对文本。',
       },
       {
         id: 'gemini',
@@ -106,12 +112,18 @@ const SUBTITLE_PIPELINE_DEFINITIONS: PipelinePlatformDefinition[] = [
   {
     platform: 'bilibili',
     label: 'Bilibili',
-    description: '字幕提取优先走 Needle Browser，失败时可回退到 AI 多模态 API。',
+    description:
+      '字幕提取优先走 Needle Browser，失败时可回退到 AI 多模态 API。',
     sources: [
       {
         id: 'browser',
         label: 'Needle Browser',
         description: '当前默认主链路，优先拉取现成字幕。',
+      },
+      {
+        id: 'whisper-ai',
+        label: 'Whisper + AI 校对',
+        description: '本地 Whisper 提供时间戳，多模态 AI 听音频校对文本。',
       },
       {
         id: 'gemini',
@@ -155,12 +167,30 @@ function normalizePlatformConfig(
       .map((source) => [source.id, source.enabled] as const),
   );
 
-  const orderedIds = [
-    ...storedOrder.map((source) => source.id).filter((id) => sourceMap.has(id)),
-    ...definition.sources
-      .map((source) => source.id)
-      .filter((id) => !storedOrder.some((source) => source.id === id)),
-  ];
+  const orderedIds = storedOrder
+    .map((source) => source.id)
+    .filter((id, index, ids) => sourceMap.has(id) && ids.indexOf(id) === index);
+  const definitionIds = definition.sources.map((source) => source.id);
+  for (const id of definitionIds) {
+    if (orderedIds.includes(id)) continue;
+    const definitionIndex = definitionIds.indexOf(id);
+    const previousKnownIds = definitionIds
+      .slice(0, definitionIndex)
+      .filter((candidate) => orderedIds.includes(candidate));
+    const previousKnownId = previousKnownIds[previousKnownIds.length - 1];
+    if (previousKnownId) {
+      orderedIds.splice(orderedIds.lastIndexOf(previousKnownId) + 1, 0, id);
+      continue;
+    }
+    const nextKnownId = definitionIds
+      .slice(definitionIndex + 1)
+      .find((candidate) => orderedIds.includes(candidate));
+    if (nextKnownId) {
+      orderedIds.splice(orderedIds.indexOf(nextKnownId), 0, id);
+      continue;
+    }
+    orderedIds.push(id);
+  }
 
   return {
     platform: definition.platform,

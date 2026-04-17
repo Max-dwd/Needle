@@ -103,4 +103,25 @@ describe('POST /api/videos/[id]/subtitle', () => {
       }),
     );
   });
+
+  it('disables browser subtitle fetching for player api fallback extraction', async () => {
+    const response = await POST(
+      makeRequest(
+        'http://localhost/api/videos/1/subtitle?source=player&preferredMethod=api-fallback&async=1',
+      ),
+      { params: Promise.resolve({ id: '1' }) },
+    );
+
+    expect(response.status).toBe(202);
+    expect(ensureSubtitleForVideo).toHaveBeenCalledWith(
+      1,
+      expect.objectContaining({
+        requestSource: 'player',
+        preferredMethod: 'api-fallback',
+        allowBrowser: false,
+        force: true,
+        respectPause: false,
+      }),
+    );
+  });
 });

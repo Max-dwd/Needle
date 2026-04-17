@@ -9,6 +9,10 @@ import {
   getSubtitleBrowserFetchConfig,
   setSubtitleBrowserFetchConfig,
 } from '@/lib/subtitle-browser-fetch-settings';
+import {
+  getSubtitleWhisperAiConfig,
+  setSubtitleWhisperAiConfig,
+} from '@/lib/subtitle-whisper-ai-settings';
 
 const SUBTITLE_INTERVAL_SETTING_KEY = 'scheduler_subtitle_interval';
 
@@ -16,6 +20,7 @@ export async function GET() {
   return NextResponse.json({
     apiFallback: getSubtitleApiFallbackConfig(),
     browserFetch: getSubtitleBrowserFetchConfig(),
+    whisperAi: getSubtitleWhisperAiConfig(),
     subtitleInterval: getPositiveIntAppSetting(
       SUBTITLE_INTERVAL_SETTING_KEY,
       10,
@@ -46,6 +51,10 @@ export async function POST(request: NextRequest) {
         payload && 'browserFetch' in payload
           ? setSubtitleBrowserFetchConfig(payload.browserFetch)
           : getSubtitleBrowserFetchConfig(),
+      whisperAi:
+        payload && 'whisperAi' in payload
+          ? setSubtitleWhisperAiConfig(payload.whisperAi)
+          : getSubtitleWhisperAiConfig(),
       subtitleInterval:
         typeof payload?.subtitleInterval === 'number'
           ? Math.max(0, Math.floor(payload.subtitleInterval))

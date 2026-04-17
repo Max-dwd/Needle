@@ -241,10 +241,15 @@ export default forwardRef<VideoInfoPanelRef, VideoInfoPanelProps>(
 
   const isYt = video.platform === 'youtube';
   const defaultSubtitleMethod = isYt ? 'piped' : 'bilibili-api';
+  type SubtitleRequestMethod =
+    | 'api-fallback'
+    | 'gemini'
+    | 'piped'
+    | 'bilibili-api';
 
   const buildSubtitleParams = useCallback(
     (
-      preferredMethod: 'gemini' | 'piped' | 'bilibili-api',
+      preferredMethod: SubtitleRequestMethod,
       options?: { async?: boolean; force?: boolean },
     ) => {
       const params = new URLSearchParams({
@@ -257,7 +262,11 @@ export default forwardRef<VideoInfoPanelRef, VideoInfoPanelProps>(
       if (options?.force) {
         params.set('force', '1');
       }
-      if (preferredMethod === 'gemini' && selectedSubtitleModel) {
+      if (
+        (preferredMethod === 'gemini' ||
+          preferredMethod === 'api-fallback') &&
+        selectedSubtitleModel
+      ) {
         params.set('modelId', selectedSubtitleModel);
       }
       if (!isYt) {
@@ -275,7 +284,7 @@ export default forwardRef<VideoInfoPanelRef, VideoInfoPanelProps>(
 
   const startSubtitleFetch = useCallback(
     async (
-      preferredMethod: 'gemini' | 'piped' | 'bilibili-api',
+      preferredMethod: SubtitleRequestMethod,
       options?: { force?: boolean },
     ) => {
       const params = buildSubtitleParams(preferredMethod, {
@@ -295,7 +304,12 @@ export default forwardRef<VideoInfoPanelRef, VideoInfoPanelProps>(
         status: 'fetching',
         error: null,
         preferredMethod,
-        activeMethod: preferredMethod === 'gemini' ? 'gemini' : 'browser',
+        activeMethod:
+          preferredMethod === 'api-fallback'
+            ? 'whisper-ai'
+            : preferredMethod === 'gemini'
+              ? 'gemini'
+              : 'browser',
       }));
       return res;
     },
@@ -676,7 +690,7 @@ export default forwardRef<VideoInfoPanelRef, VideoInfoPanelProps>(
     setSubtitleApiExtracting(true);
     setSubtitleLoading(false);
     try {
-      await startSubtitleFetch('gemini', { force });
+      await startSubtitleFetch('api-fallback', { force });
     } catch {
       setSubtitle({ status: 'error', error: 'API 提取字幕失败' });
     } finally {
@@ -751,8 +765,15 @@ export default forwardRef<VideoInfoPanelRef, VideoInfoPanelProps>(
       : null;
   const subtitleActiveMethod =
     typeof subtitle?.activeMethod === 'string' ? subtitle.activeMethod : null;
+  const subtitleUsedRawWhisper =
+    subtitleMetadata?.fallback === 'raw-whisper' ||
+    parseMetricNumber(subtitleMetadata?.correction_raw_fallback_ratio) === 1;
   const subtitleSourceLabel =
-    subtitle?.sourceMethod === 'gemini-url'
+    subtitle?.sourceMethod === 'whisper-ai'
+      ? subtitleUsedRawWhisper
+        ? 'Whisper 原文（校对回退）'
+        : 'Whisper + AI 校对'
+      : subtitle?.sourceMethod === 'gemini-url'
       ? 'Gemini API（视频直传）'
       : subtitle?.sourceMethod === 'gemini-audio'
         ? 'Gemini API（音频转录）'
@@ -766,7 +787,9 @@ export default forwardRef<VideoInfoPanelRef, VideoInfoPanelProps>(
               : subtitle?.sourceMethod || null;
   const subtitleFetchingMessage =
     subtitle?.message ||
-    (subtitleActiveMethod === 'gemini'
+    (subtitleActiveMethod === 'whisper-ai'
+      ? 'Whisper 时间戳锚定字幕提取已开始，关闭弹窗也会继续处理。'
+      : subtitleActiveMethod === 'gemini'
       ? 'API 字幕提取已开始，关闭弹窗也会继续处理。'
       : subtitleActiveMethod === 'browser' || subtitleActiveMethod === 'opencli'
         ? 'CLI 字幕抓取已开始，关闭弹窗也会继续处理。'

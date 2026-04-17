@@ -18,7 +18,7 @@ Needle 抓取频道元数据与视频列表、下载字幕、通过任意 OpenAI
 
 - **意图 × 主题** 双维度频道组织 — 每个意图独立配置 auto-subtitle / auto-summary 开关和模型覆盖
 - **事件驱动流水线** — 新视频 → 字幕 → 摘要，全自动完成
-- **字幕流水线** — Needle Browser → Gemini 音频转录 fallback，分级退避重试
+- **字幕流水线** — Needle Browser → Whisper 锚定的 AI 字幕 → Gemini 音频转录 fallback，分级退避重试
 - **AI 摘要** — 兼容 OpenAI 协议（OpenAI、Ollama、Gemini、任意端点）；共享 RPM/TPM/RPD 预算
 - **AI 问答面板** — 圈定字幕时间范围后自由问答；输出 Obsidian 风格 markdown 笔记或吐槽分享卡（PNG 导出）
 - **音频模式 + 媒体会话** — 移动端全锁屏控制，静音 MP3 心跳维持 iOS 音频会话
@@ -92,16 +92,20 @@ NEEDLE_HTTP_PORT=3001 docker compose up -d --build  # 如果 3000 已被占用
 | 工具 | 用途 |
 |------|------|
 | `yt-dlp` | YouTube cookie 导入、Gemini 字幕音频提取 |
-| `ffmpeg` / `ffprobe` | Gemini 音频转录（15 分钟分段切割） |
+| `ffmpeg` / `ffprobe` | Gemini 和 Whisper 字幕的音频切片 |
+| `mlx-whisper` | Apple Silicon 上的 Whisper 锚定字幕源 |
 
 ```bash
 # macOS
 brew install yt-dlp ffmpeg
+python3 -m pip install mlx-whisper
 
 # Ubuntu / Debian
 sudo apt install -y ffmpeg
 sudo add-apt-repository ppa:tomtomtom/yt-dlp && sudo apt install -y yt-dlp
 ```
+
+`mlx-whisper` 是 Needle 调用本地 Whisper 锚定字幕源时使用的 CLI。当前只面向 Apple Silicon Mac，首次运行会自动从 Hugging Face 下载所选 Whisper 模型。
 
 ---
 
@@ -125,6 +129,8 @@ PYTHON_BIN=python3
 YT_DLP_BIN=yt-dlp
 FFMPEG_BIN=ffmpeg
 FFPROBE_BIN=ffprobe
+MLX_WHISPER_BIN=mlx_whisper
+WHISPER_MODEL_ID=mlx-community/whisper-base-mlx-q4
 
 # 可选：受保护内容需要登录态
 YOUTUBE_COOKIES_BROWSER=chrome
@@ -151,6 +157,19 @@ npm run browser:prepare
 然后打开 `chrome://extensions`，开启**开发者模式**，点击**加载已解压的扩展程序**，选择 `browser-bridge/extension`。
 
 如果是 Docker 部署，这个扩展仍然运行在宿主机 Chrome 中，并通过映射出来的 `19825` 端口与容器内 daemon 通信。
+
+### 安装 mlx-whisper
+
+Needle 在尝试 Whisper 锚定字幕源前会先检测本地 `mlx_whisper` 可执行文件。Apple Silicon macOS 上可直接这样安装：
+
+```bash
+brew install ffmpeg
+python3 -m pip install mlx-whisper
+```
+
+如果二进制不在 `PATH` 里，就把 `MLX_WHISPER_BIN` 设成完整路径。默认模型是 `mlx-community/whisper-base-mlx-q4`，可以通过 `WHISPER_MODEL_ID` 覆盖，也可以在设置 → 字幕里切换模型。
+
+安装完成后，进入设置 → 字幕，点击**检测环境**。Needle 会调用 `/api/settings/whisper-status` 来确认 `mlx_whisper` 是否可用。
 
 ### 首次导入订阅
 
@@ -186,8 +205,9 @@ npm run browser:prepare
 ### 字幕流水线
 
 1. Needle Browser 下载原生字幕
-2. Fallback：Gemini 音频转录（用 `ffmpeg` 切成 15 分钟片段上传）
-3. 失败重试间隔：`10 分钟 → 30 分钟 → 2 小时 → 6 小时 → 24 小时`（按错误类型分级）
+2. Fallback：Whisper 锚定的 AI 字幕（本地 `mlx_whisper` 先产出时间戳锚点，再由多模态 LLM 校对文本；如果这一步失败，则保留原始 Whisper 文本作为最后兜底）
+3. 如果 Whisper 锚定字幕不可用，再回退到 Gemini 音频转录
+4. 失败重试间隔：`10 分钟 → 30 分钟 → 2 小时 → 6 小时 → 24 小时`（按错误类型分级）
 
 VTT、SRT、JSON3 格式统一归一化为 `SubtitleSegment[]`。
 

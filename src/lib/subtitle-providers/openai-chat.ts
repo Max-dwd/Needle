@@ -57,6 +57,20 @@ export const openAiChatTranscriber: MultimodalTranscriber = {
     }
     const data = fs.readFileSync(input.audioPath).toString('base64');
     const format = audioFormatFromPath(input.audioPath);
+    const messages: Array<Record<string, unknown>> = [];
+    if (input.systemPrompt?.trim()) {
+      messages.push({ role: 'system', content: input.systemPrompt.trim() });
+    }
+    messages.push({
+      role: 'user',
+      content: [
+        { type: 'text', text: input.prompt },
+        {
+          type: 'input_audio',
+          input_audio: { data, format },
+        },
+      ],
+    });
 
     const budgetLease = await acquireSharedAiBudget({
       priority: input.priority,
@@ -76,20 +90,22 @@ export const openAiChatTranscriber: MultimodalTranscriber = {
         },
         body: JSON.stringify({
           model: model.model,
-          max_tokens: DEFAULT_MAX_OUTPUT_TOKENS,
-          messages: [
-            {
-              role: 'user',
-              content: [
-                { type: 'text', text: input.prompt },
-                {
-                  type: 'input_audio',
-                  input_audio: { data, format },
+          max_tokens: input.maxOutputTokens ?? DEFAULT_MAX_OUTPUT_TOKENS,
+          ...(input.responseSchema
+            ? {
+                response_format: {
+                  type: 'json_schema',
+                  json_schema: {
+                    name: 'subtitle_corrections',
+                    strict: true,
+                    schema: input.responseSchema,
+                  },
                 },
-              ],
-            },
-          ],
+              }
+            : {}),
+          messages,
         }),
+        signal: input.signal,
       });
       const ttftSeconds = (Date.now() - requestStartTime) / 1000;
       const bodyText = await res.text();

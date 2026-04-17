@@ -108,31 +108,47 @@ describe('pipeline config normalization', () => {
         {
           platform: 'youtube',
           label: 'YouTube',
-          description: '字幕提取优先走 Needle Browser，失败时可回退到 AI 多模态 API。',
+          description:
+            '字幕提取优先走 Needle Browser，失败时可回退到 AI 多模态 API。',
           sources: [
-            {
-              id: 'gemini',
-              label: 'AI 多模态 API',
-              description: 'AI 提取 fallback，适合无字幕或字幕失效场景。',
-              enabled: false,
-            },
             {
               id: 'browser',
               label: 'Needle Browser',
               description: '当前默认主链路，优先提取现成字幕。',
               enabled: true,
             },
+            {
+              id: 'whisper-ai',
+              label: 'Whisper + AI 校对',
+              description:
+                '本地 Whisper 提供时间戳，多模态 AI 听音频校对文本。',
+              enabled: true,
+            },
+            {
+              id: 'gemini',
+              label: 'AI 多模态 API',
+              description: 'AI 提取 fallback，适合无字幕或字幕失效场景。',
+              enabled: false,
+            },
           ],
         },
         {
           platform: 'bilibili',
           label: 'Bilibili',
-          description: '字幕提取优先走 Needle Browser，失败时可回退到 AI 多模态 API。',
+          description:
+            '字幕提取优先走 Needle Browser，失败时可回退到 AI 多模态 API。',
           sources: [
             {
               id: 'browser',
               label: 'Needle Browser',
               description: '当前默认主链路，优先拉取现成字幕。',
+              enabled: true,
+            },
+            {
+              id: 'whisper-ai',
+              label: 'Whisper + AI 校对',
+              description:
+                '本地 Whisper 提供时间戳，多模态 AI 听音频校对文本。',
               enabled: true,
             },
             {

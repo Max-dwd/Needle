@@ -56,6 +56,7 @@ async function uploadGeminiFile(
   mimeType: string,
   apiKey: string,
   uploadBase: string,
+  signal?: AbortSignal,
 ): Promise<{ uri: string; mimeType: string }> {
   const data = fs.readFileSync(filePath);
   const startRes = await fetch(
@@ -74,6 +75,7 @@ async function uploadGeminiFile(
           display_name: path.basename(filePath),
         },
       }),
+      signal,
     },
   );
   if (!startRes.ok) {
@@ -93,6 +95,7 @@ async function uploadGeminiFile(
       'X-Goog-Upload-Command': 'upload, finalize',
     },
     body: data,
+    signal,
   });
   if (!finalizeRes.ok) {
     throw new Error(
@@ -118,6 +121,11 @@ async function generateGeminiContent(
   label: string,
   estimatedTokens: number,
   selectedModel: AiSummaryModelConfig,
+  options: {
+    systemPrompt?: string;
+    responseSchema?: Record<string, unknown>;
+    signal?: AbortSignal;
+  } = {},
 ): Promise<TranscribeResult> {
   if (!selectedModel.apiKey) {
     throw new Error('未配置 AI API Key，无法执行 Gemini 字幕 fallback');
@@ -139,6 +147,21 @@ async function generateGeminiContent(
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          ...(options.systemPrompt
+            ? {
+                systemInstruction: {
+                  parts: [{ text: options.systemPrompt }],
+                },
+              }
+            : {}),
+          ...(options.responseSchema
+            ? {
+                generationConfig: {
+                  responseMimeType: 'application/json',
+                  responseSchema: options.responseSchema,
+                },
+              }
+            : {}),
           contents: [
             {
               role: 'user',
@@ -146,6 +169,7 @@ async function generateGeminiContent(
             },
           ],
         }),
+        signal: options.signal,
       },
     );
     const ttftSeconds = (Date.now() - requestStartTime) / 1000;
@@ -198,6 +222,7 @@ export const geminiTranscriber: MultimodalTranscriber = {
       input.mediaType,
       model.apiKey,
       uploadBase,
+      input.signal,
     );
     return generateGeminiContent(
       [
@@ -213,6 +238,11 @@ export const geminiTranscriber: MultimodalTranscriber = {
       input.label,
       input.estimatedTokens,
       model,
+      {
+        systemPrompt: input.systemPrompt,
+        responseSchema: input.responseSchema,
+        signal: input.signal,
+      },
     );
   },
 
@@ -234,6 +264,7 @@ export const geminiTranscriber: MultimodalTranscriber = {
       input.label,
       input.estimatedTokens,
       model,
+      {},
     );
   },
 };

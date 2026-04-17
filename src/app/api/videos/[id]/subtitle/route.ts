@@ -41,6 +41,7 @@ async function handleSubtitleRequest(
   const source = req.nextUrl.searchParams.get('source')?.trim();
   const preferredMethod =
     req.nextUrl.searchParams.get('preferredMethod')?.trim() || undefined;
+  const normalizedPreferredMethod = preferredMethod?.toLowerCase();
   const apiModelId =
     req.nextUrl.searchParams.get('modelId')?.trim() || undefined;
   const runAsync = req.nextUrl.searchParams.get('async') === '1';
@@ -50,7 +51,10 @@ async function handleSubtitleRequest(
     requestSource: source === 'player' ? 'player' : 'default',
     preferredMethod,
     allowBrowser:
-      source === 'player' && preferredMethod?.toLowerCase() === 'gemini'
+      source === 'player' &&
+      (normalizedPreferredMethod === 'gemini' ||
+        normalizedPreferredMethod === 'api-fallback' ||
+        normalizedPreferredMethod === 'api_fallback')
         ? false
         : undefined,
     bilibiliContext: aid || cid ? { aid, cid } : undefined,

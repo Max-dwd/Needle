@@ -32,9 +32,19 @@ export const anthropicMessagesTranscriber: MultimodalTranscriber = {
     input: TranscribeAudioInput,
   ): Promise<TranscribeResult> {
     if (!model.apiKey) {
-      throw new Error('未配置 AI API Key，无法执行 Anthropic 兼容字幕 fallback');
+      throw new Error(
+        '未配置 AI API Key，无法执行 Anthropic 兼容字幕 fallback',
+      );
     }
     const data = fs.readFileSync(input.audioPath).toString('base64');
+    const prompt = input.responseSchema
+      ? [
+          input.prompt,
+          '',
+          'Output must be valid JSON matching this JSON Schema:',
+          JSON.stringify(input.responseSchema),
+        ].join('\n')
+      : input.prompt;
 
     const budgetLease = await acquireSharedAiBudget({
       priority: input.priority,
@@ -55,12 +65,15 @@ export const anthropicMessagesTranscriber: MultimodalTranscriber = {
         },
         body: JSON.stringify({
           model: model.model,
-          max_tokens: DEFAULT_MAX_OUTPUT_TOKENS,
+          max_tokens: input.maxOutputTokens ?? DEFAULT_MAX_OUTPUT_TOKENS,
+          ...(input.systemPrompt?.trim()
+            ? { system: input.systemPrompt.trim() }
+            : {}),
           messages: [
             {
               role: 'user',
               content: [
-                { type: 'text', text: input.prompt },
+                { type: 'text', text: prompt },
                 {
                   type: 'audio',
                   source: {
@@ -73,6 +86,7 @@ export const anthropicMessagesTranscriber: MultimodalTranscriber = {
             },
           ],
         }),
+        signal: input.signal,
       });
       const ttftSeconds = (Date.now() - requestStartTime) / 1000;
       const bodyText = await res.text();

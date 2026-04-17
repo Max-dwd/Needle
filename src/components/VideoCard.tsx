@@ -486,7 +486,13 @@ const VideoCard = memo(function VideoCard({
   }, [metadataRepairing, video.availability_status, video.id]);
 
   const triggerSubtitleRetry = useCallback(
-    (preferredMethod: 'gemini' | 'piped' | 'bilibili-api') => {
+    (
+      preferredMethod:
+        | 'api-fallback'
+        | 'gemini'
+        | 'piped'
+        | 'bilibili-api',
+    ) => {
       if (subtitleRetrying) return;
       setSubtitleRetrying(true);
       const params = new URLSearchParams({
@@ -600,7 +606,7 @@ const VideoCard = memo(function VideoCard({
                         setSubtitleRetrying(true);
                         const params = new URLSearchParams({
                           source: 'player',
-                          preferredMethod: 'gemini',
+                          preferredMethod: 'api-fallback',
                           async: '1',
                         });
                         void fetch(
@@ -946,7 +952,7 @@ const VideoCard = memo(function VideoCard({
                   type="button"
                   onClick={() => {
                     closeContextMenu();
-                    triggerSubtitleRetry('gemini');
+                    triggerSubtitleRetry('api-fallback');
                   }}
                   style={contextMenuItemStyle}
                 >
