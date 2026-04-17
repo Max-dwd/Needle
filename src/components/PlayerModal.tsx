@@ -77,6 +77,7 @@ function getEmbedUrl(
       autoplay: '1',
       disablekb: '1',
       playsinline: '1',
+      controls: '0',
       start: String(Math.max(0, Math.floor(startSeconds))),
     });
     if (options?.enableYouTubeJsApi) {
@@ -989,7 +990,6 @@ export default function PlayerModal({
       tabIndex={0}
       src={proxyUrl}
       poster={video.thumbnail_url || undefined}
-      controls
       autoPlay
       preload="auto"
       playsInline
@@ -1235,6 +1235,17 @@ export default function PlayerModal({
                   transition: 'opacity 0.3s',
                 }}
               >
+                {!isMobile && !isAudioMode && (
+                  <div
+                    onClick={togglePlay}
+                    style={{
+                      position: 'absolute',
+                      inset: 0,
+                      zIndex: 10,
+                      cursor: 'pointer',
+                    }}
+                  />
+                )}
                 {isYt ? (
                   <>
                     {shouldAttemptNativeYouTube && youtubePlaybackLoading ? (
