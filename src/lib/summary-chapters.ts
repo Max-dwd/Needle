@@ -360,3 +360,18 @@ export function extractSummaryChapters(
       body: chapter.body,
     }));
 }
+
+export function findChapterIndexForSeconds(
+  chapters: SummaryChapter[],
+  seconds: number,
+): number {
+  if (!chapters || chapters.length === 0) return -1;
+  if (seconds < chapters[0].seconds) return 0;
+
+  for (let i = chapters.length - 1; i >= 0; i--) {
+    if (seconds >= chapters[i].seconds) {
+      return i;
+    }
+  }
+  return 0;
+}

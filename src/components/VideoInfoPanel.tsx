@@ -1,6 +1,14 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+} from 'react';
+
 import MarkdownRenderer from '@/components/MarkdownRenderer';
 import ChatPanel from '@/components/ChatPanel';
 import { formatSecondsLabel, normalizeCommentUrl } from '@/lib/format';
@@ -12,7 +20,12 @@ import type {
   VideoWithMeta,
 } from '@/types';
 
+export interface VideoInfoPanelRef {
+  scrollToChapterSeconds: (seconds: number) => void;
+}
+
 interface VideoInfoPanelProps {
+
   video: VideoWithMeta;
   onTimestampClick: (seconds: number) => void;
   currentPlayerSeconds?: number;
@@ -71,15 +84,21 @@ const colors = {
   dangerBorder: 'rgba(220, 38, 38, 0.2)',
 } as const;
 
-export default function VideoInfoPanel({
-  video,
-  onTimestampClick,
-  currentPlayerSeconds = 0,
-  playerDuration = 0,
-  bilibiliAid,
-  bilibiliCid,
-}: VideoInfoPanelProps) {
+export default forwardRef<VideoInfoPanelRef, VideoInfoPanelProps>(
+  function VideoInfoPanel(
+    {
+      video,
+      onTimestampClick,
+      currentPlayerSeconds = 0,
+      playerDuration = 0,
+      bilibiliAid,
+      bilibiliCid,
+    }: VideoInfoPanelProps,
+    ref,
+  ) {
+
   const [subtitle, setSubtitle] = useState<SubtitleData | null>(null);
+
   const [subtitleLoading, setSubtitleLoading] = useState(true);
   const [subtitleRetrying, setSubtitleRetrying] = useState(false);
   const [subtitleApiExtracting, setSubtitleApiExtracting] = useState(false);
@@ -107,6 +126,24 @@ export default function VideoInfoPanel({
     'subtitle' | 'summary' | 'comments' | 'chat'
   >('summary');
   const activeSegmentRef = useRef<HTMLButtonElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+
+  useImperativeHandle(ref, () => ({
+    scrollToChapterSeconds: (seconds: number) => {
+      const container = scrollContainerRef.current;
+      if (!container) return;
+      const target = container.querySelector<HTMLElement>(
+        `[data-summary-seconds="${seconds}"]`,
+      );
+      if (target) {
+        container.scrollTo({
+          top: target.offsetTop - container.offsetTop - 8,
+          behavior: 'smooth',
+        });
+      }
+    },
+  }));
+
 
   // Keep refs to latest bilibili ids for use inside SSE handler
   const bilibiliAidRef = useRef<number | null | undefined>(bilibiliAid);
@@ -728,11 +765,13 @@ export default function VideoInfoPanel({
       </div>
 
       <div
+        ref={scrollContainerRef}
         style={{
           minWidth: 0,
           flex: 1,
           overflowY: 'auto',
           paddingRight: 4,
+          position: 'relative',
         }}
       >
         {activePanel !== 'summary' && activePanel !== 'chat' && (
@@ -1395,4 +1434,4 @@ export default function VideoInfoPanel({
       )}
     </>
   );
-}
+});

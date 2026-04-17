@@ -16,10 +16,10 @@ import {
   resolveYouTubeEmbedOrigin,
 } from '@/lib/youtube-player';
 import type { VideoWithMeta } from '@/types';
-import VideoInfoPanel from '@/components/VideoInfoPanel';
+import VideoInfoPanel, { type VideoInfoPanelRef } from '@/components/VideoInfoPanel';
 import AudioModeOverlay from '@/components/AudioModeOverlay';
 import { useMediaSession } from '@/hooks/useMediaSession';
-import { extractSummaryChapters } from '@/lib/summary-chapters';
+import { extractSummaryChapters, findChapterIndexForSeconds } from '@/lib/summary-chapters';
 import PlayerBottomBar from '@/components/player/PlayerBottomBar';
 
 interface BilibiliPlaybackResponse {
@@ -147,6 +147,21 @@ export default function PlayerModal({
     useState<PlayerKeyboardModeSettings>(DEFAULT_KEYBOARD_SETTINGS);
   const [keyboardSettingsLoaded, setKeyboardSettingsLoaded] = useState(false);
 
+  // Follow Mode States
+  const [followMode, setFollowMode] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return localStorage.getItem('needle-player-follow-mode') === 'true';
+  });
+
+  const [activeChapterIndex, setActiveChapterIndex] = useState<number>(-1);
+  const [cursorChapterIndex, setCursorChapterIndex] = useState<number | null>(null);
+  const videoInfoPanelRef = useRef<VideoInfoPanelRef>(null);
+
+  const [isMuted, setIsMuted] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return localStorage.getItem('needle-player-mute') === 'true';
+  });
+
   const [youtubeEmbedSrc, setYoutubeEmbedSrc] = useState(() =>
     isYt
       ? getEmbedUrl(video, initialStartSeconds, { enableYouTubeJsApi: true })
@@ -173,7 +188,9 @@ export default function PlayerModal({
   const [nativePlaybackRate, setNativePlaybackRate] = useState(1);
   const [nativeIsPlaying, setNativeIsPlaying] = useState(false);
 
+  const lastDesiredRateRef = useRef<number>(1);
   const modalContentRef = useRef<HTMLDivElement>(null);
+
   const youtubeIframeRef = useRef<HTMLIFrameElement>(null);
   const youtubeNativeVideoRef = useRef<HTMLVideoElement>(null);
   const bilibiliVideoRef = useRef<HTMLVideoElement>(null);
@@ -214,6 +231,23 @@ export default function PlayerModal({
       ),
     [summaryMarkdown, video.platform, video.video_id, playerDuration],
   );
+
+  useEffect(() => {
+    const cIndex = findChapterIndexForSeconds(chapters, playerStartSeconds);
+    if (cIndex !== activeChapterIndex) {
+      setActiveChapterIndex(cIndex);
+    }
+  }, [chapters, playerStartSeconds, activeChapterIndex]);
+
+  useEffect(() => {
+    if (!followMode) return;
+    const targetIndex = cursorChapterIndex !== null ? cursorChapterIndex : activeChapterIndex;
+    if (targetIndex !== -1 && chapters[targetIndex]) {
+      videoInfoPanelRef.current?.scrollToChapterSeconds(chapters[targetIndex].seconds);
+    }
+  }, [followMode, activeChapterIndex, cursorChapterIndex, chapters]);
+
+
 
   const { width: leftPanelWidth, handleRef: panelHandleRef } =
     useDraggableWidth('player-panel-width', 380, { min: 260, max: 520 });
@@ -487,7 +521,12 @@ export default function PlayerModal({
   const flushPendingYouTubeSeek = useCallback(
     (seconds: number) => {
       if (!postYouTubeCommand('seekTo', [seconds, true])) return false;
+      postYouTubeCommand('setPlaybackRate', [lastDesiredRateRef.current]);
       postYouTubeCommand('playVideo');
+      // Second reinforcement after a short delay for iframe lag
+      window.setTimeout(() => {
+        postYouTubeCommand('setPlaybackRate', [lastDesiredRateRef.current]);
+      }, 50);
       return true;
     },
     [postYouTubeCommand],
@@ -543,14 +582,20 @@ export default function PlayerModal({
             ? Math.min(seconds, Math.max(0, videoElement.duration - 0.25))
             : seconds;
         videoElement.currentTime = Math.max(0, boundedSeconds);
-        videoElement.playbackRate = nativePlaybackRate;
+        videoElement.playbackRate = lastDesiredRateRef.current;
+        videoElement.muted = isMuted;
         const playPromise = videoElement.play();
         if (playPromise) {
           playPromise.catch(() => {});
         }
-        pendingNativeSeekRef.current = null;
+
+        // Delay clearing the flag to avoid onRateChange(1) race condition
+        window.setTimeout(() => {
+          pendingNativeSeekRef.current = null;
+        }, 300);
         return true;
       } catch {
+        pendingNativeSeekRef.current = null;
         return false;
       }
     },
@@ -558,7 +603,6 @@ export default function PlayerModal({
       bilibiliPlayback?.proxyUrl,
       getNativeVideoElement,
       isYt,
-      nativePlaybackRate,
       youtubePlayback?.proxyUrl,
     ],
   );
@@ -586,8 +630,10 @@ export default function PlayerModal({
     if (youtubePlayerState === 1) {
       postYouTubeCommand('pauseVideo');
     } else {
+      postYouTubeCommand('setPlaybackRate', [youtubeIframePlaybackRate]);
       postYouTubeCommand('playVideo');
     }
+
   }, [
     usesNativeVideo,
     toggleNativePlayback,
@@ -600,6 +646,8 @@ export default function PlayerModal({
       const appliedRate = usesNativeVideo
         ? setNativeRate(nextRate)
         : applyYouTubeIframeRate(nextRate);
+
+      lastDesiredRateRef.current = appliedRate;
 
       if (options?.rememberManual) {
         lastManualRateRef.current = isOneRate(appliedRate) ? null : appliedRate;
@@ -686,6 +734,25 @@ export default function PlayerModal({
     ],
   );
 
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('needle-player-follow-mode', String(followMode));
+    }
+  }, [followMode]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('needle-player-mute', String(isMuted));
+    }
+    if (usesNativeVideo) {
+      const el = getNativeVideoElement();
+      if (el) el.muted = isMuted;
+    } else {
+      postYouTubeCommand(isMuted ? 'mute' : 'unMute');
+    }
+  }, [isMuted, usesNativeVideo, getNativeVideoElement, postYouTubeCommand]);
+
+
   // ── Keyboard interaction ────────────────────────────────────────────────────
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -725,6 +792,15 @@ export default function PlayerModal({
       }
       if (action.type === 'seek-step') {
         handleSeekStep(action.seconds);
+        return;
+      }
+      if (action.type === 'toggle-summary-follow') {
+        setFollowMode((v) => !v);
+        return;
+      }
+      if (action.type === 'toggle-mute') {
+        setIsMuted((v) => !v);
+        return;
       }
     };
 
@@ -818,9 +894,11 @@ export default function PlayerModal({
         if (usesNativeVideo) {
           getNativeVideoElement()?.play();
         } else {
+          postYouTubeCommand('setPlaybackRate', [youtubeIframePlaybackRate]);
           postYouTubeCommand('playVideo');
         }
       },
+
       onPause: () => {
         if (usesNativeVideo) {
           getNativeVideoElement()?.pause();
@@ -952,8 +1030,10 @@ export default function PlayerModal({
     if (!videoElement) return;
 
     focusPlayer();
-    videoElement.playbackRate = nativePlaybackRate;
+    videoElement.playbackRate = lastDesiredRateRef.current;
+    videoElement.muted = isMuted;
     setPlayerDuration(videoElement.duration);
+
 
     if (pendingSeconds !== null) {
       flushPendingNativeSeek(pendingSeconds);
@@ -994,13 +1074,27 @@ export default function PlayerModal({
       preload="auto"
       playsInline
       onLoadedMetadata={handleNativeLoadedMetadata}
-      onPlay={() => setNativeIsPlaying(true)}
+      onPlay={(event) => {
+        setNativeIsPlaying(true);
+        if (event.currentTarget.playbackRate !== lastDesiredRateRef.current) {
+          event.currentTarget.playbackRate = lastDesiredRateRef.current;
+        }
+      }}
+      onPlaying={(event) => {
+        if (event.currentTarget.playbackRate !== lastDesiredRateRef.current) {
+          event.currentTarget.playbackRate = lastDesiredRateRef.current;
+        }
+      }}
       onPause={() => setNativeIsPlaying(false)}
       onError={platform === 'youtube' ? handleYouTubeNativeError : undefined}
       onRateChange={(event) => {
         const nextRate = event.currentTarget.playbackRate;
         if (typeof nextRate === 'number' && Number.isFinite(nextRate)) {
-          setNativePlaybackRate(nextRate);
+          // Only update desired rate if it wasn't a sudden drop to 1 on seek
+          if (nextRate !== 1 || !pendingNativeSeekRef.current) {
+            setNativePlaybackRate(nextRate);
+            lastDesiredRateRef.current = nextRate;
+          }
         }
       }}
       onTimeUpdate={(event) => {
@@ -1187,6 +1281,7 @@ export default function PlayerModal({
               }}
             />
             <VideoInfoPanel
+              ref={videoInfoPanelRef}
               video={video}
               onTimestampClick={handleTimestampClick}
               currentPlayerSeconds={playerStartSeconds}
@@ -1235,7 +1330,60 @@ export default function PlayerModal({
                   transition: 'opacity 0.3s',
                 }}
               >
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: 20,
+                    right: 20,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 12,
+                    zIndex: 20,
+                  }}
+                >
+                  {isMuted && (
+                    <div
+                      style={{
+                        background: 'rgba(0,0,0,0.6)',
+                        color: '#fff',
+                        padding: '6px 10px',
+                        borderRadius: 8,
+                        fontSize: 12,
+                        backdropFilter: 'blur(4px)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6,
+                      }}
+                    >
+                      <svg
+                        viewBox="0 0 24 24"
+                        width="16"
+                        height="16"
+                        fill="currentColor"
+                      >
+                        <path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM19 12c0 3.12-1.99 5.77-4.75 6.75l.85 1.76c3.67-1.35 6.4-4.8 6.4-8.51 0-3.71-2.73-7.16-6.4-8.51l-.85 1.76C17.01 6.23 19 8.88 19 12zm-12 1h-2v-2h2v2zm12.35 6.04l-1.42 1.41-1.41-1.41 1.41-1.41 1.42 1.41zM5 14h3l3.29 3.29c.63.63 1.71.18 1.71-.71V7.41c0-.89-1.08-1.34-1.71-.71L8 10H5c-.55 0-1 .45-1 1v2c0 .55.45 1 1 1z" />
+                      </svg>
+                      已静音
+                    </div>
+                  )}
+                  {followMode && (
+                    <div
+                      style={{
+                        background: 'var(--accent-purple)',
+                        color: '#fff',
+                        padding: '6px 10px',
+                        borderRadius: 8,
+                        fontSize: 12,
+                        fontWeight: 600,
+                        boxShadow: '0 2px 8px rgba(139, 92, 246, 0.3)',
+                      }}
+                    >
+                      随播
+                    </div>
+                  )}
+                </div>
                 {!isMobile && !isAudioMode && (
+
                   <div
                     onClick={togglePlay}
                     style={{
@@ -1264,6 +1412,7 @@ export default function PlayerModal({
                           setYoutubePlayerLoaded(true);
                           focusPlayer();
                           requestYouTubeTelemetry();
+                          postYouTubeCommand(isMuted ? 'mute' : 'unMute');
                         }}
                         title={video.title}
                         tabIndex={0}
@@ -1339,6 +1488,8 @@ export default function PlayerModal({
                 usesNativeVideo ? nativePlaybackRate : youtubeIframePlaybackRate
               }
               chapters={chapters}
+              followMode={followMode}
+              onCursorChapterChange={setCursorChapterIndex}
               onSeek={handleTimestampClick}
               video={video}
               disabled={

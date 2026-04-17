@@ -125,7 +125,11 @@ export type PlayerKeyboardActionId =
   | 'rate-decrement'
   | 'rate-increment'
   | 'seek-backward'
-  | 'seek-forward';
+  | 'seek-forward'
+  | 'toggle-summary-follow'
+  | 'toggle-mute';
+
+
 
 export interface PlayerKeyboardBinding {
   action: PlayerKeyboardActionId;

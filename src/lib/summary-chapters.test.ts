@@ -216,3 +216,32 @@ Same time [01:00](https://youtube.com/watch?v=12345&t=60s)
     expect(chapters[0].title).toBe('Hello World');
   });
 });
+
+describe('findChapterIndexForSeconds', () => {
+  const { findChapterIndexForSeconds } = require('./summary-chapters');
+  const chapters = [
+    { seconds: 10, title: 'Ch 1', body: '' },
+    { seconds: 20, title: 'Ch 2', body: '' },
+    { seconds: 30, title: 'Ch 3', body: '' },
+  ];
+
+  it('returns -1 for empty chapters', () => {
+    expect(findChapterIndexForSeconds([], 15)).toBe(-1);
+  });
+
+  it('returns 0 if cursor is before the first chapter', () => {
+    expect(findChapterIndexForSeconds(chapters, 5)).toBe(0);
+  });
+
+  it('returns correct index when cursor is equal to a chapter start', () => {
+    expect(findChapterIndexForSeconds(chapters, 20)).toBe(1);
+  });
+
+  it('returns correct index when cursor is between chapters', () => {
+    expect(findChapterIndexForSeconds(chapters, 25)).toBe(1);
+  });
+
+  it('returns last index when cursor is after the last chapter', () => {
+    expect(findChapterIndexForSeconds(chapters, 50)).toBe(2);
+  });
+});

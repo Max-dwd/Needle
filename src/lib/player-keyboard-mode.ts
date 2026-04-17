@@ -23,15 +23,15 @@ export type PlayerKeyboardModeSettingsInput =
   Partial<PlayerKeyboardModeSettings>;
 
 export const DEFAULT_PLAYER_KEYBOARD_MODE_SETTINGS: PlayerKeyboardModeSettings =
-  {
-    enabled: true,
-    bindings: DEFAULT_PLAYER_KEYBOARD_BINDINGS,
-    rateTogglePreset: 2,
-    rateStep: 0.1,
-    seekSeconds: 10,
-    rateMin: 0.5,
-    rateMax: 3,
-  };
+{
+  enabled: true,
+  bindings: DEFAULT_PLAYER_KEYBOARD_BINDINGS,
+  rateTogglePreset: 2,
+  rateStep: 0.1,
+  seekSeconds: 10,
+  rateMin: 0.2,
+  rateMax: 8,
+};
 
 function cloneSettings(
   settings: PlayerKeyboardModeSettings,

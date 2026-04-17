@@ -368,6 +368,23 @@ export default function MarkdownRenderer({
       pushSectionSpacer();
       const level = headingMatch[1].length;
       const text = headingMatch[2];
+
+      let sectionSeconds: number | null = null;
+      for (let j = index; j < lines.length; j++) {
+        const checkLine = lines[j];
+        if (j > index && /^(#{1,3})\s+/.test(checkLine)) break;
+        const pattern = /\[([^\]]+)\]\(([^)]+)\)/g;
+        let pMatch;
+        while ((pMatch = pattern.exec(checkLine)) !== null) {
+          const s = parseSeekSeconds(pMatch[2], video);
+          if (typeof s === 'number') {
+            sectionSeconds = s;
+            break;
+          }
+        }
+        if (sectionSeconds !== null) break;
+      }
+
       const fontSize =
         level === 1
           ? isCompact ? 16 : 20
@@ -420,6 +437,7 @@ export default function MarkdownRenderer({
       elements.push(
         <div
           key={`h-${elements.length}`}
+          data-summary-seconds={sectionSeconds !== null ? sectionSeconds : undefined}
           style={{
             color: headingColor,
             fontWeight: level === 3 ? 700 : 800,

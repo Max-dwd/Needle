@@ -25,7 +25,7 @@ const DEFAULT_SETTINGS: PlayerKeyboardModeSettings = {
   rateStep: 0.1,
   seekSeconds: 10,
   rateMin: 0.5,
-  rateMax: 3,
+  rateMax: 16,
 };
 
 const BLOCKED_CAPTURE_KEYS = new Set([
@@ -165,6 +165,8 @@ export default function PlayerKeyboardSettingsPanel({
     'rate-increment': t.settings.appearance.actionRateIncrement,
     'seek-backward': t.settings.appearance.actionSeekBackward,
     'seek-forward': t.settings.appearance.actionSeekForward,
+    'toggle-summary-follow': '随播追随 (Follow Mode)',
+    'toggle-mute': '静音切换 (Mute)',
   };
 
   return (
@@ -305,7 +307,7 @@ export default function PlayerKeyboardSettingsPanel({
                   className="premium-input"
                   type="number"
                   min={draft.rateMin}
-                  max={draft.rateMax}
+                  max={Math.max(draft.rateMax, 100)}
                   step="0.1"
                   value={draft.rateTogglePreset}
                   disabled={loading || saving}
@@ -408,6 +410,7 @@ export default function PlayerKeyboardSettingsPanel({
                   className="premium-input"
                   type="number"
                   min={draft.rateMin}
+                  max={100}
                   step="0.1"
                   value={draft.rateMax}
                   disabled={loading || saving}

@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import type { SummaryChapter } from '@/lib/summary-chapters';
+import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
+import { type SummaryChapter, findChapterIndexForSeconds } from '@/lib/summary-chapters';
 import type { VideoWithMeta } from '@/types';
 import MarkdownRenderer from '@/components/MarkdownRenderer';
 import { formatSecondsLabel } from '@/lib/format';
@@ -15,6 +15,8 @@ interface PlayerBottomBarProps {
   video: VideoWithMeta;
   disabled?: boolean; // 播放源尚未就绪时置灰
   trailing?: React.ReactNode; // B 站画质/错误/重试按钮插槽
+  followMode?: boolean;
+  onCursorChapterChange?: (index: number | null) => void;
 }
 
 export default function PlayerBottomBar({
@@ -28,18 +30,20 @@ export default function PlayerBottomBar({
   video,
   disabled,
   trailing,
+  followMode = false,
+  onCursorChapterChange,
 }: PlayerBottomBarProps) {
-  const [hoveredChapterIndex, setHoveredChapterIndex] = useState<number | null>(
-    null,
-  );
   const [isDetailedMode, setIsDetailedMode] = useState(false);
   const trackRef = useRef<HTMLDivElement>(null);
+  const tooltipRef = useRef<HTMLDivElement>(null);
+  
+  const [hoverActive, setHoverActive] = useState(false);
+  const [cursorSeconds, setCursorSeconds] = useState(0);
+  const [cursorChapterIndex, setCursorChapterIndex] = useState<number | -1>(-1);
   const [tooltipLeft, setTooltipLeft] = useState(0);
-  const [trackWidth, setTrackWidth] = useState(0);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // 避免在输入框中按下 Shift 时触发切换
       if (
         e.target instanceof HTMLInputElement ||
         e.target instanceof HTMLTextAreaElement ||
@@ -63,8 +67,37 @@ export default function PlayerBottomBar({
     if (!trackRef.current) return;
     const rect = trackRef.current.getBoundingClientRect();
     const x = e.clientX - rect.left;
-    setTrackWidth((current) => (current === rect.width ? current : rect.width));
-    setTooltipLeft(Math.max(8, Math.min(x, rect.width - 8)));
+    const ratio = Math.min(1, Math.max(0, x / rect.width));
+    const cSecs = ratio * duration;
+    setCursorSeconds(cSecs);
+
+    const cIndex = findChapterIndexForSeconds(chapters, cSecs);
+    if (cIndex !== cursorChapterIndex) {
+      setCursorChapterIndex(cIndex);
+      onCursorChapterChange?.(cIndex === -1 ? null : cIndex);
+    }
+
+    let tWidth = 320;
+    if (tooltipRef.current) {
+      tWidth = tooltipRef.current.offsetWidth;
+    }
+    const tooltipCenterViewport = e.clientX;
+    const minCenter = tWidth / 2 + 8;
+    const maxCenter = window.innerWidth - tWidth / 2 - 8;
+    const clampedCenter = Math.max(minCenter, Math.min(tooltipCenterViewport, maxCenter));
+    setTooltipLeft(clampedCenter - rect.left);
+  };
+
+  const handleMouseEnter = () => {
+    setHoverActive(true);
+  };
+
+  const handleMouseLeave = () => {
+    setHoverActive(false);
+    if (cursorChapterIndex !== -1) {
+      setCursorChapterIndex(-1);
+      onCursorChapterChange?.(null);
+    }
   };
 
   const handleProgressClick = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -74,6 +107,20 @@ export default function PlayerBottomBar({
     const ratio = x / rect.width;
     onSeek(ratio * duration);
   };
+
+  useLayoutEffect(() => {
+    if (hoverActive && tooltipRef.current && trackRef.current) {
+      const rect = trackRef.current.getBoundingClientRect();
+      const tooltipCenterViewport = rect.left + tooltipLeft;
+      const tWidth = tooltipRef.current.offsetWidth;
+      const minCenter = tWidth / 2 + 8;
+      const maxCenter = window.innerWidth - tWidth / 2 - 8;
+      const clampedCenter = Math.max(minCenter, Math.min(tooltipCenterViewport, maxCenter));
+      if (clampedCenter !== tooltipCenterViewport) {
+        setTooltipLeft(clampedCenter - rect.left);
+      }
+    }
+  }, [isDetailedMode, hoverActive, tooltipLeft]);
 
   const progressRatio =
     duration > 0 ? Math.min(1, Math.max(0, currentSeconds / duration)) : 0;
@@ -127,16 +174,29 @@ export default function PlayerBottomBar({
         {formatSecondsLabel(currentSeconds)} / {formatSecondsLabel(duration)}
       </div>
 
-      <div
-        style={{
-          fontSize: 12,
-          color:
-            playbackRate === 1 ? 'var(--text-muted)' : 'var(--accent-purple)',
-          fontVariantNumeric: 'tabular-nums',
-          flexShrink: 0,
-        }}
-      >
-        {playbackRate.toFixed(playbackRate % 1 === 0 ? 0 : 2)}×
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+        {followMode && (
+          <div
+            style={{
+              fontSize: 11,
+              color: 'var(--accent-purple)',
+              display: 'flex',
+              alignItems: 'center',
+              fontWeight: 600,
+            }}
+          >
+            ↓ 追随
+          </div>
+        )}
+        <div
+          style={{
+            fontSize: 12,
+            color: playbackRate === 1 ? 'var(--text-muted)' : 'var(--accent-purple)',
+            fontVariantNumeric: 'tabular-nums',
+          }}
+        >
+          {playbackRate.toFixed(playbackRate % 1 === 0 ? 0 : 2)}×
+        </div>
       </div>
 
       <div
@@ -146,15 +206,16 @@ export default function PlayerBottomBar({
         aria-valuemax={duration}
         aria-valuenow={currentSeconds}
         aria-valuetext={formatSecondsLabel(currentSeconds)}
-        onMouseLeave={() => {
-          setHoveredChapterIndex(null);
-        }}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
         onMouseMove={handleMouseMove}
         onClick={handleProgressClick}
         style={{
           position: 'relative',
           flex: 1,
           height: 6,
+          padding: '8px 0',
+          backgroundClip: 'content-box',
           display: 'flex',
           alignItems: 'center',
           cursor: duration > 0 ? 'pointer' : 'default',
@@ -164,7 +225,9 @@ export default function PlayerBottomBar({
         <div
           style={{
             position: 'absolute',
-            inset: 0,
+            left: 0,
+            right: 0,
+            height: 6,
             borderRadius: 3,
             overflow: 'hidden',
             background: 'var(--bg-hover)',
@@ -206,12 +269,47 @@ export default function PlayerBottomBar({
             })}
         </div>
 
-        {/* 2. Interaction Layer: Chapters for Hover/Click tooltips */}
+        {/* 2. visual thick layer for hover */}
+        {hasChapters && hoverActive && cursorChapterIndex !== -1 && (() => {
+          const ch = chapters[cursorChapterIndex];
+          if (!ch) return null;
+          const startSeconds = Math.min(duration, Math.max(0, ch.seconds));
+          const nextSeconds = Math.min(
+            duration,
+            Math.max(startSeconds, chapters[cursorChapterIndex + 1]?.seconds ?? duration),
+          );
+          const segDuration = nextSeconds - startSeconds;
+          if (segDuration <= 0) return null;
+          const leftPct = (startSeconds / duration) * 100;
+          const widthPct = (segDuration / duration) * 100;
+          
+          return (
+            <div
+              style={{
+                position: 'absolute',
+                pointerEvents: 'none',
+                left: `${leftPct}%`,
+                width: `${widthPct}%`,
+                top: 'calc(50% - 5px)',
+                height: 10,
+                background: 'var(--accent-purple)',
+                opacity: 0.9,
+                borderRadius: 3,
+                transition: 'top 80ms, height 80ms, opacity 80ms',
+                zIndex: 2,
+              }}
+            />
+          );
+        })()}
+
+        {/* 3. Interaction Layer (a11y buttons) */}
         {hasChapters && (
           <div
             style={{
               position: 'absolute',
-              inset: 0,
+              left: 0,
+              right: 0,
+              height: 6,
             }}
           >
             {chapters.map((ch, i) => {
@@ -230,13 +328,6 @@ export default function PlayerBottomBar({
                   key={i}
                   role="button"
                   aria-label={`跳转到章节：${ch.title}（${formatSecondsLabel(ch.seconds)}）`}
-                  onMouseEnter={() => {
-                    setHoveredChapterIndex(i);
-                  }}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onSeek(ch.seconds);
-                  }}
                   style={{
                     position: 'absolute',
                     left: `${leftPct}%`,
@@ -251,25 +342,23 @@ export default function PlayerBottomBar({
           </div>
         )}
 
-        {hoveredChapterIndex !== null && chapters[hoveredChapterIndex] && (
+        {/* 4. Tooltip */}
+        {hoverActive && (
           <div
             role="tooltip"
             style={{
               position: 'absolute',
-              bottom: 'calc(100% + 8px)',
-              left: Math.max(
-                8,
-                Math.min(tooltipLeft, Math.max(8, trackWidth - 8)),
-              ),
+              bottom: 'calc(50% + 12px)',
+              left: tooltipLeft,
               transform: 'translateX(-50%)',
             }}
             className="player-bottom-bar-tooltip"
           >
             <div
+              ref={tooltipRef}
               style={{
                 position: 'relative',
                 left: 0,
-                transform: `translateX(calc(-50%))`,
                 maxWidth: isDetailedMode ? 500 : 320,
                 width: 'max-content',
                 background: 'var(--bg-primary)',
@@ -279,53 +368,58 @@ export default function PlayerBottomBar({
                 boxShadow: '0 8px 32px rgba(0,0,0,0.45)',
                 pointerEvents: 'none',
                 zIndex: 100,
-                transition: 'all 120ms',
+                transition: 'width 120ms',
               }}
             >
               <div
                 style={{
                   color: 'var(--text-muted)',
                   fontSize: 11,
-                  marginBottom: 2,
+                  marginBottom: cursorChapterIndex !== -1 && chapters[cursorChapterIndex] ? 2 : 0,
                 }}
               >
-                {formatSecondsLabel(chapters[hoveredChapterIndex].seconds)}
+                {formatSecondsLabel(cursorSeconds)}
               </div>
-              <div
-                style={{
-                  color: 'var(--text-primary)',
-                  fontSize: 13,
-                  fontWeight: 600,
-                  display: '-webkit-box',
-                  WebkitLineClamp: isDetailedMode ? 'none' : 2,
-                  WebkitBoxOrient: 'vertical',
-                  overflow: 'hidden',
-                  whiteSpace: 'normal',
-                  lineHeight: 1.4,
-                }}
-              >
-                {chapters[hoveredChapterIndex].title}
-              </div>
-              {isDetailedMode && chapters[hoveredChapterIndex].body && (
-                <div
-                  style={{
-                    color: 'var(--text-secondary)',
-                    fontSize: 12,
-                    marginTop: 6,
-                    maxHeight: 'min(600px, 80vh)',
-                    overflowY: 'auto',
-                    pointerEvents: 'auto',
-                  }}
-                >
-                  <MarkdownRenderer
-                    markdown={chapters[hoveredChapterIndex].body}
-                    video={video}
-                    onTimestampClick={onSeek}
-                    tone="dark"
-                    fontSizeVariant="compact"
-                    hideTimestamps={true}
-                  />
-                </div>
+              
+              {cursorChapterIndex !== -1 && chapters[cursorChapterIndex] && (
+                <>
+                  <div
+                    style={{
+                      color: 'var(--text-primary)',
+                      fontSize: 13,
+                      fontWeight: 600,
+                      display: '-webkit-box',
+                      WebkitLineClamp: isDetailedMode ? 'none' : 2,
+                      WebkitBoxOrient: 'vertical',
+                      overflow: 'hidden',
+                      whiteSpace: 'normal',
+                      lineHeight: 1.4,
+                    }}
+                  >
+                    {chapters[cursorChapterIndex].title}
+                  </div>
+                  {isDetailedMode && chapters[cursorChapterIndex].body && (
+                    <div
+                      style={{
+                        color: 'var(--text-secondary)',
+                        fontSize: 12,
+                        marginTop: 6,
+                        maxHeight: 'min(600px, 80vh)',
+                        overflowY: 'auto',
+                        pointerEvents: 'auto',
+                      }}
+                    >
+                      <MarkdownRenderer
+                        markdown={chapters[cursorChapterIndex].body}
+                        video={video}
+                        onTimestampClick={onSeek}
+                        tone="dark"
+                        fontSizeVariant="compact"
+                        hideTimestamps={true}
+                      />
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </div>
@@ -336,3 +430,4 @@ export default function PlayerBottomBar({
     </div>
   );
 }
+

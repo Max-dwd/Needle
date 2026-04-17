@@ -5,6 +5,8 @@ export const PLAYER_KEYBOARD_ACTION_IDS = [
   'rate-increment',
   'seek-backward',
   'seek-forward',
+  'toggle-summary-follow',
+  'toggle-mute',
 ] as const;
 
 export type PlayerKeyboardActionId =
@@ -22,6 +24,8 @@ export const DEFAULT_PLAYER_KEYBOARD_BINDINGS: PlayerKeyboardBinding[] = [
   { action: 'rate-increment', key: 'd' },
   { action: 'seek-backward', key: 'z' },
   { action: 'seek-forward', key: 'x' },
+  { action: 'toggle-summary-follow', key: 'f' },
+  { action: 'toggle-mute', key: 'm' },
 ];
 
 export type PlayerKeyboardAction =
@@ -30,7 +34,9 @@ export type PlayerKeyboardAction =
   | { type: 'play-pause' }
   | { type: 'rate-toggle' }
   | { type: 'rate-step'; delta: number }
-  | { type: 'seek-step'; seconds: number };
+  | { type: 'seek-step'; seconds: number }
+  | { type: 'toggle-summary-follow' }
+  | { type: 'toggle-mute' };
 
 export interface KeyboardEventLike {
   key: string;
@@ -117,6 +123,10 @@ export function resolvePlayerKeyboardAction(
       return { type: 'seek-step', seconds: -settings.seekSeconds };
     case 'seek-forward':
       return { type: 'seek-step', seconds: settings.seekSeconds };
+    case 'toggle-summary-follow':
+      return { type: 'toggle-summary-follow' };
+    case 'toggle-mute':
+      return { type: 'toggle-mute' };
     default:
       return { type: 'none' };
   }
