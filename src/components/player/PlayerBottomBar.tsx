@@ -6,12 +6,12 @@ interface PlayerBottomBarProps {
   isPlaying: boolean;
   onTogglePlay: () => void;
   currentSeconds: number;
-  duration: number;            // 0 表示未知
+  duration: number; // 0 表示未知
   playbackRate: number;
   chapters: SummaryChapter[];
   onSeek: (seconds: number) => void;
-  disabled?: boolean;          // 播放源尚未就绪时置灰
-  trailing?: React.ReactNode;  // B 站画质/错误/重试按钮插槽
+  disabled?: boolean; // 播放源尚未就绪时置灰
+  trailing?: React.ReactNode; // B 站画质/错误/重试按钮插槽
 }
 
 export default function PlayerBottomBar({
@@ -25,16 +25,16 @@ export default function PlayerBottomBar({
   disabled,
   trailing,
 }: PlayerBottomBarProps) {
-  const [hoveredChapterIndex, setHoveredChapterIndex] = useState<number | null>(null);
+  const [hoveredChapterIndex, setHoveredChapterIndex] = useState<number | null>(
+    null,
+  );
   const [isShiftHeld, setIsShiftHeld] = useState(false);
   const trackRef = useRef<HTMLDivElement>(null);
   const [tooltipLeft, setTooltipLeft] = useState(0);
+  const [trackWidth, setTrackWidth] = useState(0);
 
   useEffect(() => {
-    if (hoveredChapterIndex === null) {
-      setIsShiftHeld(false);
-      return;
-    }
+    if (hoveredChapterIndex === null) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Shift') setIsShiftHeld(true);
@@ -55,28 +55,21 @@ export default function PlayerBottomBar({
     if (!trackRef.current) return;
     const rect = trackRef.current.getBoundingClientRect();
     const x = e.clientX - rect.left;
-    const cw = rect.width;
-    const tw = isShiftHeld ? 420 : 320; // max width
-    
-    // clamp center position
-    const minCenter = 8 + tw / 2;
-    const maxCenter = Math.max(minCenter, cw - 8 - tw / 2);
-    
-    // Actually, setting left strictly clamped avoids overflow.
-    // If the tooltip is narrower than tw, it's safer.
-    setTooltipLeft(Math.max(8, Math.min(x, cw - 8)));
+    setTrackWidth((current) => (current === rect.width ? current : rect.width));
+    setTooltipLeft(Math.max(8, Math.min(x, rect.width - 8)));
   };
 
   const handleProgressClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (duration <= 0 || chapters.length > 0) return;
+    if (duration <= 0) return;
     const rect = e.currentTarget.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const ratio = x / rect.width;
     onSeek(ratio * duration);
   };
 
-  const progressRatio = duration > 0 ? Math.min(1, Math.max(0, currentSeconds / duration)) : 0;
-  
+  const progressRatio =
+    duration > 0 ? Math.min(1, Math.max(0, currentSeconds / duration)) : 0;
+
   const hasChapters = chapters.length > 0 && duration > 0;
 
   return (
@@ -115,21 +108,26 @@ export default function PlayerBottomBar({
         {isPlaying ? 'Ⅱ' : '▶'}
       </button>
 
-      <div style={{
-        fontSize: 12,
-        fontVariantNumeric: 'tabular-nums',
-        color: 'var(--text-primary)',
-        flexShrink: 0,
-      }}>
+      <div
+        style={{
+          fontSize: 12,
+          fontVariantNumeric: 'tabular-nums',
+          color: 'var(--text-primary)',
+          flexShrink: 0,
+        }}
+      >
         {formatSecondsLabel(currentSeconds)} / {formatSecondsLabel(duration)}
       </div>
 
-      <div style={{
-        fontSize: 12,
-        color: playbackRate === 1 ? 'var(--text-muted)' : 'var(--accent-purple)',
-        fontVariantNumeric: 'tabular-nums',
-        flexShrink: 0,
-      }}>
+      <div
+        style={{
+          fontSize: 12,
+          color:
+            playbackRate === 1 ? 'var(--text-muted)' : 'var(--accent-purple)',
+          fontVariantNumeric: 'tabular-nums',
+          flexShrink: 0,
+        }}
+      >
         {playbackRate.toFixed(playbackRate % 1 === 0 ? 0 : 2)}×
       </div>
 
@@ -145,44 +143,57 @@ export default function PlayerBottomBar({
           setIsShiftHeld(false);
         }}
         onMouseMove={handleMouseMove}
-        onClick={hasChapters ? undefined : handleProgressClick}
+        onClick={handleProgressClick}
         style={{
           position: 'relative',
           flex: 1,
           height: 6,
           borderRadius: 3,
-          background: hasChapters ? 'transparent' : 'var(--bg-hover)',
+          background: 'var(--bg-hover)',
           display: 'flex',
           alignItems: 'center',
           cursor: duration > 0 ? 'pointer' : 'default',
         }}
       >
         {hasChapters && (
-          <div style={{
-            position: 'absolute',
-            inset: 0,
-            display: 'flex',
-            gap: 2,
-          }}>
+          <div
+            style={{
+              position: 'absolute',
+              inset: 0,
+            }}
+          >
             {chapters.map((ch, i) => {
-              const nextSeconds = chapters[i + 1]?.seconds ?? duration;
-              const segDuration = Math.max(0, Math.min(duration, nextSeconds) - ch.seconds);
+              const startSeconds = Math.min(duration, Math.max(0, ch.seconds));
+              const nextSeconds = Math.min(
+                duration,
+                Math.max(startSeconds, chapters[i + 1]?.seconds ?? duration),
+              );
+              const segDuration = nextSeconds - startSeconds;
+              if (segDuration <= 0) return null;
+              const leftPct = (startSeconds / duration) * 100;
               const widthPct = (segDuration / duration) * 100;
               return (
                 <div
                   key={i}
                   role="button"
                   aria-label={`跳转到章节：${ch.title}（${formatSecondsLabel(ch.seconds)}）`}
-                  onMouseEnter={() => setHoveredChapterIndex(i)}
+                  onMouseEnter={(event) => {
+                    setHoveredChapterIndex(i);
+                    setIsShiftHeld(event.shiftKey);
+                  }}
                   onClick={(e) => {
                     e.stopPropagation();
                     onSeek(ch.seconds);
                   }}
                   style={{
+                    position: 'absolute',
+                    left: `${leftPct}%`,
                     width: `${widthPct}%`,
                     height: '100%',
                     background: 'var(--bg-hover)',
                     borderRadius: 3,
+                    boxShadow:
+                      i > 0 ? 'inset 2px 0 0 var(--bg-secondary)' : undefined,
                   }}
                 />
               );
@@ -190,18 +201,20 @@ export default function PlayerBottomBar({
           </div>
         )}
 
-        <div style={{
-          position: 'absolute',
-          left: 0,
-          top: 0,
-          bottom: 0,
-          width: `${progressRatio * 100}%`,
-          background: 'var(--accent-purple)',
-          opacity: 0.75,
-          borderRadius: 3,
-          pointerEvents: 'none',
-          mixBlendMode: 'normal',
-        }} />
+        <div
+          style={{
+            position: 'absolute',
+            left: 0,
+            top: 0,
+            bottom: 0,
+            width: `${progressRatio * 100}%`,
+            background: 'var(--accent-purple)',
+            opacity: 0.75,
+            borderRadius: 3,
+            pointerEvents: 'none',
+            mixBlendMode: 'normal',
+          }}
+        />
 
         {hoveredChapterIndex !== null && chapters[hoveredChapterIndex] && (
           <div
@@ -209,16 +222,15 @@ export default function PlayerBottomBar({
             style={{
               position: 'absolute',
               bottom: 'calc(100% + 8px)',
-              left: Math.max(8, Math.min(tooltipLeft, (trackRef.current?.getBoundingClientRect().width || 0) - 8)),
+              left: Math.max(
+                8,
+                Math.min(tooltipLeft, Math.max(8, trackWidth - 8)),
+              ),
               transform: 'translateX(-50%)',
-              // Use CSS to bound the translation
-              // better: just compute transform clamp if needed, but left/right max avoids spilling.
-              // Let's use simple negative margin hack if bounded.
             }}
-            // To prevent overflow, we can just use CSS:
             className="player-bottom-bar-tooltip"
           >
-            <div 
+            <div
               style={{
                 position: 'relative',
                 left: 0,
@@ -235,32 +247,42 @@ export default function PlayerBottomBar({
                 transition: 'max-width 120ms',
               }}
             >
-              <div style={{ color: 'var(--text-muted)', fontSize: 11, marginBottom: 2 }}>
+              <div
+                style={{
+                  color: 'var(--text-muted)',
+                  fontSize: 11,
+                  marginBottom: 2,
+                }}
+              >
                 {formatSecondsLabel(chapters[hoveredChapterIndex].seconds)}
               </div>
-              <div style={{
-                color: 'var(--text-primary)',
-                fontSize: 13,
-                fontWeight: 600,
-                display: '-webkit-box',
-                WebkitLineClamp: 2,
-                WebkitBoxOrient: 'vertical',
-                overflow: 'hidden',
-                whiteSpace: 'normal',
-              }}>
+              <div
+                style={{
+                  color: 'var(--text-primary)',
+                  fontSize: 13,
+                  fontWeight: 600,
+                  display: '-webkit-box',
+                  WebkitLineClamp: 2,
+                  WebkitBoxOrient: 'vertical',
+                  overflow: 'hidden',
+                  whiteSpace: 'normal',
+                }}
+              >
                 {chapters[hoveredChapterIndex].title}
               </div>
               {isShiftHeld && chapters[hoveredChapterIndex].body && (
-                <div style={{
-                  color: 'var(--text-secondary)',
-                  fontSize: 12,
-                  whiteSpace: 'pre-wrap',
-                  marginTop: 6,
-                  display: '-webkit-box',
-                  WebkitLineClamp: 8,
-                  WebkitBoxOrient: 'vertical',
-                  overflow: 'hidden',
-                }}>
+                <div
+                  style={{
+                    color: 'var(--text-secondary)',
+                    fontSize: 12,
+                    whiteSpace: 'pre-wrap',
+                    marginTop: 6,
+                    display: '-webkit-box',
+                    WebkitLineClamp: 8,
+                    WebkitBoxOrient: 'vertical',
+                    overflow: 'hidden',
+                  }}
+                >
                   {chapters[hoveredChapterIndex].body}
                 </div>
               )}
@@ -269,11 +291,7 @@ export default function PlayerBottomBar({
         )}
       </div>
 
-      {trailing && (
-        <div style={{ marginLeft: 'auto' }}>
-          {trailing}
-        </div>
-      )}
+      {trailing && <div style={{ marginLeft: 'auto' }}>{trailing}</div>}
     </div>
   );
 }

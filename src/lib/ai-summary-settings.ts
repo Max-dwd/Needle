@@ -26,16 +26,19 @@ export const DEFAULT_AI_SUMMARY_PROMPT_TEMPLATE = [
   '1. 只用中文输出最终总结。',
   '2. 尽可能覆盖全文，不要只覆盖前半段或只摘最显眼的观点。',
   '3. 要覆盖：主论点、关键论据、例子、转折、例外、结论、行动建议。',
-  '4. 以“总结可读性”为中心组织结构，不要写成逐段字幕改写，不要写成流水账时间轴。',
-  '5. 全文时间戳总数不超过15个，只在最能支撑结论或最关键的观点后附 1-2 个时间戳。',
-  '6. 时间戳只能使用“完整可点击 Markdown 链接”，禁止输出裸时间、禁止只输出 `[mm:ss]`、禁止输出不带 URL 的占位符。',
-  '7. 如果无法确定某个时间戳对应的完整链接，就不要输出该时间戳。',
-  '8. 如果字幕存在明显 ASR 错字，按语义纠正后再总结，但不要编造原文没有的信息。',
-  '9. 如果有广告、寒暄、引流、口播或免责声明，不要混入核心总结。',
-  '10. 不要输出“可能”“大概”“猜测链接”等不确定措辞。',
-  '11. 注意上下文的连贯性，读者能只通过看这个总结就能理解通畅。例如，下文出现的术语或缩写，一定要在前文介绍。',
-  '12. 时间戳必须来自字幕中实际出现的时间，不得推测或编造。所有时间戳不得超过视频总时长。',
-  '13. 注意在时长超过15分钟的视频中，在整15分钟处会有因为音频切分，导致字幕识别不准确的情况。',
+  '4. 详细总结的 `##` 小节**标题必须按视频时间先后排列**：每个小节的标题以锚点时间戳开头，该时间戳严格晚于上一小节，不得回跳、不得重叠。这是为进度条章节导航提供稳定的时间骨架。',
+  '5. 小节**内部**不受时间限制，可以自由引用视频任意位置的时间戳来汇总跨时段的同一主题或呼应前后观点。不要写成逐条字幕改写。',
+  '6. 小节数量建议：视频 < 20 分钟 3-5 节，20-60 分钟 5-8 节，> 60 分钟 8-12 节。相邻小节锚点间隔应大致均匀，避免某一节跨越一半视频，也不要把极短的过场独立成节。',
+  '7. 同一主题在视频多处出现时，归属到该主题被**首次系统性讨论**的那一小节，在正文里用内部时间戳链接指向其他位置（例如"呼应 [mm:ss](...)"、"参见 [mm:ss](...)"），不要为同一主题创建两个 `##` 小节。',
+  '8. 时间戳数量：每个 `##` 小节标题必须带一个锚点时间戳（该节起点），正文按需附 0-3 个支撑性时间戳。全文时间戳总数不超过 30 个。',
+  '9. 时间戳只能使用"完整可点击 Markdown 链接"，禁止输出裸时间、禁止只输出 `[mm:ss]`、禁止输出不带 URL 的占位符。',
+  '10. 如果无法确定某个时间戳对应的完整链接，就不要输出该时间戳。',
+  '11. 如果字幕存在明显 ASR 错字，按语义纠正后再总结，但不要编造原文没有的信息。',
+  '12. 如果有广告、寒暄、引流、口播或免责声明，不要混入核心总结。',
+  '13. 不要输出"可能""大概""猜测链接"等不确定措辞。',
+  '14. 注意上下文的连贯性，读者只看总结也能理解通畅。例如下文出现的术语或缩写，一定要在前文介绍。',
+  '15. 时间戳必须来自字幕中实际出现的时间，不得推测或编造。所有时间戳不得超过视频总时长。',
+  '16. 注意在时长超过15分钟的视频中，在整15分钟处会有因为音频切分，导致字幕识别不准确的情况。',
   '',
   '时间戳链接格式规则：',
   '- YouTube 必须写成：`[00:17](https://www.youtube.com/watch?v={{video_id}}&t=17s)`',
@@ -50,16 +53,18 @@ export const DEFAULT_AI_SUMMARY_PROMPT_TEMPLATE = [
   '- 检查每个时间戳是否都是完整 Markdown 链接。',
   '- 检查每个时间戳的URL是否和当前视频的`{{source_url}}`一致。',
   '- 检查链接是否使用当前视频的 `{{video_id}}`，不要链接到其他视频。',
+  '- 检查每个 `##` 小节标题开头是否有锚点时间戳，且这些锚点时间戳严格递增；若有回跳，调整小节顺序或合并。',
   '',
   '最终输出必须使用 Markdown，严格遵循以下结构：',
   '',
   '# 核心总结',
-  '用 1-2 段或若干条项目符号，尽可能完整当精简地概括全文主旨。关键词/重要信息加粗。',
+  '用 1-2 段或若干条项目符号，尽可能完整但精简地概括全文主旨。关键词/重要信息加粗。',
   '',
   '# 详细总结',
-  '按主题组织若干小节。每节解释一个主要部分，标题要清晰、简洁、有吸引力。每个小节之间空一行。关键词加粗。每个小节的内容尽可能用项目符号搭配术语/短语/短句/时间戳来总结。',
-  '## 1. 小节标题',
-  '- **术语/短语/短报**：一到两个短句+时间戳。',
+  '按视频时间顺序组织若干小节：小节标题以锚点时间戳开头、标注该节覆盖内容的起点；标题文字清晰、简洁、有吸引力。小节之间空一行。关键词加粗。小节内容用项目符号搭配术语/短语/短句+时间戳来总结；正文时间戳不受时间顺序限制，可跨时段汇总同一主题、呼应前后观点。',
+  '以下是参考格式, 注意小节标题前要带数字序号和锚点时间戳',
+  '## 1. 小节标题 [12:34](完整URL)',
+  '- **术语/短语/短报**：一到两个短句+时间戳，必要时可跨时段呼应 [28:10](完整URL)。',
   '',
   '# 结论 / 观点 / 建议',
   '总结视频最后的判断、观点归纳、建议或行动项。',
@@ -359,16 +364,16 @@ function normalizeConfigDocument(
   const normalizedModels =
     Array.isArray(doc?.models) && doc.models.length > 0
       ? dedupeModels(
-          doc.models
-            .map((model, index) =>
-              normalizeModelInput(
-                model,
-                fallbackDoc.models[index] || fallbackDoc.models[0],
-                index,
-              ),
-            )
-            .filter((model): model is AiSummaryModelConfig => Boolean(model)),
-        )
+        doc.models
+          .map((model, index) =>
+            normalizeModelInput(
+              model,
+              fallbackDoc.models[index] || fallbackDoc.models[0],
+              index,
+            ),
+          )
+          .filter((model): model is AiSummaryModelConfig => Boolean(model)),
+      )
       : fallbackDoc.models;
 
   const promptTemplates = normalizePromptTemplates(
@@ -416,14 +421,14 @@ function normalizeConfigDocument(
     1,
     Math.floor(
       Number((doc as Record<string, unknown>)?.sharedTokensPerMinute) ||
-        1_000_000,
+      1_000_000,
     ),
   );
   const subtitleFallbackTokenReserve = Math.max(
     1,
     Math.floor(
       Number((doc as Record<string, unknown>)?.subtitleFallbackTokenReserve) ||
-        120_000,
+      120_000,
     ),
   );
 
@@ -600,8 +605,8 @@ function buildConfigFromExisting(
     input.subtitleApiPromptTemplate !== undefined ||
     (input.promptTemplates &&
       (Object.prototype.hasOwnProperty.call(input.promptTemplates, 'subtitleSegment') ||
-       Object.prototype.hasOwnProperty.call(input.promptTemplates, 'chatObsidian') ||
-       Object.prototype.hasOwnProperty.call(input.promptTemplates, 'chatRoast'))) ||
+        Object.prototype.hasOwnProperty.call(input.promptTemplates, 'chatObsidian') ||
+        Object.prototype.hasOwnProperty.call(input.promptTemplates, 'chatRoast'))) ||
     input.promptTemplates !== undefined
   ) {
     const currentTemplates = next.promptTemplates;
@@ -613,38 +618,38 @@ function buildConfigFromExisting(
         default:
           input.promptTemplate !== undefined
             ? ensureSummaryTemplateIncludesSubtitle(
-                normalizeText(
-                  input.promptTemplate,
-                  currentTemplates.default || DEFAULT_AI_SUMMARY_PROMPT_TEMPLATE,
-                ),
-              )
-            : ensureSummaryTemplateIncludesSubtitle(
-                normalizeText(
-                  mergedTemplates.default,
-                  currentTemplates.default || DEFAULT_AI_SUMMARY_PROMPT_TEMPLATE,
-                ),
+              normalizeText(
+                input.promptTemplate,
+                currentTemplates.default || DEFAULT_AI_SUMMARY_PROMPT_TEMPLATE,
               ),
+            )
+            : ensureSummaryTemplateIncludesSubtitle(
+              normalizeText(
+                mergedTemplates.default,
+                currentTemplates.default || DEFAULT_AI_SUMMARY_PROMPT_TEMPLATE,
+              ),
+            ),
         subtitleApi:
           input.subtitleApiPromptTemplate !== undefined
             ? normalizeText(
-                input.subtitleApiPromptTemplate,
-                currentTemplates.subtitleApi ||
-                  DEFAULT_AI_SUBTITLE_PROMPT_TEMPLATE,
-              )
+              input.subtitleApiPromptTemplate,
+              currentTemplates.subtitleApi ||
+              DEFAULT_AI_SUBTITLE_PROMPT_TEMPLATE,
+            )
             : normalizeText(
-                mergedTemplates.subtitleApi,
-                currentTemplates.subtitleApi ||
-                  DEFAULT_AI_SUBTITLE_PROMPT_TEMPLATE,
-              ),
+              mergedTemplates.subtitleApi,
+              currentTemplates.subtitleApi ||
+              DEFAULT_AI_SUBTITLE_PROMPT_TEMPLATE,
+            ),
         subtitleSegment: normalizeText(
           mergedTemplates.subtitleSegment,
           currentTemplates.subtitleSegment ||
-            DEFAULT_AI_SUBTITLE_SEGMENT_PROMPT_TEMPLATE,
+          DEFAULT_AI_SUBTITLE_SEGMENT_PROMPT_TEMPLATE,
         ),
         chatObsidian: normalizeText(
           mergedTemplates.chatObsidian,
           currentTemplates.chatObsidian ||
-            DEFAULT_AI_CHAT_OBSIDIAN_PROMPT_TEMPLATE,
+          DEFAULT_AI_CHAT_OBSIDIAN_PROMPT_TEMPLATE,
         ),
         chatRoast: normalizeText(
           mergedTemplates.chatRoast,
@@ -652,7 +657,7 @@ function buildConfigFromExisting(
         ),
       },
     };
-}
+  }
 
   if (Array.isArray(input.models)) {
     const fallbackModels =
@@ -662,16 +667,16 @@ function buildConfigFromExisting(
     const nextModels =
       input.models.length > 0
         ? dedupeModels(
-            input.models
-              .map((model, index) =>
-                normalizeModelInput(
-                  model,
-                  fallbackModels[index] || fallbackModels[0],
-                  index,
-                ),
-              )
-              .filter((model): model is AiSummaryModelConfig => Boolean(model)),
-          )
+          input.models
+            .map((model, index) =>
+              normalizeModelInput(
+                model,
+                fallbackModels[index] || fallbackModels[0],
+                index,
+              ),
+            )
+            .filter((model): model is AiSummaryModelConfig => Boolean(model)),
+        )
         : fallbackModels;
 
     next = {
@@ -690,35 +695,35 @@ function buildConfigFromExisting(
     const nextModels =
       next.models.length > 0
         ? next.models.map((model) => {
-            if (model.id !== targetId) return model;
-            return {
-              ...model,
-              endpoint:
-                input.endpoint !== undefined
-                  ? normalizeText(input.endpoint, model.endpoint)
-                  : model.endpoint,
-              apiKey:
-                input.apiKey !== undefined
-                  ? normalizeText(input.apiKey, model.apiKey)
-                  : model.apiKey,
-              model:
-                input.model !== undefined
-                  ? normalizeText(input.model, model.model)
-                  : model.model,
-            };
-          })
+          if (model.id !== targetId) return model;
+          return {
+            ...model,
+            endpoint:
+              input.endpoint !== undefined
+                ? normalizeText(input.endpoint, model.endpoint)
+                : model.endpoint,
+            apiKey:
+              input.apiKey !== undefined
+                ? normalizeText(input.apiKey, model.apiKey)
+                : model.apiKey,
+            model:
+              input.model !== undefined
+                ? normalizeText(input.model, model.model)
+                : model.model,
+          };
+        })
         : [
-            {
-              id: targetId,
-              name: '默认模型',
-              endpoint: normalizeText(
-                input.endpoint,
-                DEFAULT_AI_SUMMARY_ENDPOINT,
-              ),
-              apiKey: normalizeText(input.apiKey, ''),
-              model: normalizeText(input.model, DEFAULT_AI_SUMMARY_MODEL),
-            },
-          ];
+          {
+            id: targetId,
+            name: '默认模型',
+            endpoint: normalizeText(
+              input.endpoint,
+              DEFAULT_AI_SUMMARY_ENDPOINT,
+            ),
+            apiKey: normalizeText(input.apiKey, ''),
+            model: normalizeText(input.model, DEFAULT_AI_SUMMARY_MODEL),
+          },
+        ];
 
     next = {
       ...next,
@@ -774,7 +779,7 @@ function buildConfigFromExisting(
       1,
       Math.floor(
         input.subtitleFallbackTokenReserve ||
-          next.subtitleFallbackTokenReserve,
+        next.subtitleFallbackTokenReserve,
       ),
     );
   }

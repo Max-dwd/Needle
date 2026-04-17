@@ -73,7 +73,7 @@ Body
 
   it('multiple headings and sorting', () => {
     const markdown = `
-### [05:00](https://youtube.com/watch?v=12345&t=300s) Late Chapter
+## [05:00](https://youtube.com/watch?v=12345&t=300s) Late Chapter
 Late text
 ## [01:00](https://youtube.com/watch?v=12345&t=60s) Early Chapter
 Early text
@@ -86,7 +86,7 @@ Early text
     expect(chapters[1].title).toBe('Late Chapter');
   });
 
-  it('cuts parent body at child headings and emits child chapters independently', () => {
+  it('uses h2 headings as chapters and keeps nested h3 content in the parent body', () => {
     const markdown = `
 ## Parent
 Parent body [01:00](https://youtube.com/watch?v=12345&t=60s)
@@ -96,16 +96,82 @@ Child body [02:00](https://youtube.com/watch?v=12345&t=120s)
 Sibling body [03:00](https://youtube.com/watch?v=12345&t=180s)
 `;
     const chapters = extractSummaryChapters(markdown, dummyVideo);
-    expect(chapters).toHaveLength(3);
+    expect(chapters).toHaveLength(2);
     expect(chapters.map((chapter) => chapter.title)).toEqual([
       'Parent',
-      'Child',
       'Sibling',
     ]);
-    expect(chapters[0].body).toBe(
+    expect(chapters[0].body).toContain(
       'Parent body [01:00](https://youtube.com/watch?v=12345&t=60s)',
     );
-    expect(chapters[0].body).not.toContain('Child body');
+    expect(chapters[0].body).toContain('### Child');
+    expect(chapters[0].body).toContain('Child body');
+  });
+
+  it('uses h2 headings inside the detailed summary section and ignores core timestamps', () => {
+    const markdown = `
+# 核心总结
+Core point [00:15](https://youtube.com/watch?v=12345&t=15s)
+
+# 详细总结
+
+## 1. Opening
+- Detail [01:00](https://youtube.com/watch?v=12345&t=60s)
+
+## 2. Middle
+- Detail [03:00](https://youtube.com/watch?v=12345&t=180s)
+
+# 结论 / 观点 / 建议
+Final [09:00](https://youtube.com/watch?v=12345&t=540s)
+`;
+    const chapters = extractSummaryChapters(markdown, dummyVideo);
+    expect(chapters.map((chapter) => chapter.title)).toEqual([
+      '1. Opening',
+      '2. Middle',
+    ]);
+    expect(chapters.map((chapter) => chapter.seconds)).toEqual([60, 180]);
+  });
+
+  it('keeps legacy converted summaries that put chapters under h3 headings', () => {
+    const markdown = `
+## 详细总结
+
+### Legacy One
+- Detail [01:00](https://youtube.com/watch?v=12345&t=60s)
+
+### Legacy Two
+- Detail [02:00](https://youtube.com/watch?v=12345&t=120s)
+`;
+    const chapters = extractSummaryChapters(markdown, dummyVideo);
+    expect(chapters.map((chapter) => chapter.title)).toEqual([
+      'Legacy One',
+      'Legacy Two',
+    ]);
+    expect(chapters.map((chapter) => chapter.seconds)).toEqual([60, 120]);
+  });
+
+  it('infers missing h2 chapter starts from duration when summary anchors are incomplete', () => {
+    const markdown = `
+# 详细总结
+
+## 1. Opening
+No timestamp here.
+
+## 2. Setup
+Still no timestamp.
+
+## 3. Payoff
+- Detail [05:00](https://youtube.com/watch?v=12345&t=300s)
+`;
+    const chapters = extractSummaryChapters(markdown, dummyVideo, {
+      duration: 600,
+    });
+    expect(chapters.map((chapter) => chapter.title)).toEqual([
+      '1. Opening',
+      '2. Setup',
+      '3. Payoff',
+    ]);
+    expect(chapters.map((chapter) => chapter.seconds)).toEqual([0, 150, 300]);
   });
 
   it('keeps document order when sections share the same first timestamp', () => {

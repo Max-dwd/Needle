@@ -187,24 +187,31 @@ export default function PlayerModal({
     const controller = new AbortController();
     fetch(`/api/videos/${video.id}/summary`, {
       cache: 'no-store',
-      signal: controller.signal
+      signal: controller.signal,
     })
-      .then(res => res.json())
-      .then(data => {
-         if (!controller.signal.aborted && data.markdown) {
-           setSummaryMarkdown(data.markdown);
-         }
+      .then((res) => res.json())
+      .then((data) => {
+        if (!controller.signal.aborted && data.markdown) {
+          setSummaryMarkdown(data.markdown);
+        }
       })
       .catch(() => {});
     return () => controller.abort();
   }, [video.id]);
 
   const chapters = useMemo(
-    () => extractSummaryChapters(summaryMarkdown, {
-      platform: video.platform,
-      video_id: video.video_id,
-    }),
-    [summaryMarkdown, video.platform, video.video_id],
+    () =>
+      extractSummaryChapters(
+        summaryMarkdown,
+        {
+          platform: video.platform,
+          video_id: video.video_id,
+        },
+        {
+          duration: playerDuration,
+        },
+      ),
+    [summaryMarkdown, video.platform, video.video_id, playerDuration],
   );
 
   const { width: leftPanelWidth, handleRef: panelHandleRef } =
@@ -580,7 +587,12 @@ export default function PlayerModal({
     } else {
       postYouTubeCommand('playVideo');
     }
-  }, [usesNativeVideo, toggleNativePlayback, youtubePlayerState, postYouTubeCommand]);
+  }, [
+    usesNativeVideo,
+    toggleNativePlayback,
+    youtubePlayerState,
+    postYouTubeCommand,
+  ]);
 
   const applyPlaybackRate = useCallback(
     (nextRate: number, options?: { rememberManual?: boolean }) => {
@@ -1194,166 +1206,189 @@ export default function PlayerModal({
               flexDirection: 'column',
             }}
           >
-            <div style={{ flex: 1, position: 'relative', minHeight: 0, overflow: 'hidden' }}>
-            {isAudioMode && (
-              <AudioModeOverlay
-                video={video}
-                isPlaying={isPlayerPlaying}
-                currentTime={playerStartSeconds}
-                duration={playerDuration}
-                onTogglePlay={togglePlay}
-                onSeek={handleTimestampClick}
-                onClose={onClose}
-              />
-            )}
             <div
               style={{
-                position: 'absolute',
-                inset: 0,
-                opacity: isAudioMode || isMobile ? 0 : 1,
-                pointerEvents: isAudioMode || isMobile ? 'none' : 'auto',
-                transition: 'opacity 0.3s',
+                flex: 1,
+                position: 'relative',
+                minHeight: 0,
+                overflow: 'hidden',
               }}
             >
-              {isYt ? (
-                <>
-                  {shouldAttemptNativeYouTube && youtubePlaybackLoading ? (
-                    renderPlaybackStatus(
-                      '正在解析 YouTube 原生播放流…',
-                      '解析成功后可以使用精确倍速快捷键。',
-                    )
-                  ) : useNativeYouTube && youtubePlayback?.proxyUrl ? (
-                    renderNativeVideo('youtube', youtubePlayback.proxyUrl)
-                  ) : (
-                    <iframe
-                      key={video.id}
-                      ref={youtubeIframeRef}
-                      src={youtubeEmbedSrc}
-                      onLoad={() => {
-                        setYoutubePlayerLoaded(true);
-                        focusPlayer();
-                        requestYouTubeTelemetry();
-                      }}
-                      title={video.title}
-                      tabIndex={0}
-                      style={{
-                        position: 'absolute',
-                        inset: 0,
-                        width: '100%',
-                        height: '100%',
-                        border: 'none',
-                      }}
-                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
-                      allowFullScreen
-                    />
-                  )}
-
-                  {desktopKeyboardEnabled && youtubePlaybackError && (
-                    <div
-                      style={{
-                        position: 'absolute',
-                        left: 16,
-                        bottom: 16,
-                        maxWidth: 420,
-                        padding: '10px 12px',
-                        borderRadius: 8,
-                        border: `1px solid ${modalColors.dangerBorder}`,
-                        background: modalColors.dangerSoft,
-                        color: modalColors.textStrong,
-                        fontSize: 12,
-                        lineHeight: 1.5,
-                      }}
-                    >
-                      精准倍速不可用，已回退到 YouTube iframe：
-                      {youtubePlaybackError}
-                    </div>
-                  )}
-                </>
-              ) : (
-                <div
-                  style={{
-                    position: 'absolute',
-                    inset: 0,
-                    display: 'flex',
-                    flexDirection: 'column',
-                    background: '#000',
-                  }}
-                >
-                  <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
-                    {bilibiliPlayback?.proxyUrl
-                      ? renderNativeVideo('bilibili', bilibiliPlayback.proxyUrl)
-                      : renderPlaybackStatus(
-                          bilibiliPlaybackLoading
-                            ? '正在解析 B 站可播放流…'
-                            : '当前无法直接播放这个 B 站视频',
-                          bilibiliPlaybackError ||
-                            '这个阶段只支持可直接播放的 MP4 单路流。',
-                        )}
-                  </div>
-
-                </div>
+              {isAudioMode && (
+                <AudioModeOverlay
+                  video={video}
+                  isPlaying={isPlayerPlaying}
+                  currentTime={playerStartSeconds}
+                  duration={playerDuration}
+                  onTogglePlay={togglePlay}
+                  onSeek={handleTimestampClick}
+                  onClose={onClose}
+                />
               )}
-            </div>
+              <div
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  opacity: isAudioMode || isMobile ? 0 : 1,
+                  pointerEvents: isAudioMode || isMobile ? 'none' : 'auto',
+                  transition: 'opacity 0.3s',
+                }}
+              >
+                {isYt ? (
+                  <>
+                    {shouldAttemptNativeYouTube && youtubePlaybackLoading ? (
+                      renderPlaybackStatus(
+                        '正在解析 YouTube 原生播放流…',
+                        '解析成功后可以使用精确倍速快捷键。',
+                      )
+                    ) : useNativeYouTube && youtubePlayback?.proxyUrl ? (
+                      renderNativeVideo('youtube', youtubePlayback.proxyUrl)
+                    ) : (
+                      <iframe
+                        key={video.id}
+                        ref={youtubeIframeRef}
+                        src={youtubeEmbedSrc}
+                        onLoad={() => {
+                          setYoutubePlayerLoaded(true);
+                          focusPlayer();
+                          requestYouTubeTelemetry();
+                        }}
+                        title={video.title}
+                        tabIndex={0}
+                        style={{
+                          position: 'absolute',
+                          inset: 0,
+                          width: '100%',
+                          height: '100%',
+                          border: 'none',
+                        }}
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
+                        allowFullScreen
+                      />
+                    )}
+
+                    {desktopKeyboardEnabled && youtubePlaybackError && (
+                      <div
+                        style={{
+                          position: 'absolute',
+                          left: 16,
+                          bottom: 16,
+                          maxWidth: 420,
+                          padding: '10px 12px',
+                          borderRadius: 8,
+                          border: `1px solid ${modalColors.dangerBorder}`,
+                          background: modalColors.dangerSoft,
+                          color: modalColors.textStrong,
+                          fontSize: 12,
+                          lineHeight: 1.5,
+                        }}
+                      >
+                        精准倍速不可用，已回退到 YouTube iframe：
+                        {youtubePlaybackError}
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      inset: 0,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      background: '#000',
+                    }}
+                  >
+                    <div
+                      style={{ flex: 1, minHeight: 0, position: 'relative' }}
+                    >
+                      {bilibiliPlayback?.proxyUrl
+                        ? renderNativeVideo(
+                            'bilibili',
+                            bilibiliPlayback.proxyUrl,
+                          )
+                        : renderPlaybackStatus(
+                            bilibiliPlaybackLoading
+                              ? '正在解析 B 站可播放流…'
+                              : '当前无法直接播放这个 B 站视频',
+                            bilibiliPlaybackError ||
+                              '这个阶段只支持可直接播放的 MP4 单路流。',
+                          )}
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
             <PlayerBottomBar
               isPlaying={isPlayerPlaying}
               onTogglePlay={togglePlay}
               currentSeconds={playerStartSeconds}
               duration={playerDuration}
-              playbackRate={usesNativeVideo ? nativePlaybackRate : youtubeIframePlaybackRate}
+              playbackRate={
+                usesNativeVideo ? nativePlaybackRate : youtubeIframePlaybackRate
+              }
               chapters={chapters}
               onSeek={handleTimestampClick}
-              disabled={isYt ? (shouldAttemptNativeYouTube && youtubePlaybackLoading && !youtubePlayerLoaded) : (!bilibiliPlayback?.proxyUrl)}
-              trailing={!isYt ? (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <div style={{ fontSize: 12, color: modalColors.textMuted }}>
-                    {bilibiliPlaybackLoading
-                      ? '解析中'
-                      : bilibiliPlayback?.qualityLabel ||
-                        bilibiliPlayback?.format ||
-                        'MP4 单路流'}
-                    {bilibiliPlayback?.authUsed ? ' · 已使用 SESSDATA' : ''}
-                  </div>
-
-                  {bilibiliPlaybackError && (
-                    <div style={{ fontSize: 12, color: modalColors.danger }}>
-                      {bilibiliPlaybackError}
+              disabled={
+                isYt
+                  ? shouldAttemptNativeYouTube &&
+                    youtubePlaybackLoading &&
+                    !youtubePlayerLoaded
+                  : !bilibiliPlayback?.proxyUrl
+              }
+              trailing={
+                !isYt ? (
+                  <div
+                    style={{ display: 'flex', alignItems: 'center', gap: 12 }}
+                  >
+                    <div style={{ fontSize: 12, color: modalColors.textMuted }}>
+                      {bilibiliPlaybackLoading
+                        ? '解析中'
+                        : bilibiliPlayback?.qualityLabel ||
+                          bilibiliPlayback?.format ||
+                          'MP4 单路流'}
+                      {bilibiliPlayback?.authUsed ? ' · 已使用 SESSDATA' : ''}
                     </div>
-                  )}
 
-                  {!bilibiliPlaybackLoading &&
-                    !bilibiliPlayback?.proxyUrl && (
-                      <button
-                        type="button"
-                        onClick={() => void loadBilibiliPlayback()}
-                        style={{
-                          border: `1px solid ${modalColors.borderStrong}`,
-                          borderRadius: 8,
-                          background: 'var(--bg-hover)',
-                          color: modalColors.textStrong,
-                          cursor: 'pointer',
-                          padding: '4px 10px',
-                          fontSize: 12,
-                          lineHeight: 1,
-                        }}
-                      >
-                        重试解析
-                      </button>
-                    )}
-
-                  {Array.isArray(bilibiliPlayback?.limitations) &&
-                    bilibiliPlayback.limitations.length > 0 && (
-                      <div
-                        style={{
-                          fontSize: 12,
-                          color: modalColors.textSoft,
-                        }}
-                      >
-                        限制：{bilibiliPlayback.limitations.join('；')}
+                    {bilibiliPlaybackError && (
+                      <div style={{ fontSize: 12, color: modalColors.danger }}>
+                        {bilibiliPlaybackError}
                       </div>
                     )}
-                </div>
-              ) : undefined}
+
+                    {!bilibiliPlaybackLoading &&
+                      !bilibiliPlayback?.proxyUrl && (
+                        <button
+                          type="button"
+                          onClick={() => void loadBilibiliPlayback()}
+                          style={{
+                            border: `1px solid ${modalColors.borderStrong}`,
+                            borderRadius: 8,
+                            background: 'var(--bg-hover)',
+                            color: modalColors.textStrong,
+                            cursor: 'pointer',
+                            padding: '4px 10px',
+                            fontSize: 12,
+                            lineHeight: 1,
+                          }}
+                        >
+                          重试解析
+                        </button>
+                      )}
+
+                    {Array.isArray(bilibiliPlayback?.limitations) &&
+                      bilibiliPlayback.limitations.length > 0 && (
+                        <div
+                          style={{
+                            fontSize: 12,
+                            color: modalColors.textSoft,
+                          }}
+                        >
+                          限制：{bilibiliPlayback.limitations.join('；')}
+                        </div>
+                      )}
+                  </div>
+                ) : undefined
+              }
             />
           </div>
         </div>
