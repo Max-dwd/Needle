@@ -19,6 +19,8 @@ import type { VideoWithMeta } from '@/types';
 import VideoInfoPanel from '@/components/VideoInfoPanel';
 import AudioModeOverlay from '@/components/AudioModeOverlay';
 import { useMediaSession } from '@/hooks/useMediaSession';
+import { extractSummaryChapters } from '@/lib/summary-chapters';
+import PlayerBottomBar from '@/components/player/PlayerBottomBar';
 
 interface BilibiliPlaybackResponse {
   bvid?: string;
@@ -139,6 +141,7 @@ export default function PlayerModal({
   const [playerDuration, setPlayerDuration] = useState<number>(0);
   const [isAudioMode, setIsAudioMode] = useState(initialAudioMode ?? false);
   const [isMobile, setIsMobile] = useState(false);
+  const [summaryMarkdown, setSummaryMarkdown] = useState<string>('');
   const [keyboardSettings, setKeyboardSettings] =
     useState<PlayerKeyboardModeSettings>(DEFAULT_KEYBOARD_SETTINGS);
   const [keyboardSettingsLoaded, setKeyboardSettingsLoaded] = useState(false);
@@ -179,6 +182,30 @@ export default function PlayerModal({
   );
   const lastManualRateRef = useRef<number | null>(null);
   const keyboardSettingsRef = useRef(keyboardSettings);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch(`/api/videos/${video.id}/summary`, {
+      cache: 'no-store',
+      signal: controller.signal
+    })
+      .then(res => res.json())
+      .then(data => {
+         if (!controller.signal.aborted && data.markdown) {
+           setSummaryMarkdown(data.markdown);
+         }
+      })
+      .catch(() => {});
+    return () => controller.abort();
+  }, [video.id]);
+
+  const chapters = useMemo(
+    () => extractSummaryChapters(summaryMarkdown, {
+      platform: video.platform,
+      video_id: video.video_id,
+    }),
+    [summaryMarkdown, video.platform, video.video_id],
+  );
 
   const { width: leftPanelWidth, handleRef: panelHandleRef } =
     useDraggableWidth('player-panel-width', 380, { min: 260, max: 520 });
@@ -542,6 +569,18 @@ export default function PlayerModal({
 
     videoElement.pause();
   }, [getNativeVideoElement]);
+
+  const togglePlay = useCallback(() => {
+    if (usesNativeVideo) {
+      toggleNativePlayback();
+      return;
+    }
+    if (youtubePlayerState === 1) {
+      postYouTubeCommand('pauseVideo');
+    } else {
+      postYouTubeCommand('playVideo');
+    }
+  }, [usesNativeVideo, toggleNativePlayback, youtubePlayerState, postYouTubeCommand]);
 
   const applyPlaybackRate = useCallback(
     (nextRate: number, options?: { rememberManual?: boolean }) => {
@@ -1151,25 +1190,18 @@ export default function PlayerModal({
               background: modalColors.background,
               position: 'relative',
               overflow: 'hidden',
+              display: 'flex',
+              flexDirection: 'column',
             }}
           >
+            <div style={{ flex: 1, position: 'relative', minHeight: 0, overflow: 'hidden' }}>
             {isAudioMode && (
               <AudioModeOverlay
                 video={video}
                 isPlaying={isPlayerPlaying}
                 currentTime={playerStartSeconds}
                 duration={playerDuration}
-                onTogglePlay={() => {
-                  if (usesNativeVideo) {
-                    toggleNativePlayback();
-                    return;
-                  }
-                  if (youtubePlayerState === 1) {
-                    postYouTubeCommand('pauseVideo');
-                  } else {
-                    postYouTubeCommand('playVideo');
-                  }
-                }}
+                onTogglePlay={togglePlay}
                 onSeek={handleTimestampClick}
                 onClose={onClose}
               />
@@ -1259,123 +1291,70 @@ export default function PlayerModal({
                         )}
                   </div>
 
-                  <div
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 12,
-                      padding: '12px 16px',
-                      borderTop: `1px solid ${modalColors.border}`,
-                      background: modalColors.surface,
-                      color: modalColors.textMuted,
-                      flexWrap: 'wrap',
-                    }}
-                  >
-                    <button
-                      type="button"
-                      onClick={toggleNativePlayback}
-                      disabled={!bilibiliPlayback?.proxyUrl}
-                      style={{
-                        border: `1px solid ${modalColors.borderStrong}`,
-                        borderRadius: 8,
-                        background: bilibiliPlayback?.proxyUrl
-                          ? 'var(--bg-hover)'
-                          : 'var(--bg-primary)',
-                        color: bilibiliPlayback?.proxyUrl
-                          ? modalColors.textStrong
-                          : modalColors.textFaint,
-                        cursor: bilibiliPlayback?.proxyUrl
-                          ? 'pointer'
-                          : 'not-allowed',
-                        padding: '8px 14px',
-                        fontSize: 13,
-                        lineHeight: 1,
-                      }}
-                    >
-                      {nativeIsPlaying ? '暂停' : '播放'}
-                    </button>
-
-                    <label
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 8,
-                        fontSize: 13,
-                      }}
-                    >
-                      <span>倍速</span>
-                      <select
-                        value={nativePlaybackRate}
-                        onChange={(e) => setNativeRate(Number(e.target.value))}
-                        disabled={!bilibiliPlayback?.proxyUrl}
-                        style={{
-                          background: modalColors.inputBg,
-                          color: modalColors.textStrong,
-                          border: `1px solid ${modalColors.borderStrong}`,
-                          borderRadius: 6,
-                          padding: '6px 10px',
-                          fontSize: 13,
-                        }}
-                      >
-                        {rateOptions.map((rate) => (
-                          <option key={rate} value={rate}>
-                            {rate}x
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-
-                    <div style={{ fontSize: 12, color: modalColors.textMuted }}>
-                      {bilibiliPlaybackLoading
-                        ? '解析中'
-                        : bilibiliPlayback?.qualityLabel ||
-                          bilibiliPlayback?.format ||
-                          'MP4 单路流'}
-                      {bilibiliPlayback?.authUsed ? ' · 已使用 SESSDATA' : ''}
-                    </div>
-
-                    {bilibiliPlaybackError && (
-                      <div style={{ fontSize: 12, color: modalColors.danger }}>
-                        {bilibiliPlaybackError}
-                      </div>
-                    )}
-
-                    {!bilibiliPlaybackLoading &&
-                      !bilibiliPlayback?.proxyUrl && (
-                        <button
-                          type="button"
-                          onClick={() => void loadBilibiliPlayback()}
-                          style={{
-                            border: `1px solid ${modalColors.borderStrong}`,
-                            borderRadius: 8,
-                            background: 'var(--bg-hover)',
-                            color: modalColors.textStrong,
-                            cursor: 'pointer',
-                            padding: '8px 14px',
-                            fontSize: 13,
-                            lineHeight: 1,
-                          }}
-                        >
-                          重试解析
-                        </button>
-                      )}
-
-                    {Array.isArray(bilibiliPlayback?.limitations) &&
-                      bilibiliPlayback.limitations.length > 0 && (
-                        <div
-                          style={{
-                            width: '100%',
-                            fontSize: 12,
-                            color: modalColors.textSoft,
-                          }}
-                        >
-                          限制：{bilibiliPlayback.limitations.join('；')}
-                        </div>
-                      )}
-                  </div>
                 </div>
               )}
             </div>
+            </div>
+            <PlayerBottomBar
+              isPlaying={isPlayerPlaying}
+              onTogglePlay={togglePlay}
+              currentSeconds={playerStartSeconds}
+              duration={playerDuration}
+              playbackRate={usesNativeVideo ? nativePlaybackRate : youtubeIframePlaybackRate}
+              chapters={chapters}
+              onSeek={handleTimestampClick}
+              disabled={isYt ? (shouldAttemptNativeYouTube && youtubePlaybackLoading && !youtubePlayerLoaded) : (!bilibiliPlayback?.proxyUrl)}
+              trailing={!isYt ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div style={{ fontSize: 12, color: modalColors.textMuted }}>
+                    {bilibiliPlaybackLoading
+                      ? '解析中'
+                      : bilibiliPlayback?.qualityLabel ||
+                        bilibiliPlayback?.format ||
+                        'MP4 单路流'}
+                    {bilibiliPlayback?.authUsed ? ' · 已使用 SESSDATA' : ''}
+                  </div>
+
+                  {bilibiliPlaybackError && (
+                    <div style={{ fontSize: 12, color: modalColors.danger }}>
+                      {bilibiliPlaybackError}
+                    </div>
+                  )}
+
+                  {!bilibiliPlaybackLoading &&
+                    !bilibiliPlayback?.proxyUrl && (
+                      <button
+                        type="button"
+                        onClick={() => void loadBilibiliPlayback()}
+                        style={{
+                          border: `1px solid ${modalColors.borderStrong}`,
+                          borderRadius: 8,
+                          background: 'var(--bg-hover)',
+                          color: modalColors.textStrong,
+                          cursor: 'pointer',
+                          padding: '4px 10px',
+                          fontSize: 12,
+                          lineHeight: 1,
+                        }}
+                      >
+                        重试解析
+                      </button>
+                    )}
+
+                  {Array.isArray(bilibiliPlayback?.limitations) &&
+                    bilibiliPlayback.limitations.length > 0 && (
+                      <div
+                        style={{
+                          fontSize: 12,
+                          color: modalColors.textSoft,
+                        }}
+                      >
+                        限制：{bilibiliPlayback.limitations.join('；')}
+                      </div>
+                    )}
+                </div>
+              ) : undefined}
+            />
           </div>
         </div>
       </div>
