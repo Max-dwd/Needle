@@ -137,6 +137,14 @@ function getSubtitleThrottleDisplay(
 // Sub-components
 // ---------------------------------------------------------------------------
 
+function SectionMeta({ color, children }: { color?: string; children: React.ReactNode }) {
+  return (
+    <span className="section-meta" style={color ? { color } : undefined}>
+      {children}
+    </span>
+  );
+}
+
 function CompactRow({
   crawlerStatus,
   pipelineStatus,
@@ -168,10 +176,12 @@ function CompactRow({
   const relativeTime = lastRefreshAt ? formatRelativeTime(lastRefreshAt) : null;
   const crawlColor =
     crawlState === 'running'
-      ? 'var(--accent-bili)'
+      ? 'var(--status-ok)'
       : crawlState === 'error'
         ? 'var(--accent-yt)'
-        : 'var(--text-muted)';
+        : crawlState === 'cooldown'
+          ? 'var(--status-warn)'
+          : 'var(--text-muted)';
   const crawlText =
     crawlState === 'idle'
       ? relativeTime
@@ -204,7 +214,7 @@ function CompactRow({
       ? `${subQueue}待处理`
       : subtitleThrottle.compactText;
   const subColor = subProcessing
-    ? 'var(--accent-bili)'
+    ? 'var(--status-ok)'
     : subQueue > 0
       ? 'var(--status-warn)'
       : subtitleThrottle.color;
@@ -226,7 +236,7 @@ function CompactRow({
       ? `${sumQueue} 待处理`
       : '空闲';
   const sumColor = sumProcessing
-    ? 'var(--accent-bili)'
+    ? 'var(--status-ok)'
     : sumQueue > 0
       ? 'var(--status-warn)'
       : 'var(--text-muted)';
@@ -248,7 +258,9 @@ function CompactRow({
     ? { color: 'var(--accent-yt)', pulse: false }
     : crawlState === 'running'
       ? { color: 'var(--status-ok)', pulse: true }
-      : (crawlState === 'cooldown' || crawlState === 'error')
+      : crawlState === 'error'
+        ? { color: 'var(--accent-yt)', pulse: false }
+      : crawlState === 'cooldown'
         ? { color: 'var(--status-warn)', pulse: false }
         : { color: 'var(--text-muted)', pulse: false };
 
@@ -256,9 +268,11 @@ function CompactRow({
     ? { color: 'var(--accent-yt)', pulse: false }
     : (subProcessing && !subCooling)
       ? { color: 'var(--status-ok)', pulse: true }
-      : (subQueue > 0 || subCooling || (pipelineStatus?.subtitle?.throttle?.state && pipelineStatus.subtitle.throttle.state !== 'clear'))
+      : (subQueue > 0 || subCooling)
         ? { color: 'var(--status-warn)', pulse: false }
-        : { color: 'var(--text-muted)', pulse: false };
+        : pipelineStatus?.subtitle?.throttle?.state && pipelineStatus.subtitle.throttle.state !== 'clear'
+          ? { color: subtitleThrottle.color, pulse: false }
+          : { color: 'var(--text-muted)', pulse: false };
 
   const sumDot = isDisconnected || isGlobalPaused
     ? { color: 'var(--accent-yt)', pulse: false }
@@ -624,8 +638,11 @@ function SubtitleSection({
     : queueLength > 0
       ? `${queueLength} 个作业待处理`
       : '空闲';
-  const statusTextColor =
-    processing || queueLength > 0 ? statusColor : 'var(--text-muted)';
+  const statusTextColor = processing
+    ? 'var(--status-ok)'
+    : (queueLength > 0 || cooling)
+      ? 'var(--status-warn)'
+      : statusColor;
 
   return (
     <div className="task-panel-section">
@@ -756,13 +773,21 @@ function SummarySection({
       <div className="section-header">
         <span>📝</span>
         <span>总结队列</span>
-        <span className="section-meta">
+        <SectionMeta
+          color={
+            processing
+              ? 'var(--status-ok)'
+              : queueLength > 0
+                ? 'var(--status-warn)'
+                : 'var(--text-muted)'
+          }
+        >
           {processing
             ? '处理中'
             : queueLength > 0
               ? `${queueLength} 待处理`
               : '空闲'}
-        </span>
+        </SectionMeta>
       </div>
       <div className="section-body">
         {currentTitle ? (
@@ -892,7 +917,7 @@ function BudgetSection({
         )}
 
         {/* Per-model breakdown */}
-        {models.length > 1 && (
+        {models.length >= 1 && (
           <>
             <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6, marginBottom: 2 }}>
               各模型用量
