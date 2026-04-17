@@ -214,18 +214,21 @@ export default function VideoInfoPanel({
     };
   }, [buildSubtitleParams, defaultSubtitleMethod, startSubtitleFetch, video.id]);
 
-  const loadSummary = useCallback(async () => {
-    setSummaryLoading(true);
-    try {
-      const res = await fetch(`/api/videos/${video.id}/summary?history=1`);
-      const data = await res.json();
-      setSummary(data);
-    } catch {
-      setSummary({ error: '总结加载失败' });
-    } finally {
-      setSummaryLoading(false);
-    }
-  }, [video.id]);
+  const loadSummary = useCallback(
+    async (isRefresh = false) => {
+      if (!isRefresh) setSummaryLoading(true);
+      try {
+        const res = await fetch(`/api/videos/${video.id}/summary?history=1`);
+        const data = await res.json();
+        setSummary(data);
+      } catch {
+        setSummary({ error: '总结加载失败' });
+      } finally {
+        setSummaryLoading(false);
+      }
+    },
+    [video.id],
+  );
 
   useEffect(() => {
     void loadSummary();
@@ -301,7 +304,6 @@ export default function VideoInfoPanel({
       setSummaryGenerating(true);
       setSummaryError(null);
       setSummaryProgressMessage('正在开始生成总结...');
-      setActivePanel('summary');
     };
 
     const onSummaryProgress = (event: MessageEvent) => {
@@ -312,7 +314,6 @@ export default function VideoInfoPanel({
       setSummaryProgressMessage(
         typeof data?.message === 'string' ? data.message : '正在生成总结...',
       );
-      setActivePanel('summary');
     };
 
     const onSummaryComplete = (event: MessageEvent) => {
@@ -321,9 +322,9 @@ export default function VideoInfoPanel({
       setSummaryGenerating(false);
       setSummaryError(null);
       setSummaryProgressMessage(null);
-      setStreamingMarkdown(null);
-      setActivePanel('summary');
-      void loadSummary();
+      void loadSummary(true).then(() => {
+        setStreamingMarkdown(null);
+      });
     };
 
     const onSummaryError = (event: MessageEvent) => {
@@ -335,7 +336,6 @@ export default function VideoInfoPanel({
       setSummaryError(
         typeof data?.error === 'string' ? data.error : '总结生成失败',
       );
-      setActivePanel('summary');
     };
 
     const onSubtitleStatus = (event: MessageEvent) => {
@@ -370,7 +370,6 @@ export default function VideoInfoPanel({
         ...(activeMethod ? { activeMethod } : {}),
         ...(message ? { message } : {}),
       }));
-      setActivePanel('subtitle');
 
       if (status === 'fetching') {
         setSubtitleLoading(false);
