@@ -1,7 +1,9 @@
 'use client';
 
 import { useCallback, useState } from 'react';
-import type { UnavailableVideoBehavior } from '@/types';
+import type { AiModelProtocol, UnavailableVideoBehavior } from '@/types';
+
+export type { AiModelProtocol };
 
 export interface AiSummaryModelConfig {
   id: string;
@@ -11,6 +13,8 @@ export interface AiSummaryModelConfig {
   apiKeyMasked?: string | null;
   hasApiKey?: boolean;
   model: string;
+  isMultimodal?: boolean;
+  protocol: AiModelProtocol;
 }
 
 export interface AiSummaryConfig {
@@ -212,6 +216,7 @@ export interface SubtitleApiFallbackConfig {
   enabled: boolean;
   scope: SubtitleApiFallbackScope;
   globalMaxWaitSeconds: number;
+  globalModelId: string;
   customRules: SubtitleApiFallbackRule[];
   updatedAt: string | null;
 }

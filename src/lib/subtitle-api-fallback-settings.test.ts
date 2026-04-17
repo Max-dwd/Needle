@@ -34,6 +34,7 @@ describe('subtitle api fallback settings', () => {
           endpoint: 'https://example.com',
           apiKey: '',
           model: 'm1',
+          isMultimodal: true,
         },
         {
           id: 'fast',
@@ -41,8 +42,10 @@ describe('subtitle api fallback settings', () => {
           endpoint: 'https://example.com',
           apiKey: '',
           model: 'm2',
+          isMultimodal: true,
         },
       ],
+      defaultModelId: 'default',
     });
   });
 
@@ -51,6 +54,7 @@ describe('subtitle api fallback settings', () => {
       enabled: false,
       scope: 'global',
       globalMaxWaitSeconds: 0,
+      globalModelId: 'default',
       customRules: [],
       updatedAt: null,
     });
@@ -142,11 +146,74 @@ describe('subtitle api fallback settings', () => {
       enabled: true,
       scope: 'global',
       globalMaxWaitSeconds: 10,
+      globalModelId: 'fast',
       customRules: [],
     });
 
     expect(mockSetAppSetting).toHaveBeenCalledTimes(1);
     expect(mockSetAppSetting.mock.calls[0]?.[1]).toContain('"enabled":true');
     expect(mockSetAppSetting.mock.calls[0]?.[1]).toContain('"scope":"global"');
+    expect(mockSetAppSetting.mock.calls[0]?.[1]).toContain('"globalModelId":"fast"');
+  });
+
+  it('only allows multimodal models for api fallback selection', () => {
+    mockGetAiSummarySettings.mockReturnValue({
+      models: [
+        {
+          id: 'text',
+          name: '文本模型',
+          endpoint: 'https://example.com',
+          apiKey: '',
+          model: 'm1',
+          isMultimodal: false,
+        },
+        {
+          id: 'vision',
+          name: '多模态模型',
+          endpoint: 'https://example.com',
+          apiKey: '',
+          model: 'm2',
+          isMultimodal: true,
+        },
+      ],
+      defaultModelId: 'text',
+    });
+    mockGetAppSetting.mockReturnValue(
+      JSON.stringify({
+        enabled: true,
+        scope: 'custom',
+        globalModelId: 'text',
+        customRules: [
+          {
+            id: 'bad-text-model',
+            targetType: 'intent',
+            targetId: '12',
+            targetLabel: '工作',
+            modelId: 'text',
+          },
+          {
+            id: 'ok-vision-model',
+            targetType: 'channel',
+            targetId: '5',
+            targetLabel: '频道',
+            modelId: 'vision',
+          },
+        ],
+      }),
+    );
+
+    const config = getSubtitleApiFallbackConfig();
+
+    expect(config.globalModelId).toBe('vision');
+    expect(config.customRules).toEqual([
+      {
+        id: 'ok-vision-model',
+        targetType: 'channel',
+        targetId: '5',
+        targetLabel: '频道',
+        maxWaitSeconds: 0,
+        modelId: 'vision',
+      },
+    ]);
   });
 });

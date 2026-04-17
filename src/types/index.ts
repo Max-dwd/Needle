@@ -236,17 +236,24 @@ export interface VideoCommentsData {
   details?: string;
 }
 
+export type AiModelProtocol = 'gemini' | 'openai-chat' | 'anthropic-messages';
+
 export interface AiSummaryModelConfig {
   id: string;
   name: string;
   endpoint: string;
   apiKey: string;
   model: string;
+  isMultimodal?: boolean;
+  protocol: AiModelProtocol;
 }
 
 export interface AiSummaryPromptTemplates {
   default: string;
   subtitleApi: string;
+  subtitleSegment: string;
+  chatObsidian: string;
+  chatRoast: string;
 }
 
 // AI Summary types

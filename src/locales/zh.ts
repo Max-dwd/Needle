@@ -255,6 +255,8 @@ export const zh = {
       delete: '删除',
       endpointPlaceholder: 'Endpoint',
       modelNamePlaceholder: 'Model Name',
+      multimodal: '多模态模型（可用于 API 提取字幕）',
+      protocol: '协议',
       sharedBudget: '共享预算',
       rpm: '每分钟请求上限',
       rpmDesc: '总结和字幕 fallback 共享的 RPM。',
@@ -382,7 +384,7 @@ export const zh = {
       toastResetPipelineFailed: '重置字幕链路失败',
       toastResetPipelineSuccess: '字幕链路已恢复默认配置',
       toastResetPipelineError: '重置字幕链路失败，请稍后重试',
-      addRuleErrorModel: '请先配置模型，并至少存在一个意图或频道',
+      addRuleErrorModel: '请先配置至少一个多模态模型，并至少存在一个意图或频道',
       toastRestoreApiPrompt: '已恢复字幕 API 默认模板，请保存配置以生效',
       toastRestoreSegmentPrompt: '已恢复分块字幕补充模板，请保存配置以生效',
       browserFetch: '浏览器字幕抓取',
@@ -407,6 +409,9 @@ export const zh = {
       maxWait: '最大等待时间',
       maxWaitDesc:
         '累计等待超过这个阈值后，如果 AI budget 有余量，就会提前逃逸到 API。',
+      apiModel: 'API 模型',
+      apiModelDesc: '只显示在模型页勾选为多模态的模型。',
+      noMultimodalModels: '请先在模型页勾选多模态模型',
       customRules: '自定义规则',
       customRulesDesc:
         '只有命中的意图或频道，才会启用 API 逃逸与兜底。每条规则可独立配置最大等待时间和模型。',

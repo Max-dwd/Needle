@@ -90,6 +90,8 @@ function ModelsTabForm({
         endpoint: '',
         apiKey: '',
         model: '',
+        isMultimodal: false,
+        protocol: 'openai-chat',
       },
     ]);
   };
@@ -98,10 +100,10 @@ function ModelsTabForm({
     setModels((current) => current.filter((_, currentIndex) => currentIndex !== index));
   };
 
-  const handleUpdateModel = (
+  const handleUpdateModel = <K extends keyof AiSummaryModelConfig>(
     index: number,
-    field: keyof AiSummaryModelConfig,
-    value: string,
+    field: K,
+    value: AiSummaryModelConfig[K],
   ) => {
     setModels((current) =>
       current.map((item, currentIndex) =>
@@ -343,6 +345,66 @@ function ModelsTabForm({
                     handleUpdateModel(index, 'apiKey', e.target.value)
                   }
                 />
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 16,
+                    flexWrap: 'wrap',
+                  }}
+                >
+                  <label
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      fontSize: 13,
+                      color: '#374151',
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={item.isMultimodal !== false}
+                      onChange={(e) =>
+                        handleUpdateModel(
+                          index,
+                          'isMultimodal',
+                          e.target.checked,
+                        )
+                      }
+                    />
+                    {t.settings.models.multimodal}
+                  </label>
+                  <label
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      fontSize: 13,
+                      color: '#374151',
+                      opacity: item.isMultimodal === false ? 0.5 : 1,
+                    }}
+                  >
+                    {t.settings.models.protocol}
+                    <select
+                      className="premium-input"
+                      style={{ padding: '4px 8px' }}
+                      value={item.protocol || 'gemini'}
+                      disabled={item.isMultimodal === false}
+                      onChange={(e) =>
+                        handleUpdateModel(
+                          index,
+                          'protocol',
+                          e.target.value as AiSummaryModelConfig['protocol'],
+                        )
+                      }
+                    >
+                      <option value="gemini">Gemini</option>
+                      <option value="openai-chat">OpenAI 兼容</option>
+                      <option value="anthropic-messages">Anthropic 兼容</option>
+                    </select>
+                  </label>
+                </div>
               </div>
             ))
           )}

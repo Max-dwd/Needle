@@ -118,6 +118,92 @@ describe('ai-summary-settings', () => {
     expect(settings.subtitleFallbackTokenReserve).toBe(98765);
   });
 
+  it('persists multimodal model flags and treats legacy models as multimodal', async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'folo-ai-settings-'));
+    tempDirs.push(tempDir);
+    const dbPath = path.join(tempDir, 'test.db');
+
+    const { setAiSummarySettings, getAiSummarySettings } =
+      await loadSettingsModule(dbPath);
+
+    setAiSummarySettings({
+      models: [
+        {
+          id: 'legacy',
+          name: '旧模型',
+          endpoint: 'https://legacy.example.com/v1',
+          apiKey: '',
+          model: 'legacy-model',
+        },
+        {
+          id: 'text',
+          name: '文本模型',
+          endpoint: 'https://text.example.com/v1',
+          apiKey: '',
+          model: 'text-model',
+          isMultimodal: false,
+        },
+      ],
+    });
+
+    const settings = getAiSummarySettings();
+
+    expect(settings.models.find((item) => item.id === 'legacy')).toMatchObject({
+      isMultimodal: true,
+    });
+    expect(settings.models.find((item) => item.id === 'text')).toMatchObject({
+      isMultimodal: false,
+    });
+  });
+
+  it('infers model protocol for legacy configs and preserves explicit values', async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'folo-ai-settings-'));
+    tempDirs.push(tempDir);
+    const dbPath = path.join(tempDir, 'test.db');
+
+    const { setAiSummarySettings, getAiSummarySettings } =
+      await loadSettingsModule(dbPath);
+
+    setAiSummarySettings({
+      models: [
+        {
+          id: 'gemini-legacy',
+          name: 'Gemini Legacy',
+          endpoint: 'https://generativelanguage.googleapis.com/v1beta/openai',
+          apiKey: '',
+          model: 'gemini-2.5-flash-lite',
+        },
+        {
+          id: 'openai-legacy',
+          name: 'OpenAI Legacy',
+          endpoint: 'https://api.example.com/v1/chat/completions',
+          apiKey: '',
+          model: 'omni-model',
+        },
+        {
+          id: 'anthropic-explicit',
+          name: 'Anthropic Explicit',
+          endpoint: 'https://api.example.com/v1/messages',
+          apiKey: '',
+          model: 'messages-model',
+          protocol: 'anthropic-messages',
+        },
+      ],
+    });
+
+    const settings = getAiSummarySettings();
+
+    expect(settings.models.find((item) => item.id === 'gemini-legacy')).toMatchObject({
+      protocol: 'gemini',
+    });
+    expect(settings.models.find((item) => item.id === 'openai-legacy')).toMatchObject({
+      protocol: 'openai-chat',
+    });
+    expect(settings.models.find((item) => item.id === 'anthropic-explicit')).toMatchObject({
+      protocol: 'anthropic-messages',
+    });
+  });
+
   it('fills subtitle API prompt template defaults and persists custom values', async () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'folo-ai-settings-'));
     tempDirs.push(tempDir);

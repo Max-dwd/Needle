@@ -283,6 +283,8 @@ export const en: typeof zh = {
       delete: 'Delete',
       endpointPlaceholder: 'Endpoint',
       modelNamePlaceholder: 'Model Name',
+      multimodal: 'Multimodal model (usable for API subtitle extraction)',
+      protocol: 'Protocol',
       sharedBudget: 'Shared Budget',
       rpm: 'RPM Limit',
       rpmDesc: 'Shared RPM for summary and subtitle fallback.',
@@ -414,7 +416,7 @@ export const en: typeof zh = {
       toastResetPipelineError:
         'Failed to reset subtitle pipeline, try again later',
       addRuleErrorModel:
-        'Please configure models first, and ensure at least one intent or channel exists',
+        'Please configure at least one multimodal model, and ensure at least one intent or channel exists',
       toastRestoreApiPrompt:
         'Restored subtitle API prompt template, please save to apply',
       toastRestoreSegmentPrompt:
@@ -442,6 +444,11 @@ export const en: typeof zh = {
       maxWait: 'Max Wait Time',
       maxWaitDesc:
         'After exceeding this wait time threshold, if AI budget is available, the video will escape early to the API.',
+      apiModel: 'API Model',
+      apiModelDesc:
+        'Only models marked as multimodal on the Models page are shown.',
+      noMultimodalModels:
+        'Mark a multimodal model on the Models page first',
       customRules: 'Custom Rules',
       customRulesDesc:
         'Only matched intents or channels will use API escape and fallback. Each rule can be independently configured with max wait time and model.',

@@ -16,6 +16,7 @@ import { Info, RefreshCw, Cpu, BrainCircuit, History, BarChart3, Languages, File
 import ResearchFavoriteModal from '@/components/ResearchFavoriteModal';
 import type {
   SubtitleData,
+  AiSummaryModelConfig,
   VideoCommentsData,
   VideoSummaryData,
   VideoWithMeta,
@@ -188,12 +189,16 @@ export default forwardRef<VideoInfoPanelRef, VideoInfoPanelProps>(
   const abortRef = useRef<AbortController | null>(null);
   const [comments, setComments] = useState<VideoCommentsData | null>(null);
   const [commentsLoading, setCommentsLoading] = useState(true);
-  const [models, setModels] = useState<{ id: string; name: string }[]>([]);
+  const [models, setModels] = useState<
+    Pick<AiSummaryModelConfig, 'id' | 'name' | 'isMultimodal'>[]
+  >([]);
   const [selectedModel, setSelectedModel] = useState<string>('');
+  const [selectedSubtitleModel, setSelectedSubtitleModel] =
+    useState<string>('');
   const [viewingHistory, setViewingHistory] = useState(false);
   const [researchModalState, setResearchModalState] = useState<{
     mode: 'add' | 'edit';
-    existingFavorite?: { id: number; intent_type_id: number; note?: string };
+    existingFavorite?: { id: number; intent_type_id: number; note: string };
   } | null>(null);
   const [activePanel, setActivePanel] = useState<
     'subtitle' | 'summary' | 'comments' | 'chat'
@@ -252,6 +257,9 @@ export default forwardRef<VideoInfoPanelRef, VideoInfoPanelProps>(
       if (options?.force) {
         params.set('force', '1');
       }
+      if (preferredMethod === 'gemini' && selectedSubtitleModel) {
+        params.set('modelId', selectedSubtitleModel);
+      }
       if (!isYt) {
         if (typeof bilibiliAid === 'number' && bilibiliAid > 0) {
           params.set('aid', String(bilibiliAid));
@@ -262,7 +270,7 @@ export default forwardRef<VideoInfoPanelRef, VideoInfoPanelProps>(
       }
       return params;
     },
-    [bilibiliAid, bilibiliCid, isYt],
+    [bilibiliAid, bilibiliCid, isYt, selectedSubtitleModel],
   );
 
   const startSubtitleFetch = useCallback(
@@ -363,7 +371,10 @@ export default forwardRef<VideoInfoPanelRef, VideoInfoPanelProps>(
   }, [video.id, video.summary_status]);
 
   useEffect(() => {
-    if (activePanel === 'summary' && models.length === 0) {
+    if (
+      (activePanel === 'summary' || activePanel === 'subtitle') &&
+      models.length === 0
+    ) {
       fetch('/api/settings/ai-summary')
         .then((r) => r.json())
         .then((d) => setModels(d.models || []))
@@ -731,6 +742,9 @@ export default forwardRef<VideoInfoPanelRef, VideoInfoPanelProps>(
       : typeof subtitleMetadata?.generated_model === 'string'
         ? subtitleMetadata.generated_model
         : null;
+  const multimodalModels = models.filter(
+    (model) => model.isMultimodal !== false,
+  );
   const subtitleTriggerSource =
     typeof subtitleMetadata?.trigger_source === 'string'
       ? subtitleMetadata.trigger_source
@@ -824,7 +838,11 @@ export default forwardRef<VideoInfoPanelRef, VideoInfoPanelProps>(
                 if (fav) {
                   setResearchModalState({
                     mode: 'edit',
-                    existingFavorite: { id: fav.id, intent_type_id: fav.intent_type_id, note: fav.note }
+                    existingFavorite: {
+                      id: fav.id,
+                      intent_type_id: fav.intent_type_id,
+                      note: fav.note || '',
+                    },
                   });
                   return;
                 }
@@ -1060,12 +1078,51 @@ export default forwardRef<VideoInfoPanelRef, VideoInfoPanelProps>(
 
                 {/* Actions Section */}
                 <div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <select
+                      value={selectedSubtitleModel}
+                      onChange={(event) =>
+                        setSelectedSubtitleModel(event.target.value)
+                      }
+                      disabled={subtitleApiExtracting || multimodalModels.length === 0}
+                      style={{
+                        width: '100%',
+                        background: 'rgba(255, 255, 255, 0.05)',
+                        color: colors.textStrong,
+                        border: '1px solid rgba(255, 255, 255, 0.1)',
+                        borderRadius: 8,
+                        fontSize: 12,
+                        padding: '8px 10px',
+                        outline: 'none',
+                      }}
+                    >
+                      {multimodalModels.length === 0 ? (
+                        <option value="" style={{ background: 'var(--bg-secondary)' }}>
+                          无多模态模型
+                        </option>
+                      ) : (
+                        <option value="" style={{ background: 'var(--bg-secondary)' }}>
+                          默认多模态模型
+                        </option>
+                      )}
+                      {multimodalModels.map((model) => (
+                        <option
+                          key={model.id}
+                          value={model.id}
+                          style={{ background: 'var(--bg-secondary)' }}
+                        >
+                          {model.name || model.id}
+                        </option>
+                      ))}
+                    </select>
                     <button
                       onClick={() => void handleExtractSubtitleViaApi(true)}
-                      disabled={subtitleApiExtracting || subtitleRetrying}
+                      disabled={
+                        subtitleApiExtracting ||
+                        subtitleRetrying ||
+                        multimodalModels.length === 0
+                      }
                       style={{
-                        flex: 1,
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
@@ -1074,7 +1131,12 @@ export default forwardRef<VideoInfoPanelRef, VideoInfoPanelProps>(
                         border: 'none',
                         borderRadius: 8,
                         color: 'white',
-                        cursor: subtitleApiExtracting || subtitleRetrying ? 'progress' : 'pointer',
+                        cursor:
+                          subtitleApiExtracting ||
+                          subtitleRetrying ||
+                          multimodalModels.length === 0
+                            ? 'progress'
+                            : 'pointer',
                         fontSize: 12,
                         fontWeight: 600,
                         padding: '8px 12px',
@@ -1384,17 +1446,50 @@ export default forwardRef<VideoInfoPanelRef, VideoInfoPanelProps>(
                     {subtitleRetrying ? '重试中...' : '立即重试'}
                   </button>
                 )}
+                <select
+                  value={selectedSubtitleModel}
+                  onChange={(event) =>
+                    setSelectedSubtitleModel(event.target.value)
+                  }
+                  disabled={subtitleApiExtracting || multimodalModels.length === 0}
+                  style={{
+                    background: colors.inputBg,
+                    border: `1px solid ${colors.borderStrong}`,
+                    borderRadius: 8,
+                    color: colors.textStrong,
+                    fontSize: 13,
+                    minWidth: 150,
+                    padding: '9px 12px',
+                  }}
+                >
+                  {multimodalModels.length === 0 ? (
+                    <option value="">无多模态模型</option>
+                  ) : (
+                    <option value="">默认多模态模型</option>
+                  )}
+                  {multimodalModels.map((model) => (
+                    <option key={model.id} value={model.id}>
+                      {model.name || model.id}
+                    </option>
+                  ))}
+                </select>
                 <button
                   type="button"
                   onClick={() => void handleExtractSubtitleViaApi()}
-                  disabled={subtitleRetrying || subtitleApiExtracting}
+                  disabled={
+                    subtitleRetrying ||
+                    subtitleApiExtracting ||
+                    multimodalModels.length === 0
+                  }
                   style={{
                     background: colors.accentSoft,
                     border: `1px solid ${colors.accentBorder}`,
                     borderRadius: 8,
                     color: colors.accent,
                     cursor:
-                      subtitleRetrying || subtitleApiExtracting
+                      subtitleRetrying ||
+                      subtitleApiExtracting ||
+                      multimodalModels.length === 0
                         ? 'progress'
                         : 'pointer',
                     fontSize: 13,
@@ -1406,7 +1501,7 @@ export default forwardRef<VideoInfoPanelRef, VideoInfoPanelProps>(
                 </button>
               </div>
               <div style={{ color: colors.textFaint, fontSize: 11 }}>
-                API 提取会调用当前 AI 模型并使用设置页中的字幕提示词模板。
+                API 提取会调用多模态模型并使用设置页中的字幕提示词模板。
               </div>
             </div>
           )}

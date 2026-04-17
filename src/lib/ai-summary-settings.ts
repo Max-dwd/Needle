@@ -1,5 +1,30 @@
 import { getDb } from './db';
-import type { AiSummaryModelConfig } from '@/types';
+import type { AiModelProtocol, AiSummaryModelConfig } from '@/types';
+
+function inferProtocolFromEndpoint(endpoint: string): AiModelProtocol {
+  const normalized = (endpoint || '').toLowerCase();
+  if (normalized.includes('generativelanguage.googleapis.com')) {
+    return 'gemini';
+  }
+  if (/\/v\d+(?:beta|alpha)?\/messages\b/.test(normalized)) {
+    return 'anthropic-messages';
+  }
+  return 'openai-chat';
+}
+
+function normalizeProtocol(
+  value: unknown,
+  fallback: AiModelProtocol,
+): AiModelProtocol {
+  if (
+    value === 'gemini' ||
+    value === 'openai-chat' ||
+    value === 'anthropic-messages'
+  ) {
+    return value;
+  }
+  return fallback;
+}
 
 const AI_CONFIG_KEY = 'ai_summary_config';
 const AI_ENDPOINT_KEY = 'ai_summary_api_endpoint';
@@ -74,8 +99,8 @@ export const DEFAULT_AI_SUBTITLE_PROMPT_TEMPLATE = [
   '输出完整、带时间范围、以整句/整段为主的字幕。',
   '检查每个时间段是否和视频内容保持一致。',
   '输出格式示范：',
-  '[00:00-00:23] 发言1',
-  '[00:23-00:50] 发言2',
+  '[mm:ss-mm:ss] 发言1',
+  '[mm:ss-mm:ss] 发言2',
 ].join('\n');
 
 export const DEFAULT_AI_SUBTITLE_SEGMENT_PROMPT_TEMPLATE = [
@@ -135,6 +160,8 @@ export interface AiSummaryModelInput {
   endpoint?: string;
   apiKey?: string;
   model?: string;
+  isMultimodal?: boolean;
+  protocol?: AiModelProtocol;
 }
 
 export interface AiSummaryPromptTemplatesInput {
@@ -146,7 +173,7 @@ export interface AiSummaryPromptTemplatesInput {
 }
 
 export interface AiSummaryConfigDocument {
-  version: 5;
+  version: 6;
   promptTemplates: AiSummaryPromptTemplates;
   defaultModelId: string;
   autoDefaultModelId: string;
@@ -279,6 +306,14 @@ function normalizeModelInput(
     fallback.model || DEFAULT_AI_SUMMARY_MODEL,
   );
   const name = normalizeText(value.name, fallback.name || `模型 ${index + 1}`);
+  const isMultimodal =
+    typeof value.isMultimodal === 'boolean'
+      ? value.isMultimodal
+      : fallback.isMultimodal ?? true;
+  const protocol = normalizeProtocol(
+    value.protocol,
+    inferProtocolFromEndpoint(endpoint),
+  );
 
   return {
     id,
@@ -286,6 +321,8 @@ function normalizeModelInput(
     endpoint,
     apiKey,
     model,
+    isMultimodal,
+    protocol,
   };
 }
 
@@ -357,6 +394,8 @@ function normalizeConfigDocument(
         endpoint: DEFAULT_AI_SUMMARY_ENDPOINT,
         apiKey: '',
         model: DEFAULT_AI_SUMMARY_MODEL,
+        isMultimodal: true,
+        protocol: 'gemini',
       },
     ],
   };
@@ -433,7 +472,7 @@ function normalizeConfigDocument(
   );
 
   return {
-    version: 5,
+    version: 6,
     promptTemplates,
     defaultModelId: resolvedDefaultModelId,
     autoDefaultModelId,
@@ -474,6 +513,8 @@ function createLegacyConfigDocument(): LegacyConfigDocument {
         endpoint,
         apiKey,
         model,
+        isMultimodal: true,
+        protocol: inferProtocolFromEndpoint(endpoint),
       },
     ],
   };
@@ -533,6 +574,8 @@ function resolveSelectedModel(
           endpoint: DEFAULT_AI_SUMMARY_ENDPOINT,
           apiKey: '',
           model: DEFAULT_AI_SUMMARY_MODEL,
+          isMultimodal: true,
+          protocol: 'gemini',
         },
         source: 'default',
       };
@@ -570,6 +613,8 @@ function resolveSelectedModel(
         endpoint: DEFAULT_AI_SUMMARY_ENDPOINT,
         apiKey: '',
         model: DEFAULT_AI_SUMMARY_MODEL,
+        isMultimodal: true,
+        protocol: 'gemini',
       },
       source: 'default',
     };
@@ -722,6 +767,8 @@ function buildConfigFromExisting(
             ),
             apiKey: normalizeText(input.apiKey, ''),
             model: normalizeText(input.model, DEFAULT_AI_SUMMARY_MODEL),
+            isMultimodal: true,
+            protocol: 'gemini' as const,
           },
         ];
 
