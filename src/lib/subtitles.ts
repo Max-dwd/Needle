@@ -1530,6 +1530,9 @@ async function fetchSubtitleViaWhisperAi(
   respectPause: boolean,
   selectedModel: AiSummaryModelConfig,
   signal?: AbortSignal,
+  onPartialPayload?: (
+    payload: AiGeneratedSubtitlePayload,
+  ) => void | Promise<void>,
 ): Promise<AiGeneratedSubtitlePayload> {
   const whisperConfig = getSubtitleWhisperAiConfig();
   if (!whisperConfig.enabled) {
@@ -1567,6 +1570,20 @@ async function fetchSubtitleViaWhisperAi(
       signal,
     });
     const whisperDurationMs = Date.now() - whisperStartedAt;
+    const buildWhisperMetadata = (
+      totalTokens: number | undefined,
+      ttftSeconds: number | undefined,
+    ) => ({
+      ...buildAiSubtitleMetadata(
+        selectedModel,
+        priority,
+        totalTokens,
+        ttftSeconds,
+      ),
+      whisper_model: whisperConfig.whisperModelId,
+      whisper_duration_ms: whisperDurationMs,
+      whisper_segment_count: whisper.segments.length,
+    });
     const correction = await runWhisperAiCorrection({
       audioPath,
       sliceOutputDir,
@@ -1579,6 +1596,41 @@ async function fetchSubtitleViaWhisperAi(
       priority,
       signal,
       beforeBatch: () => waitForCrawlerResumeIfNeeded(respectPause),
+      onBatchComplete: onPartialPayload
+        ? async (progress) => {
+            if (progress.segments.length === 0) return;
+            await onPartialPayload({
+              ...buildAiSubtitlePayloadFromSegments(
+                video,
+                progress.segments,
+                progress.rawText,
+                'whisper-ai',
+                'fine',
+              ),
+              language: whisper.language || 'unknown',
+              metadata: {
+                ...buildWhisperMetadata(
+                  progress.totalTokens,
+                  progress.ttftSeconds,
+                ),
+                partial: 'true',
+                partial_updated_at: new Date().toISOString(),
+                batch_count: progress.batchCount,
+                completed_batch_count: progress.completedBatchCount,
+                last_completed_batch_index: progress.batchIndex,
+                hallucination_filtered_count:
+                  progress.hallucinationFilteredCount,
+                correction_failed_batch_count:
+                  progress.correctionFailedBatchCount,
+                correction_raw_fallback_ratio:
+                  progress.correctionRawFallbackRatio,
+                raw_fallback_batch_count: progress.rawFallbackBatchCount,
+                raw_fallback_batch_indexes:
+                  progress.rawFallbackBatchIndexes.join(','),
+              },
+            });
+          }
+        : undefined,
     });
 
     log.info('subtitle', 'whisper_ai_metrics', {
@@ -1606,15 +1658,10 @@ async function fetchSubtitleViaWhisperAi(
       ),
       language: whisper.language || 'unknown',
       metadata: {
-        ...buildAiSubtitleMetadata(
-          selectedModel,
-          priority,
+        ...buildWhisperMetadata(
           Number(correction.metadata.total_tokens) || undefined,
           Number(correction.metadata.ttft_seconds) || undefined,
         ),
-        whisper_model: whisperConfig.whisperModelId,
-        whisper_duration_ms: whisperDurationMs,
-        whisper_segment_count: whisper.segments.length,
         ...correction.metadata,
       },
     };
@@ -1954,9 +2001,7 @@ export async function fetchAndStoreSubtitle(
   let tempDirToCleanup: string | null = null;
   const attemptAt = new Date().toISOString();
   const rawPreferredMethod = options?.preferredMethod || '';
-  const requestedMethod = normalizeRequestedSubtitleMethod(
-    rawPreferredMethod,
-  );
+  const requestedMethod = normalizeRequestedSubtitleMethod(rawPreferredMethod);
   const apiFallbackOnly = isApiFallbackPreferredMethod(rawPreferredMethod);
   const allowBrowser =
     options?.allowBrowser ?? options?.allowOpenCli ?? !apiFallbackOnly;
@@ -2098,6 +2143,35 @@ export async function fetchAndStoreSubtitle(
         respectPause,
         getSelectedApiModel(),
         externalSignal,
+        async (partialPayload) => {
+          const stored = persistStructuredSubtitle(video, partialPayload);
+          updateSubtitleStateAndTrack({
+            subtitle_path: getJsonTargetPath(video),
+            subtitle_language: stored.language,
+            subtitle_format: stored.format,
+            subtitle_status: 'fetching',
+            subtitle_error: null,
+            subtitle_last_attempt_at: attemptAt,
+            subtitle_retry_count: video.subtitle_retry_count,
+            subtitle_cooldown_until: null,
+          });
+          appEvents.emit('subtitle:status-changed', {
+            videoId: video.video_id,
+            platform: video.platform,
+            status: 'fetching',
+            error: null,
+            cooldownUntil: null,
+            preferredMethod: statusPreferredMethod,
+            activeMethod: method,
+            isFallback,
+            hasPartial: true,
+            partialSegmentCount: stored.segments?.length || 0,
+            completedBatchCount:
+              partialPayload.metadata?.completed_batch_count ?? null,
+            batchCount: partialPayload.metadata?.batch_count ?? null,
+            message: `Whisper 校对字幕已加载 ${partialPayload.metadata?.completed_batch_count ?? '?'} / ${partialPayload.metadata?.batch_count ?? '?'} 个分片`,
+          });
+        },
       );
       persistStructuredSuccess('whisper-ai', payload);
       return true;

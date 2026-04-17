@@ -81,13 +81,13 @@ function normalizeBatchConfig(raw: unknown): SubtitleWhisperAiBatchConfig {
     value.targetSeconds,
     DEFAULT_BATCH_CONFIG.targetSeconds,
     30,
-    300,
+    20 * 60,
   );
   const maxSeconds = normalizePositiveNumber(
     value.maxSeconds,
     DEFAULT_BATCH_CONFIG.maxSeconds,
     targetSeconds,
-    600,
+    30 * 60,
   );
   const maxSegments = normalizePositiveNumber(
     value.maxSegments,

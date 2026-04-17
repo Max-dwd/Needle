@@ -162,8 +162,58 @@ function normalizeWhisperSegment(
   };
 }
 
+function normalizeNonFiniteJsonNumbers(raw: string): string {
+  let normalized = '';
+  let inString = false;
+  let escaped = false;
+
+  for (let index = 0; index < raw.length; index += 1) {
+    const char = raw[index];
+    if (inString) {
+      normalized += char;
+      if (escaped) {
+        escaped = false;
+      } else if (char === '\\') {
+        escaped = true;
+      } else if (char === '"') {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (char === '"') {
+      inString = true;
+      normalized += char;
+      continue;
+    }
+
+    if (raw.startsWith('-Infinity', index)) {
+      normalized += 'null';
+      index += '-Infinity'.length - 1;
+      continue;
+    }
+    if (raw.startsWith('Infinity', index)) {
+      normalized += 'null';
+      index += 'Infinity'.length - 1;
+      continue;
+    }
+    if (raw.startsWith('NaN', index)) {
+      normalized += 'null';
+      index += 'NaN'.length - 1;
+      continue;
+    }
+
+    normalized += char;
+  }
+
+  return normalized;
+}
+
 function parseWhisperJson(raw: string): WhisperResult {
-  const payload = JSON.parse(raw) as Record<string, unknown>;
+  const payload = JSON.parse(normalizeNonFiniteJsonNumbers(raw)) as Record<
+    string,
+    unknown
+  >;
   const segments = Array.isArray(payload.segments) ? payload.segments : [];
   return {
     language:
@@ -245,4 +295,5 @@ export async function runWhisper(
 
 export const __whisperRuntimeTestUtils = {
   parseWhisperJson,
+  normalizeNonFiniteJsonNumbers,
 };

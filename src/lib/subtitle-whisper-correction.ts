@@ -38,6 +38,21 @@ export interface WhisperCorrectionRunResult {
   metadata: Record<string, string | number>;
 }
 
+export interface WhisperCorrectionProgress {
+  batchIndex: number;
+  batchCount: number;
+  completedBatchCount: number;
+  segments: AnchoredSubtitleSegment[];
+  rawText: string;
+  hallucinationFilteredCount: number;
+  correctionFailedBatchCount: number;
+  rawFallbackBatchCount: number;
+  correctionRawFallbackRatio: number;
+  rawFallbackBatchIndexes: number[];
+  totalTokens?: number;
+  ttftSeconds?: number;
+}
+
 export interface WhisperCorrection {
   id: number;
   text: string;
@@ -63,6 +78,14 @@ const RESPONSE_SCHEMA = {
   required: ['corrections'],
 } as const;
 
+const CORRECTION_MAX_ATTEMPTS = 2;
+const MAX_DEGRADED_RAW_FALLBACK_RATIO = 0.2;
+const MICRO_HALLUCINATION_WINDOW_SECONDS = 10;
+const MICRO_HALLUCINATION_MIN_REPEATS = 4;
+const MICRO_HALLUCINATION_MAX_SECONDS = 0.6;
+
+type TimedTextSegment = Pick<WhisperSegment, 'start' | 'end' | 'text'>;
+
 export function isLikelyHallucination(
   segment: WhisperSegment,
   config: SubtitleWhisperAiHallucinationConfig,
@@ -80,6 +103,56 @@ export function isLikelyHallucination(
     return true;
   }
   return false;
+}
+
+function normalizeMicroText(text: string): string {
+  return text.replace(/\s+/g, '').trim();
+}
+
+function isSingleCjkCharacter(text: string): boolean {
+  return /^[\u3400-\u9fff]$/u.test(text);
+}
+
+function isMicroSegment(segment: TimedTextSegment) {
+  const text = normalizeMicroText(segment.text);
+  return (
+    isSingleCjkCharacter(text) &&
+    segment.end - segment.start <= MICRO_HALLUCINATION_MAX_SECONDS
+  );
+}
+
+export function isLikelyRepeatedMicroHallucination(
+  segment: TimedTextSegment,
+  allSegments: TimedTextSegment[],
+): boolean {
+  const text = normalizeMicroText(segment.text);
+  if (!isMicroSegment(segment)) return false;
+
+  const nearbySameTextCount = allSegments.filter((candidate) => {
+    if (!isMicroSegment(candidate)) return false;
+    if (normalizeMicroText(candidate.text) !== text) return false;
+    return (
+      Math.abs(candidate.start - segment.start) <=
+      MICRO_HALLUCINATION_WINDOW_SECONDS
+    );
+  }).length;
+
+  return nearbySameTextCount >= MICRO_HALLUCINATION_MIN_REPEATS;
+}
+
+function filterRepeatedMicroHallucinations<T extends TimedTextSegment>(
+  segments: T[],
+): {
+  segments: T[];
+  droppedCount: number;
+} {
+  const filtered = segments.filter(
+    (segment) => !isLikelyRepeatedMicroHallucination(segment, segments),
+  );
+  return {
+    segments: filtered,
+    droppedCount: segments.length - filtered.length,
+  };
 }
 
 function durationOf(segments: WhisperSegment[]): number {
@@ -193,8 +266,8 @@ export function splitIntoBatches(
 function rawSegmentsFromWhisper(
   segments: WhisperSegment[],
 ): AnchoredSubtitleSegment[] {
-  return segments
-    .map((segment) => {
+  return filterRepeatedMicroHallucinations(segments)
+    .segments.map((segment) => {
       const text = segment.text.trim();
       if (!text) return null;
       return {
@@ -236,12 +309,12 @@ export function mergeCorrections(
 }
 
 function parseCorrections(rawText: string): WhisperCorrection[] {
-  const withoutFence = rawText
+  const withoutFence = extractJsonCandidate(rawText)
     .trim()
     .replace(/^```(?:json)?\s*/i, '')
     .replace(/\s*```$/i, '')
     .trim();
-  const payload = JSON.parse(withoutFence) as unknown;
+  const payload = JSON.parse(sanitizeJsonCandidate(withoutFence)) as unknown;
   const corrections = Array.isArray(payload)
     ? payload
     : payload && typeof payload === 'object'
@@ -270,6 +343,68 @@ function parseCorrections(rawText: string): WhisperCorrection[] {
       drop: value.drop,
     };
   });
+}
+
+function extractJsonCandidate(rawText: string): string {
+  const trimmed = rawText.trim();
+  if (!trimmed) return trimmed;
+
+  const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+  if (fenced?.[1]) return fenced[1].trim();
+
+  const firstObject = trimmed.indexOf('{');
+  const firstArray = trimmed.indexOf('[');
+  const starts = [firstObject, firstArray].filter((index) => index >= 0);
+  if (starts.length === 0) return trimmed;
+
+  const start = Math.min(...starts);
+  const endChar = trimmed[start] === '[' ? ']' : '}';
+  const end = trimmed.lastIndexOf(endChar);
+  if (end <= start) return trimmed.slice(start);
+  return trimmed.slice(start, end + 1);
+}
+
+function sanitizeJsonCandidate(rawText: string): string {
+  let output = '';
+  let inString = false;
+  let escaped = false;
+
+  for (let index = 0; index < rawText.length; index += 1) {
+    const char = rawText[index];
+    if (inString) {
+      if (escaped) {
+        output += char;
+        escaped = false;
+        continue;
+      }
+      if (char === '\\') {
+        output += char;
+        escaped = true;
+        continue;
+      }
+      if (char === '"') {
+        output += char;
+        inString = false;
+        continue;
+      }
+      if (char.charCodeAt(0) < 0x20) {
+        output += ' ';
+        continue;
+      }
+      output += char;
+      continue;
+    }
+
+    if (char === '"') {
+      inString = true;
+      output += char;
+      continue;
+    }
+
+    output += char;
+  }
+
+  return output.replace(/,\s*([}\]])/g, '$1');
 }
 
 export function buildCorrectionPrompt(
@@ -329,47 +464,63 @@ async function correctBatch(
       ) +
       400,
   );
-  const raw = await transcriber.transcribeAudio(model, {
-    audioPath,
-    mediaType: 'audio/mpeg',
-    prompt,
-    systemPrompt,
-    responseSchema: RESPONSE_SCHEMA,
-    maxOutputTokens: Math.max(2048, batch.segments.length * 80),
-    priority,
-    label: `whisper-ai:${video.platform}:${video.video_id}:batch-${batch.index + 1}`,
-    estimatedTokens,
-    signal,
-  });
-  const corrections = parseCorrections(raw.text);
-  if (corrections.length === 0) {
-    return {
-      segments: rawSegmentsFromWhisper(batch.segments),
-      rawFallback: true,
-      totalTokens: raw.usage?.totalTokens,
-      ttftSeconds: raw.ttftSeconds,
-    };
+  let lastError: unknown;
+
+  for (let attempt = 1; attempt <= CORRECTION_MAX_ATTEMPTS; attempt += 1) {
+    try {
+      const raw = await transcriber.transcribeAudio(model, {
+        audioPath,
+        mediaType: 'audio/mpeg',
+        prompt,
+        systemPrompt:
+          attempt === 1
+            ? systemPrompt
+            : `${systemPrompt}\n上一轮输出不是可解析 JSON。请重新听音频，只输出严格 JSON；不要 Markdown，不要注释，不要尾随逗号。`,
+        responseSchema: RESPONSE_SCHEMA,
+        maxOutputTokens: Math.max(2048, batch.segments.length * 80),
+        priority,
+        label: `whisper-ai:${video.platform}:${video.video_id}:batch-${batch.index + 1}:attempt-${attempt}`,
+        estimatedTokens,
+        signal,
+      });
+      const corrections = parseCorrections(raw.text);
+      if (corrections.length === 0) {
+        throw new Error('whisper-ai correction response is empty');
+      }
+
+      const presentIds = new Set(corrections.map((item) => item.id));
+      const missingCount = batch.segments.filter(
+        (segment) => !presentIds.has(segment.id),
+      ).length;
+      if (missingCount / Math.max(1, batch.segments.length) > 0.2) {
+        throw new Error(
+          `whisper-ai correction missing too many segment ids (${missingCount}/${batch.segments.length})`,
+        );
+      }
+
+      return {
+        segments: mergeCorrections(batch.segments, corrections),
+        rawFallback: false,
+        totalTokens: raw.usage?.totalTokens,
+        ttftSeconds: raw.ttftSeconds,
+      };
+    } catch (error) {
+      lastError = error;
+      if (attempt < CORRECTION_MAX_ATTEMPTS) {
+        log.warn('subtitle', 'whisper_ai_batch_retry', {
+          platform: video.platform,
+          target: video.video_id,
+          batch_index: batch.index,
+          attempt,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
   }
 
-  const presentIds = new Set(corrections.map((item) => item.id));
-  const missingCount = batch.segments.filter(
-    (segment) => !presentIds.has(segment.id),
-  ).length;
-  if (missingCount / Math.max(1, batch.segments.length) > 0.2) {
-    return {
-      segments: rawSegmentsFromWhisper(batch.segments),
-      rawFallback: true,
-      totalTokens: raw.usage?.totalTokens,
-      ttftSeconds: raw.ttftSeconds,
-    };
-  }
-
-  return {
-    segments: mergeCorrections(batch.segments, corrections),
-    rawFallback: false,
-    totalTokens: raw.usage?.totalTokens,
-    ttftSeconds: raw.ttftSeconds,
-  };
+  throw lastError instanceof Error
+    ? lastError
+    : new Error(String(lastError || 'whisper-ai correction failed'));
 }
 
 async function runWithConcurrency<T>(
@@ -405,10 +556,17 @@ export async function runWhisperAiCorrection(input: {
   priority: TranscribePriority;
   signal?: AbortSignal;
   beforeBatch?: () => Promise<void>;
+  onBatchComplete?: (
+    progress: WhisperCorrectionProgress,
+  ) => void | Promise<void>;
 }): Promise<WhisperCorrectionRunResult> {
-  const usableSegments = input.whisperSegments.filter(
+  const confidenceFilteredSegments = input.whisperSegments.filter(
     (segment) => !isLikelyHallucination(segment, input.hallucinationConfig),
   );
+  const microFiltered = filterRepeatedMicroHallucinations(
+    confidenceFilteredSegments,
+  );
+  const usableSegments = microFiltered.segments;
   const hallucinationFilteredCount =
     input.whisperSegments.length - usableSegments.length;
   if (usableSegments.length === 0) {
@@ -418,8 +576,59 @@ export async function runWhisperAiCorrection(input: {
   const batches = splitIntoBatches(usableSegments, input.batchConfig);
   let correctionFailedBatchCount = 0;
   let rawFallbackBatchCount = 0;
+  const rawFallbackBatchIndexes: number[] = [];
+  let completedBatchCount = 0;
   let totalTokens = 0;
   let firstBatchTtft: number | undefined;
+  const completedSegments: AnchoredSubtitleSegment[] = [];
+  let progressQueue = Promise.resolve();
+
+  const enqueueProgress = (
+    batchIndex: number,
+    segments: AnchoredSubtitleSegment[],
+  ) => {
+    if (!input.onBatchComplete) return Promise.resolve();
+    completedBatchCount += 1;
+    completedSegments.push(...segments);
+    const snapshot = completedSegments
+      .slice()
+      .sort((a, b) => a.start - b.start)
+      .filter((segment) => segment.text.trim());
+    const rawText = snapshot
+      .map(
+        (segment) =>
+          `[${segment.start.toFixed(2)}-${segment.end.toFixed(2)}] ${segment.text}`,
+      )
+      .join('\n');
+    const rawFallbackRatio =
+      batches.length > 0 ? rawFallbackBatchCount / batches.length : 0;
+    const progress: WhisperCorrectionProgress = {
+      batchIndex,
+      batchCount: batches.length,
+      completedBatchCount,
+      segments: snapshot,
+      rawText,
+      hallucinationFilteredCount,
+      correctionFailedBatchCount,
+      rawFallbackBatchCount,
+      correctionRawFallbackRatio: rawFallbackRatio,
+      rawFallbackBatchIndexes: [...rawFallbackBatchIndexes],
+      ...(totalTokens > 0 ? { totalTokens } : {}),
+      ...(firstBatchTtft !== undefined ? { ttftSeconds: firstBatchTtft } : {}),
+    };
+    progressQueue = progressQueue
+      .then(() => input.onBatchComplete?.(progress))
+      .catch((error) => {
+        log.warn('subtitle', 'whisper_ai_progress_failed', {
+          platform: input.video.platform,
+          target: input.video.video_id,
+          batch_index: batchIndex,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      });
+    return progressQueue;
+  };
+
   const corrected = await runWithConcurrency(batches, 3, async (batch) => {
     await input.beforeBatch?.();
     try {
@@ -442,25 +651,35 @@ export async function runWhisperAiCorrection(input: {
       if (firstBatchTtft === undefined) {
         firstBatchTtft = result.ttftSeconds;
       }
-      if (result.rawFallback) rawFallbackBatchCount += 1;
+      if (result.rawFallback) {
+        rawFallbackBatchCount += 1;
+        rawFallbackBatchIndexes.push(batch.index);
+      }
+      await enqueueProgress(batch.index, result.segments);
       return result.segments;
     } catch (error) {
       correctionFailedBatchCount += 1;
       rawFallbackBatchCount += 1;
+      rawFallbackBatchIndexes.push(batch.index);
       log.warn('subtitle', 'whisper_ai_batch_fallback', {
         platform: input.video.platform,
         target: input.video.video_id,
         batch_index: batch.index,
         error: error instanceof Error ? error.message : String(error),
       });
-      return rawSegmentsFromWhisper(batch.segments);
+      const fallbackSegments = rawSegmentsFromWhisper(batch.segments);
+      await enqueueProgress(batch.index, fallbackSegments);
+      return fallbackSegments;
     }
   });
+  await progressQueue;
 
-  const segments = corrected
+  const mergedSegments = corrected
     .flat()
     .sort((a, b) => a.start - b.start)
     .filter((segment) => segment.text.trim());
+  const finalMicroFiltered = filterRepeatedMicroHallucinations(mergedSegments);
+  const segments = finalMicroFiltered.segments;
   if (segments.length === 0) {
     throw new Error('whisper-ai produced no subtitle text');
   }
@@ -472,6 +691,14 @@ export async function runWhisperAiCorrection(input: {
     .join('\n');
   const rawFallbackRatio =
     batches.length > 0 ? rawFallbackBatchCount / batches.length : 0;
+  if (
+    rawFallbackBatchCount >= 2 &&
+    rawFallbackRatio > MAX_DEGRADED_RAW_FALLBACK_RATIO
+  ) {
+    throw new Error(
+      `whisper-ai correction degraded: ${rawFallbackBatchCount}/${batches.length} batches fell back to raw Whisper`,
+    );
+  }
 
   return {
     segments,
@@ -484,8 +711,15 @@ export async function runWhisperAiCorrection(input: {
           0,
         ) / Math.max(1, batches.length),
       hallucination_filtered_count: hallucinationFilteredCount,
+      micro_hallucination_filtered_count:
+        microFiltered.droppedCount + finalMicroFiltered.droppedCount,
+      post_correction_micro_hallucination_filtered_count:
+        finalMicroFiltered.droppedCount,
       correction_failed_batch_count: correctionFailedBatchCount,
+      raw_fallback_batch_count: rawFallbackBatchCount,
       correction_raw_fallback_ratio: rawFallbackRatio,
+      raw_fallback_batch_indexes: rawFallbackBatchIndexes.join(','),
+      ...(rawFallbackBatchCount > 0 ? { correction_degraded: 'true' } : {}),
       ...(rawFallbackBatchCount === batches.length
         ? { fallback: 'raw-whisper' }
         : {}),

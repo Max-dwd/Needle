@@ -34,4 +34,37 @@ describe('whisper runtime JSON parsing', () => {
       ],
     });
   });
+
+  it('accepts mlx-whisper JSON containing bare NaN confidence values', () => {
+    expect(
+      __whisperRuntimeTestUtils.parseWhisperJson(
+        [
+          '{"language":"zh","segments":[',
+          '{"id":1,"start":0,"end":1.5,"text":"保留 NaN 这个词","avg_logprob": NaN, "compression_ratio": Infinity},',
+          '{"id":2,"start":2,"end":3,"text":"ok","no_speech_prob": -Infinity}',
+          ']}',
+        ].join(''),
+      ),
+    ).toEqual({
+      language: 'zh',
+      segments: [
+        {
+          id: 1,
+          start: 0,
+          end: 1.5,
+          text: '保留 NaN 这个词',
+          noSpeechProb: undefined,
+          avgLogprob: undefined,
+        },
+        {
+          id: 2,
+          start: 2,
+          end: 3,
+          text: 'ok',
+          noSpeechProb: undefined,
+          avgLogprob: undefined,
+        },
+      ],
+    });
+  });
 });

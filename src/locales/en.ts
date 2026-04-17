@@ -474,7 +474,7 @@ export const en: typeof zh = {
       checkWhisperStatus: 'Check Environment',
       whisperChecking: 'Checking...',
       whisperTargetSeconds: 'Target Chunk Length',
-      whisperTargetSecondsDesc: 'Target audio length (in seconds) to merge before sending to LLM.',
+      whisperTargetSecondsDesc: 'Merge 1-20 minutes of audio and Whisper segments before sending to the LLM.',
       whisperModelId: 'Whisper Model',
       whisperModelIdDesc: 'base-q4 is recommended for balanced performance.',
       whisperPrompt: 'System Prompt Template',

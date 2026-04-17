@@ -437,7 +437,7 @@ export const zh = {
       checkWhisperStatus: '检测环境',
       whisperChecking: '检测中...',
       whisperTargetSeconds: '目标片段时长',
-      whisperTargetSecondsDesc: '合并几分钟的音频和 Whisper 区间一起发送给多模态大模型校对。',
+      whisperTargetSecondsDesc: '合并 1-20 分钟音频和 Whisper 区间一起发送给多模态大模型校对。',
       whisperModelId: 'Whisper 模型版本',
       whisperModelIdDesc: '建议选用 base-q4 获取较好性能。',
       whisperPrompt: '系统指令模板 (System Prompt)',

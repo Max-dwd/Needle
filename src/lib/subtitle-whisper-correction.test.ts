@@ -3,6 +3,7 @@ import {
   __subtitleWhisperCorrectionTestUtils,
   buildCorrectionPrompt,
   isLikelyHallucination,
+  isLikelyRepeatedMicroHallucination,
   mergeCorrections,
   splitIntoBatches,
 } from './subtitle-whisper-correction';
@@ -58,11 +59,7 @@ describe('whisper-ai batch splitter', () => {
         minSeconds: 10,
         silenceWindow: 30,
       }).map((batch) => batch.segments.map((item) => item.id)),
-    ).toEqual([
-      [1, 2],
-      [3, 4],
-      [5],
-    ]);
+    ).toEqual([[1, 2], [3, 4], [5]]);
   });
 });
 
@@ -129,6 +126,18 @@ describe('whisper-ai correction merger', () => {
       ),
     ).toEqual([{ id: 1, text: '兼容返回字段', drop: false }]);
   });
+
+  it('extracts strict JSON from fenced responses and removes trailing commas', () => {
+    expect(
+      __subtitleWhisperCorrectionTestUtils.parseCorrections(
+        [
+          '```json',
+          '{"corrections":[{"id":1,"text":"校正文本","drop":false},],}',
+          '```',
+        ].join('\n'),
+      ),
+    ).toEqual([{ id: 1, text: '校正文本', drop: false }]);
+  });
 });
 
 describe('whisper-ai hallucination filter', () => {
@@ -153,5 +162,21 @@ describe('whisper-ai hallucination filter', () => {
         config,
       ),
     ).toBe(false);
+  });
+
+  it('detects dense repeated one-character Whisper hallucinations', () => {
+    const noisy = [
+      segment(1, 10, 10.2, '他'),
+      segment(2, 10.1, 10.3, '他'),
+      segment(3, 10.2, 10.4, '他'),
+      segment(4, 10.3, 10.5, '他'),
+      segment(5, 25, 27, '正常文本'),
+    ];
+
+    expect(isLikelyRepeatedMicroHallucination(noisy[0], noisy)).toBe(true);
+    expect(isLikelyRepeatedMicroHallucination(noisy[4], noisy)).toBe(false);
+    expect(
+      __subtitleWhisperCorrectionTestUtils.rawSegmentsFromWhisper(noisy),
+    ).toEqual([{ start: 25, end: 27, text: '正常文本' }]);
   });
 });

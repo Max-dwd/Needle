@@ -66,6 +66,12 @@ const DEFAULT_WHISPER_CONFIG: SubtitleWhisperAiConfig = {
   updatedAt: null,
 };
 
+function formatWhisperChunkDuration(seconds: number): string {
+  const safe = Math.max(30, Math.round(Number(seconds) || 180));
+  if (safe % 60 === 0) return `${safe / 60} 分钟`;
+  return `${safe} 秒`;
+}
+
 const SUBTITLE_BACKOFF_PLATFORMS = [
   { id: 'youtube' as const, label: 'YouTube' },
   { id: 'bilibili' as const, label: 'Bilibili' },
@@ -670,14 +676,15 @@ function SubtitlesTabForm({
             <div className="setting-info">
               <span className="setting-label">{t.settings.subtitles.whisperTargetSeconds}</span>
               <span className="setting-description">
-                {t.settings.subtitles.whisperTargetSecondsDesc} ({whisperAi.batch.targetSeconds}s)
+                {t.settings.subtitles.whisperTargetSecondsDesc} (
+                {formatWhisperChunkDuration(whisperAi.batch.targetSeconds)})
               </span>
             </div>
             <input
               type="range"
               min="60"
-              max="300"
-              step="30"
+              max="1200"
+              step="60"
               value={whisperAi.batch.targetSeconds}
               onChange={(e) =>
                 updateWhisperAi({

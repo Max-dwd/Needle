@@ -514,12 +514,13 @@ export default forwardRef<VideoInfoPanelRef, VideoInfoPanelProps>(
         ...(message ? { message } : {}),
       }));
 
+      const hasPartialSubtitle = data?.hasPartial === true;
       if (status === 'fetching') {
         setSubtitleLoading(false);
-        return;
+        if (!hasPartialSubtitle) return;
       }
 
-      if (status === 'fetched') {
+      if (status === 'fetched' || hasPartialSubtitle) {
         const latestAid = bilibiliAidRef.current;
         const latestCid = bilibiliCidRef.current;
         const params = new URLSearchParams({
@@ -765,14 +766,21 @@ export default forwardRef<VideoInfoPanelRef, VideoInfoPanelProps>(
       : null;
   const subtitleActiveMethod =
     typeof subtitle?.activeMethod === 'string' ? subtitle.activeMethod : null;
+  const subtitleRawFallbackRatio = parseMetricNumber(
+    subtitleMetadata?.correction_raw_fallback_ratio,
+  );
   const subtitleUsedRawWhisper =
     subtitleMetadata?.fallback === 'raw-whisper' ||
-    parseMetricNumber(subtitleMetadata?.correction_raw_fallback_ratio) === 1;
+    subtitleRawFallbackRatio === 1;
+  const subtitleHasRawWhisperFallback =
+    subtitleRawFallbackRatio !== null && subtitleRawFallbackRatio > 0;
   const subtitleSourceLabel =
     subtitle?.sourceMethod === 'whisper-ai'
       ? subtitleUsedRawWhisper
         ? 'Whisper 原文（校对回退）'
-        : 'Whisper + AI 校对'
+        : subtitleHasRawWhisperFallback
+          ? 'Whisper + AI 校对（部分回退）'
+          : 'Whisper + AI 校对'
       : subtitle?.sourceMethod === 'gemini-url'
       ? 'Gemini API（视频直传）'
       : subtitle?.sourceMethod === 'gemini-audio'
