@@ -201,22 +201,6 @@ export default function PlayerModal({
   const lastManualRateRef = useRef<number | null>(null);
   const keyboardSettingsRef = useRef(keyboardSettings);
 
-  useEffect(() => {
-    const controller = new AbortController();
-    fetch(`/api/videos/${video.id}/summary`, {
-      cache: 'no-store',
-      signal: controller.signal,
-    })
-      .then((res) => res.json())
-      .then((data) => {
-        if (!controller.signal.aborted && data.markdown) {
-          setSummaryMarkdown(data.markdown);
-        }
-      })
-      .catch(() => {});
-    return () => controller.abort();
-  }, [video.id]);
-
   const chapters = useMemo(
     () =>
       extractSummaryChapters(
@@ -1288,6 +1272,7 @@ export default function PlayerModal({
               playerDuration={playerDuration}
               bilibiliAid={isYt ? null : (bilibiliPlayback?.aid ?? null)}
               bilibiliCid={isYt ? null : (bilibiliPlayback?.cid ?? null)}
+              onSummaryChange={setSummaryMarkdown}
             />
           </div>
 

@@ -33,6 +33,7 @@ interface VideoInfoPanelProps {
   playerDuration?: number;
   bilibiliAid?: number | null;
   bilibiliCid?: number | null;
+  onSummaryChange?: (markdown: string) => void;
 }
 
 function formatToken(n: number | string | undefined | null): string {
@@ -164,6 +165,7 @@ export default forwardRef<VideoInfoPanelRef, VideoInfoPanelProps>(
       playerDuration = 0,
       bilibiliAid,
       bilibiliCid,
+      onSummaryChange,
     }: VideoInfoPanelProps,
     ref,
   ) {
@@ -198,6 +200,14 @@ export default forwardRef<VideoInfoPanelRef, VideoInfoPanelProps>(
   >('summary');
   const activeSegmentRef = useRef<HTMLButtonElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+
+  const effectiveMarkdown = viewingHistory && summary?.previous?.markdown
+    ? summary.previous.markdown
+    : summary?.markdown || '';
+
+  useEffect(() => {
+    onSummaryChange?.(effectiveMarkdown);
+  }, [effectiveMarkdown, onSummaryChange]);
 
   useImperativeHandle(ref, () => ({
     scrollToChapterSeconds: (seconds: number) => {
