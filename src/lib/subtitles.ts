@@ -928,7 +928,7 @@ async function generateGeminiSubtitle(
   priority: 'manual-subtitle' | 'auto-subtitle',
   label: string,
   selectedModel: AiSummaryModelConfig,
-): Promise<{ text: string; usage?: GeminiUsageMetadata }> {
+): Promise<{ text: string; usage?: GeminiUsageMetadata; ttftSeconds?: number }> {
   const settings = getAiSummarySettings();
   if (!selectedModel.apiKey) {
     throw new Error('未配置 AI API Key，无法执行 Gemini 字幕 fallback');
@@ -943,6 +943,7 @@ async function generateGeminiSubtitle(
 
   let totalTokens: number | undefined;
   try {
+    const requestStartTime = Date.now();
     const res = await fetch(
       `${apiBase}/models/${encodeURIComponent(modelName)}:generateContent?key=${encodeURIComponent(selectedModel.apiKey)}`,
       {
@@ -958,6 +959,7 @@ async function generateGeminiSubtitle(
         }),
       },
     );
+    const ttftSeconds = (Date.now() - requestStartTime) / 1000;
     const payload = (await res.json().catch(() => ({}))) as Record<
       string,
       unknown
@@ -985,7 +987,7 @@ async function generateGeminiSubtitle(
       throw new Error('Gemini subtitle fallback returned empty content');
     }
     budgetLease.release(totalTokens);
-    return { text, usage: { totalTokens } };
+    return { text, usage: { totalTokens }, ttftSeconds };
   } catch (error) {
     budgetLease.release(totalTokens);
     throw error;
@@ -998,7 +1000,7 @@ async function generateGeminiSubtitleFromAudio(
   priority: 'manual-subtitle' | 'auto-subtitle',
   label: string,
   selectedModel: AiSummaryModelConfig,
-): Promise<{ text: string; usage?: GeminiUsageMetadata }> {
+): Promise<{ text: string; usage?: GeminiUsageMetadata; ttftSeconds?: number }> {
   const { uploadBase } = deriveGeminiApiBase(selectedModel.endpoint);
   const uploaded = await uploadGeminiFile(
     audioPath,
@@ -1048,6 +1050,7 @@ async function fetchSubtitleViaGeminiSegmentedAudio(
   const mergedSegments: SubtitleSegment[] = [];
   const rawBlocks: string[] = [];
   let totalTokens = 0;
+  let firstChunkTtft: number | undefined;
 
   for (const chunk of chunks) {
     await waitForCrawlerResumeIfNeeded(respectPause);
@@ -1063,6 +1066,9 @@ async function fetchSubtitleViaGeminiSegmentedAudio(
       `${sourceMethod}:${video.video_id}:chunk-${chunk.index + 1}`,
       selectedModel,
     );
+    if (chunk.index === 0) {
+      firstChunkTtft = raw.ttftSeconds;
+    }
     const relativeSegments = parseAiRangeBlock(raw.text);
     if (relativeSegments.length === 0) {
       throw new Error(
@@ -1094,6 +1100,7 @@ async function fetchSubtitleViaGeminiSegmentedAudio(
       chunk_count: chunks.length,
       chunk_seconds: AI_SUBTITLE_CHUNK_SECONDS,
       ...(totalTokens > 0 ? { total_tokens: totalTokens } : {}),
+      ...(firstChunkTtft !== undefined ? { ttft_seconds: firstChunkTtft } : {}),
     },
   };
 }
