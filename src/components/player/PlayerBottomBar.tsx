@@ -32,28 +32,32 @@ export default function PlayerBottomBar({
   const [hoveredChapterIndex, setHoveredChapterIndex] = useState<number | null>(
     null,
   );
-  const [isShiftHeld, setIsShiftHeld] = useState(false);
+  const [isDetailedMode, setIsDetailedMode] = useState(false);
   const trackRef = useRef<HTMLDivElement>(null);
   const [tooltipLeft, setTooltipLeft] = useState(0);
   const [trackWidth, setTrackWidth] = useState(0);
 
   useEffect(() => {
-    if (hoveredChapterIndex === null) return;
-
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Shift') setIsShiftHeld(true);
-    };
-    const handleKeyUp = (e: KeyboardEvent) => {
-      if (e.key === 'Shift') setIsShiftHeld(false);
+      // 避免在输入框中按下 Shift 时触发切换
+      if (
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLTextAreaElement ||
+        (e.target as HTMLElement)?.isContentEditable
+      ) {
+        return;
+      }
+
+      if (e.key === 'Shift') {
+        setIsDetailedMode((prev) => !prev);
+      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('keyup', handleKeyUp);
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [hoveredChapterIndex]);
+  }, []);
 
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!trackRef.current) return;
@@ -144,7 +148,6 @@ export default function PlayerBottomBar({
         aria-valuetext={formatSecondsLabel(currentSeconds)}
         onMouseLeave={() => {
           setHoveredChapterIndex(null);
-          setIsShiftHeld(false);
         }}
         onMouseMove={handleMouseMove}
         onClick={handleProgressClick}
@@ -152,13 +155,58 @@ export default function PlayerBottomBar({
           position: 'relative',
           flex: 1,
           height: 6,
-          borderRadius: 3,
-          background: 'var(--bg-hover)',
           display: 'flex',
           alignItems: 'center',
           cursor: duration > 0 ? 'pointer' : 'default',
         }}
       >
+        {/* 1. Visual Layer: Background, Progress, and Separators. Clips to track rounds. */}
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            borderRadius: 3,
+            overflow: 'hidden',
+            background: 'var(--bg-hover)',
+            pointerEvents: 'none',
+          }}
+        >
+          {/* Progress fill */}
+          <div
+            style={{
+              position: 'absolute',
+              left: 0,
+              top: 0,
+              bottom: 0,
+              width: `${progressRatio * 100}%`,
+              background: 'var(--accent-purple)',
+              opacity: 0.75,
+            }}
+          />
+
+          {/* Separators: Rendered on top of progress to keep them visible */}
+          {hasChapters &&
+            chapters.map((ch, i) => {
+              if (i === 0) return null;
+              const leftPct =
+                (Math.min(duration, Math.max(0, ch.seconds)) / duration) * 100;
+              return (
+                <div
+                  key={`sep-${i}`}
+                  style={{
+                    position: 'absolute',
+                    left: `${leftPct}%`,
+                    width: 2,
+                    height: '100%',
+                    background: 'var(--bg-secondary)',
+                    zIndex: 1,
+                  }}
+                />
+              );
+            })}
+        </div>
+
+        {/* 2. Interaction Layer: Chapters for Hover/Click tooltips */}
         {hasChapters && (
           <div
             style={{
@@ -176,14 +224,14 @@ export default function PlayerBottomBar({
               if (segDuration <= 0) return null;
               const leftPct = (startSeconds / duration) * 100;
               const widthPct = (segDuration / duration) * 100;
+
               return (
                 <div
                   key={i}
                   role="button"
                   aria-label={`跳转到章节：${ch.title}（${formatSecondsLabel(ch.seconds)}）`}
-                  onMouseEnter={(event) => {
+                  onMouseEnter={() => {
                     setHoveredChapterIndex(i);
-                    setIsShiftHeld(event.shiftKey);
                   }}
                   onClick={(e) => {
                     e.stopPropagation();
@@ -194,31 +242,14 @@ export default function PlayerBottomBar({
                     left: `${leftPct}%`,
                     width: `${widthPct}%`,
                     height: '100%',
-                    background: 'var(--bg-hover)',
-                    borderRadius: 3,
-                    boxShadow:
-                      i > 0 ? 'inset 2px 0 0 var(--bg-secondary)' : undefined,
+                    background: 'transparent',
+                    cursor: 'pointer',
                   }}
                 />
               );
             })}
           </div>
         )}
-
-        <div
-          style={{
-            position: 'absolute',
-            left: 0,
-            top: 0,
-            bottom: 0,
-            width: `${progressRatio * 100}%`,
-            background: 'var(--accent-purple)',
-            opacity: 0.75,
-            borderRadius: 3,
-            pointerEvents: 'none',
-            mixBlendMode: 'normal',
-          }}
-        />
 
         {hoveredChapterIndex !== null && chapters[hoveredChapterIndex] && (
           <div
@@ -239,7 +270,7 @@ export default function PlayerBottomBar({
                 position: 'relative',
                 left: 0,
                 transform: `translateX(calc(-50%))`,
-                maxWidth: isShiftHeld ? 500 : 320,
+                maxWidth: isDetailedMode ? 500 : 320,
                 width: 'max-content',
                 background: 'var(--bg-primary)',
                 border: '1px solid var(--border)',
@@ -266,7 +297,7 @@ export default function PlayerBottomBar({
                   fontSize: 13,
                   fontWeight: 600,
                   display: '-webkit-box',
-                  WebkitLineClamp: isShiftHeld ? 'none' : 2,
+                  WebkitLineClamp: isDetailedMode ? 'none' : 2,
                   WebkitBoxOrient: 'vertical',
                   overflow: 'hidden',
                   whiteSpace: 'normal',
@@ -275,7 +306,7 @@ export default function PlayerBottomBar({
               >
                 {chapters[hoveredChapterIndex].title}
               </div>
-              {isShiftHeld && chapters[hoveredChapterIndex].body && (
+              {isDetailedMode && chapters[hoveredChapterIndex].body && (
                 <div
                   style={{
                     color: 'var(--text-secondary)',
