@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import type { SummaryChapter } from '@/lib/summary-chapters';
+import type { VideoWithMeta } from '@/types';
+import MarkdownRenderer from '@/components/MarkdownRenderer';
 import { formatSecondsLabel } from '@/lib/format';
 
 interface PlayerBottomBarProps {
@@ -10,6 +12,7 @@ interface PlayerBottomBarProps {
   playbackRate: number;
   chapters: SummaryChapter[];
   onSeek: (seconds: number) => void;
+  video: VideoWithMeta;
   disabled?: boolean; // 播放源尚未就绪时置灰
   trailing?: React.ReactNode; // B 站画质/错误/重试按钮插槽
 }
@@ -22,6 +25,7 @@ export default function PlayerBottomBar({
   playbackRate,
   chapters,
   onSeek,
+  video,
   disabled,
   trailing,
 }: PlayerBottomBarProps) {
@@ -235,16 +239,16 @@ export default function PlayerBottomBar({
                 position: 'relative',
                 left: 0,
                 transform: `translateX(calc(-50%))`,
-                maxWidth: isShiftHeld ? 420 : 320,
+                maxWidth: isShiftHeld ? 500 : 320,
                 width: 'max-content',
                 background: 'var(--bg-primary)',
                 border: '1px solid var(--border)',
                 borderRadius: 8,
-                padding: '10px 12px',
-                boxShadow: '0 4px 12px rgba(0,0,0,0.24)',
+                padding: '10px 14px',
+                boxShadow: '0 8px 32px rgba(0,0,0,0.45)',
                 pointerEvents: 'none',
-                zIndex: 20,
-                transition: 'max-width 120ms',
+                zIndex: 100,
+                transition: 'all 120ms',
               }}
             >
               <div
@@ -262,10 +266,11 @@ export default function PlayerBottomBar({
                   fontSize: 13,
                   fontWeight: 600,
                   display: '-webkit-box',
-                  WebkitLineClamp: 2,
+                  WebkitLineClamp: isShiftHeld ? 'none' : 2,
                   WebkitBoxOrient: 'vertical',
                   overflow: 'hidden',
                   whiteSpace: 'normal',
+                  lineHeight: 1.4,
                 }}
               >
                 {chapters[hoveredChapterIndex].title}
@@ -275,15 +280,20 @@ export default function PlayerBottomBar({
                   style={{
                     color: 'var(--text-secondary)',
                     fontSize: 12,
-                    whiteSpace: 'pre-wrap',
                     marginTop: 6,
-                    display: '-webkit-box',
-                    WebkitLineClamp: 8,
-                    WebkitBoxOrient: 'vertical',
-                    overflow: 'hidden',
+                    maxHeight: 'min(600px, 80vh)',
+                    overflowY: 'auto',
+                    pointerEvents: 'auto',
                   }}
                 >
-                  {chapters[hoveredChapterIndex].body}
+                  <MarkdownRenderer
+                    markdown={chapters[hoveredChapterIndex].body}
+                    video={video}
+                    onTimestampClick={onSeek}
+                    tone="dark"
+                    fontSizeVariant="compact"
+                    hideTimestamps={true}
+                  />
                 </div>
               )}
             </div>

@@ -1,30 +1,8 @@
 import React from 'react';
+import type { VideoWithMeta } from '@/types';
+import MarkdownRenderer from '@/components/MarkdownRenderer';
 
-function renderInlineMarkdown(text: string): React.ReactNode[] {
-  const nodes: React.ReactNode[] = [];
-  const pattern = /\*\*([^*]+)\*\*/g;
-  let lastIndex = 0;
-  let match: RegExpExecArray | null;
-
-  while ((match = pattern.exec(text)) !== null) {
-    if (match.index > lastIndex) {
-      nodes.push(text.slice(lastIndex, match.index));
-    }
-
-    nodes.push(
-      <strong key={`bold-${match.index}`} style={{ fontWeight: 700 }}>
-        {match[1]}
-      </strong>,
-    );
-    lastIndex = match.index + match[0].length;
-  }
-
-  if (lastIndex < text.length) {
-    nodes.push(text.slice(lastIndex));
-  }
-
-  return nodes;
-}
+// renderInlineMarkdown removed in favor of MarkdownRenderer
 
 function stripFrontmatter(markdown: string): string {
   if (!markdown.startsWith('---\n')) return markdown;
@@ -78,8 +56,12 @@ function extractSummaryPreview(markdown: string): {
 
 export default function SummaryHoverPreview({
   markdown,
+  video,
+  onTimestampClick,
 }: {
   markdown: string;
+  video?: VideoWithMeta;
+  onTimestampClick?: (seconds: number) => void;
 }) {
   const { coreSummaryLines, detailTitles } = extractSummaryPreview(markdown);
   const coreSummaryText =
@@ -131,7 +113,19 @@ export default function SummaryHoverPreview({
           overflow: 'visible',
         }}
       >
-        <div>{renderInlineMarkdown(coreSummaryText)}</div>
+        <div>
+          {video && onTimestampClick ? (
+            <MarkdownRenderer
+              markdown={coreSummaryText}
+              video={video}
+              onTimestampClick={onTimestampClick}
+              fontSizeVariant="compact"
+              hideTimestamps={true}
+            />
+          ) : (
+            <div style={{ whiteSpace: 'pre-wrap' }}>{coreSummaryText}</div>
+          )}
+        </div>
         {detailTitles.length > 0 && (
           <div style={{ marginTop: 12 }}>
             <div
@@ -153,7 +147,17 @@ export default function SummaryHoverPreview({
             >
               {detailTitles.map((title, index) => (
                 <div key={`${title}-${index}`}>
-                  {renderInlineMarkdown(title)}
+                  {video && onTimestampClick ? (
+                    <MarkdownRenderer
+                      markdown={title}
+                      video={video}
+                      onTimestampClick={onTimestampClick}
+                      fontSizeVariant="compact"
+                      hideTimestamps={true}
+                    />
+                  ) : (
+                    title
+                  )}
                 </div>
               ))}
             </div>

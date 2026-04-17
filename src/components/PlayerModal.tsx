@@ -1196,16 +1196,17 @@ export default function PlayerModal({
             />
           </div>
 
-          <div
-            style={{
-              flex: 1,
-              background: modalColors.background,
-              position: 'relative',
-              overflow: 'hidden',
-              display: 'flex',
-              flexDirection: 'column',
-            }}
-          >
+            <div
+              style={{
+                flex: 1,
+                background: modalColors.background,
+                position: 'relative',
+                overflow: 'visible',
+                display: 'flex',
+                flexDirection: 'column',
+                zIndex: 1,
+              }}
+            >
             <div
               style={{
                 flex: 1,
@@ -1328,6 +1329,7 @@ export default function PlayerModal({
               }
               chapters={chapters}
               onSeek={handleTimestampClick}
+              video={video}
               disabled={
                 isYt
                   ? shouldAttemptNativeYouTube &&

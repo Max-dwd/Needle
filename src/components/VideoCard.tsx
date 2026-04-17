@@ -781,6 +781,8 @@ const VideoCard = memo(function VideoCard({
             {localSummaryMarkdown ? (
               <SummaryHoverPreview
                 markdown={localSummaryMarkdown}
+                video={video}
+                onTimestampClick={(seconds) => onPlay(video, seconds)}
               />
             ) : isYt ? (
               localSummaryLoading ? (

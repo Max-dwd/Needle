@@ -9,6 +9,7 @@ function renderInlineMarkdown(
   video: VideoWithMeta,
   onTimestampClick: (seconds: number) => void,
   tone: 'light' | 'dark',
+  hideTimestamps: boolean,
 ): ReactNode[] {
   const nodes: ReactNode[] = [];
   const pattern = /\[([^\]]+)\]\(([^)]+)\)|\*\*([^*]+)\*\*/g;
@@ -46,13 +47,13 @@ function renderInlineMarkdown(
               border: 'none',
               background: 'transparent',
               padding: 0,
-              color: accentColor,
-              cursor: 'pointer',
-              textDecoration: 'underline',
+              color: hideTimestamps ? 'inherit' : accentColor,
+              cursor: hideTimestamps ? 'text' : 'pointer',
+              textDecoration: hideTimestamps ? 'none' : 'underline',
               font: 'inherit',
             }}
           >
-            {label}
+            {hideTimestamps ? '' : label}
           </button>,
         );
       } else {
@@ -99,12 +100,16 @@ export default function MarkdownRenderer({
   onTimestampClick,
   streaming = false,
   tone = 'light',
+  fontSizeVariant = 'normal',
+  hideTimestamps = false,
 }: {
   markdown: string;
   video: VideoWithMeta;
   onTimestampClick: (seconds: number) => void;
   streaming?: boolean;
   tone?: 'light' | 'dark';
+  fontSizeVariant?: 'normal' | 'compact';
+  hideTimestamps?: boolean;
 }) {
   const isDarkTone = tone === 'dark';
   const textColor = 'var(--text-primary)';
@@ -112,6 +117,11 @@ export default function MarkdownRenderer({
   const headingGray = 'var(--bg-hover)';
   const headingGrayStrong = 'var(--border)';
   const cursorColor = 'var(--accent-purple)';
+
+  const isCompact = fontSizeVariant === 'compact';
+  const baseSize = isCompact ? 12 : 14;
+  const lineMultiplier = isCompact ? 1.5 : 1.7;
+  const marginMultiplier = isCompact ? 0.6 : 1;
 
   const lines = markdown.split('\n');
   let streamingLastLine = '';
@@ -125,6 +135,8 @@ export default function MarkdownRenderer({
   const elements: ReactNode[] = [];
   let paragraphLines: string[] = [];
   let listItems: string[] = [];
+  let isOrderedList = false;
+  let listStartNumber = 1;
   let tableHeader: string[] | null = null;
   let tableRows: string[][] = [];
   let hasRenderedBlock = false;
@@ -135,7 +147,7 @@ export default function MarkdownRenderer({
       <div
         key={`spacer-${elements.length}`}
         aria-hidden="true"
-        style={{ height: 12 }}
+        style={{ height: 12 * marginMultiplier }}
       />,
     );
   };
@@ -149,12 +161,18 @@ export default function MarkdownRenderer({
           key={`p-${elements.length}`}
           style={{
             color: textColor,
-            fontSize: 14,
-            lineHeight: 1.7,
-            margin: '0 0 10px',
+            fontSize: baseSize,
+            lineHeight: lineMultiplier,
+            margin: `0 0 ${10 * marginMultiplier}px`,
           }}
         >
-          {renderInlineMarkdown(text, video, onTimestampClick, tone)}
+          {renderInlineMarkdown(
+            text,
+            video,
+            onTimestampClick,
+            tone,
+            hideTimestamps,
+          )}
         </p>,
       );
       hasRenderedBlock = true;
@@ -164,26 +182,40 @@ export default function MarkdownRenderer({
 
   const flushList = () => {
     if (listItems.length === 0) return;
+    const ListTag = isOrderedList ? 'ol' : 'ul';
     elements.push(
-      <ul
-        key={`ul-${elements.length}`}
+      <ListTag
+        key={`list-${elements.length}`}
+        start={isOrderedList ? listStartNumber : undefined}
         style={{
-          margin: '0 0 12px',
-          paddingLeft: 18,
-          fontSize: 14,
-          lineHeight: 1.7,
+          margin: `0 0 ${12 * marginMultiplier}px`,
+          paddingLeft: isOrderedList ? 26 : 18,
+          fontSize: baseSize,
+          lineHeight: lineMultiplier,
           color: textColor,
+          listStyleType: isOrderedList ? 'decimal' : 'disc',
         }}
       >
         {listItems.map((item, index) => (
-          <li key={`li-${index}`} style={{ marginBottom: 4, lineHeight: 1.6 }}>
-            {renderInlineMarkdown(item, video, onTimestampClick, tone)}
+          <li
+            key={`li-${index}`}
+            style={{ marginBottom: 8 * marginMultiplier, lineHeight: 1.6 }}
+          >
+            {renderInlineMarkdown(
+              item,
+              video,
+              onTimestampClick,
+              tone,
+              hideTimestamps,
+            )}
           </li>
         ))}
-      </ul>,
+      </ListTag>,
     );
     hasRenderedBlock = true;
     listItems = [];
+    isOrderedList = false;
+    listStartNumber = 1;
   };
 
   const flushTable = () => {
@@ -209,8 +241,8 @@ export default function MarkdownRenderer({
           style={{
             width: '100%',
             borderCollapse: 'collapse',
-            fontSize: 14,
-            lineHeight: 1.6,
+            fontSize: baseSize,
+            lineHeight: lineMultiplier,
             color: textColor,
           }}
         >
@@ -227,7 +259,13 @@ export default function MarkdownRenderer({
                     whiteSpace: 'nowrap',
                   }}
                 >
-                  {renderInlineMarkdown(cell, video, onTimestampClick, tone)}
+                  {renderInlineMarkdown(
+                    cell,
+                    video,
+                    onTimestampClick,
+                    tone,
+                    hideTimestamps,
+                  )}
                 </th>
               ))}
             </tr>
@@ -252,6 +290,7 @@ export default function MarkdownRenderer({
                       video,
                       onTimestampClick,
                       tone,
+                      hideTimestamps,
                     )}
                   </td>
                 ))}
@@ -271,8 +310,30 @@ export default function MarkdownRenderer({
     const line = rawLine.trim();
     if (!line) {
       flushParagraph();
-      flushList();
       flushTable();
+
+      // Lookahead: Only flush the list if the next non-empty line isn't a list item of the same type.
+      // This allows supporting list items separated by blank lines (loose lists).
+      let shouldFlushList = true;
+      if (listItems.length > 0) {
+        for (let j = index + 1; j < lines.length; j++) {
+          const nextTrimmed = lines[j].trim();
+          if (!nextTrimmed) continue;
+          const nextOrdered = /^\d+\.\s+/.test(nextTrimmed);
+          const nextUnordered = /^([-*+])\s+/.test(nextTrimmed);
+          if (
+            (isOrderedList && nextOrdered) ||
+            (!isOrderedList && nextUnordered)
+          ) {
+            shouldFlushList = false;
+          }
+          break;
+        }
+      }
+
+      if (shouldFlushList) {
+        flushList();
+      }
       continue;
     }
 
@@ -307,8 +368,13 @@ export default function MarkdownRenderer({
       pushSectionSpacer();
       const level = headingMatch[1].length;
       const text = headingMatch[2];
-      const fontSize = level === 1 ? 20 : level === 2 ? 16 : 14;
-      const marginTop = level === 1 ? 0 : 12;
+      const fontSize =
+        level === 1
+          ? isCompact ? 16 : 20
+          : level === 2
+          ? isCompact ? 14 : 16
+          : baseSize;
+      const marginTop = level === 1 ? 0 : 12 * marginMultiplier;
       const headingNode =
         level === 1 ? (
           <span
@@ -323,7 +389,13 @@ export default function MarkdownRenderer({
                 : 'inset 0 0 0 1px rgba(148, 163, 184, 0.12)',
             }}
           >
-            {renderInlineMarkdown(text, video, onTimestampClick, tone)}
+            {renderInlineMarkdown(
+              text,
+              video,
+              onTimestampClick,
+              tone,
+              hideTimestamps,
+            )}
           </span>
         ) : level === 2 ? (
           <span
@@ -334,10 +406,16 @@ export default function MarkdownRenderer({
               color: headingColor,
             }}
           >
-            {renderInlineMarkdown(text, video, onTimestampClick, tone)}
+            {renderInlineMarkdown(
+              text,
+              video,
+              onTimestampClick,
+              tone,
+              hideTimestamps,
+            )}
           </span>
         ) : (
-          renderInlineMarkdown(text, video, onTimestampClick, tone)
+          renderInlineMarkdown(text, video, onTimestampClick, tone, hideTimestamps)
         );
       elements.push(
         <div
@@ -357,11 +435,21 @@ export default function MarkdownRenderer({
       continue;
     }
 
-    const listMatch = line.match(/^[-*+]\s+(.+)$/);
-    if (listMatch) {
+    const orderedMatch = line.match(/^(\d+)\.\s+(.+)$/);
+    const unorderedMatch = line.match(/^([-*+])\s+(.+)$/);
+    if (orderedMatch || unorderedMatch) {
+      const isCurrentOrdered = !!orderedMatch;
+      // If switching between ordered and unordered, flush the current list
+      if (listItems.length > 0 && isOrderedList !== isCurrentOrdered) {
+        flushList();
+      }
+      if (listItems.length === 0 && orderedMatch) {
+        listStartNumber = parseInt(orderedMatch[1], 10);
+      }
+      isOrderedList = isCurrentOrdered;
       flushParagraph();
       flushTable();
-      listItems.push(listMatch[1]);
+      listItems.push(isCurrentOrdered ? orderedMatch![2] : unorderedMatch![2]);
       continue;
     }
 
@@ -379,8 +467,8 @@ export default function MarkdownRenderer({
         <span
           style={{
             color: textColor,
-            fontSize: 14,
-            lineHeight: 1.7,
+            fontSize: baseSize,
+            lineHeight: lineMultiplier,
           }}
         >
           {streamingLastLine}
