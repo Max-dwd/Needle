@@ -254,7 +254,7 @@ export default function ChatPanel({
           flex: 1, 
           overflowY: 'auto', 
           paddingRight: 4,
-          paddingBottom: 40
+          paddingBottom: 'calc(40px + env(safe-area-inset-bottom, 0px))'
         }}
       >
         {/* Mode Switcher */}

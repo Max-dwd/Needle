@@ -210,9 +210,9 @@ function CompactRow({
     ? `${subWaitingCount > 0 ? `${subWaitingCount} 等待 · ` : ''}冷却中`
     : subProcessing
       ? `${subWaitingCount > 0 ? `${subWaitingCount} 等待 · ` : ''}处理中`
-    : subQueue > 0
-      ? `${subQueue}待处理`
-      : subtitleThrottle.compactText;
+      : subQueue > 0
+        ? `${subQueue}待处理`
+        : subtitleThrottle.compactText;
   const subColor = subProcessing
     ? 'var(--status-ok)'
     : subQueue > 0
@@ -260,9 +260,9 @@ function CompactRow({
       ? { color: 'var(--status-ok)', pulse: true }
       : crawlState === 'error'
         ? { color: 'var(--accent-yt)', pulse: false }
-      : crawlState === 'cooldown'
-        ? { color: 'var(--status-warn)', pulse: false }
-        : { color: 'var(--text-muted)', pulse: false };
+        : crawlState === 'cooldown'
+          ? { color: 'var(--status-warn)', pulse: false }
+          : { color: 'var(--text-muted)', pulse: false };
 
   const subDot = isDisconnected || isGlobalPaused
     ? { color: 'var(--accent-yt)', pulse: false }
@@ -461,9 +461,9 @@ function CompactRow({
             <span className="compact-icon">🔄</span>
             <span className={`status-pulse ${crawlDot.pulse ? '' : 'paused'}`} style={{ background: crawlDot.color, width: 6, height: 6, display: 'inline-block', marginBottom: 1 }} />
             {crawlState === 'running' && crawlProgress !== undefined && crawlTotal ? (
-               <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)' }}>
-                 {crawlProgress}/{crawlTotal}
-               </span>
+              <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)' }}>
+                {crawlProgress}/{crawlTotal}
+              </span>
             ) : null}
           </div>
 
@@ -472,9 +472,9 @@ function CompactRow({
           {/* Subtitle */}
           <div className="compact-section mobile-sec">
             <span className="compact-icon">💬</span>
-            <span 
-              className={`status-pulse ${subDot.pulse ? '' : 'paused'}`} 
-              style={{ background: subDot.color, width: 6, height: 6, display: 'inline-block', marginBottom: 1 }} 
+            <span
+              className={`status-pulse ${subDot.pulse ? '' : 'paused'}`}
+              style={{ background: subDot.color, width: 6, height: 6, display: 'inline-block', marginBottom: 1 }}
             />
             <span style={{ color: ytColor, fontWeight: 700, fontSize: 12, marginLeft: 1 }}>▶</span>
             <span style={{ color: biliColor, fontWeight: 700, fontSize: 12 }}>🅱</span>
@@ -628,16 +628,16 @@ function SubtitleSection({
     ? (formatNextRun(nextRunAt) ?? '—')
     : processing
       ? '进行中'
-    : nextRunAt
-      ? (formatNextRun(nextRunAt) ?? '—')
-      : '可立即开始';
+      : nextRunAt
+        ? (formatNextRun(nextRunAt) ?? '—')
+        : '可立即开始';
   const statusText = cooling
     ? `冷却中${waitingCount > 0 ? ` · ${waitingCount} 个作业等待中` : ''}`
     : processing
       ? `处理中${waitingCount > 0 ? ` · ${waitingCount} 个作业等待中` : ''}`
-    : queueLength > 0
-      ? `${queueLength} 个作业待处理`
-      : '空闲';
+      : queueLength > 0
+        ? `${queueLength} 个作业待处理`
+        : '空闲';
   const statusTextColor = processing
     ? 'var(--status-ok)'
     : (queueLength > 0 || cooling)
@@ -1052,7 +1052,7 @@ export default function TaskStatusBar({
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: video.id, is_read: true }),
-      }).catch(() => {});
+      }).catch(() => { });
     },
     [externalOpen, onOpenVideo],
   );
@@ -1136,7 +1136,7 @@ export default function TaskStatusBar({
       : null;
   const activeSubtitlePreview =
     pipelineStatus?.subtitle?.currentVideoId?.trim() ===
-    subtitlePreview?.video_id
+      subtitlePreview?.video_id
       ? subtitlePreview
       : null;
   const activeSummaryPreview =

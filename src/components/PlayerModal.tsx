@@ -463,7 +463,7 @@ export default function PlayerModal({
     void loadYouTubePlayback(
       controller.signal,
       pendingNativeSeekRef.current ??
-        Math.max(0, Math.floor(initialStartSeconds)),
+      Math.max(0, Math.floor(initialStartSeconds)),
     );
 
     return () => controller.abort();
@@ -570,7 +570,7 @@ export default function PlayerModal({
         videoElement.muted = isMuted;
         const playPromise = videoElement.play();
         if (playPromise) {
-          playPromise.catch(() => {});
+          playPromise.catch(() => { });
         }
 
         // Delay clearing the flag to avoid onRateChange(1) race condition
@@ -598,7 +598,7 @@ export default function PlayerModal({
     if (videoElement.paused) {
       const playPromise = videoElement.play();
       if (playPromise) {
-        playPromise.catch(() => {});
+        playPromise.catch(() => { });
       }
       return;
     }
@@ -686,8 +686,8 @@ export default function PlayerModal({
 
       const duration =
         videoElement &&
-        Number.isFinite(videoElement.duration) &&
-        videoElement.duration > 0
+          Number.isFinite(videoElement.duration) &&
+          videoElement.duration > 0
           ? videoElement.duration
           : playerDuration;
       if (
@@ -1026,7 +1026,7 @@ export default function PlayerModal({
 
     const playPromise = videoElement.play();
     if (playPromise) {
-      playPromise.catch(() => {});
+      playPromise.catch(() => { });
     }
   }, [
     flushPendingNativeSeek,
@@ -1047,9 +1047,8 @@ export default function PlayerModal({
     proxyUrl: string,
   ) => (
     <video
-      key={`${platform}-${video.id}-${proxyUrl}-${
-        platform === 'youtube' ? (youtubePlayback?.expiresAt ?? '') : ''
-      }`}
+      key={`${platform}-${video.id}-${proxyUrl}-${platform === 'youtube' ? (youtubePlayback?.expiresAt ?? '') : ''
+        }`}
       ref={platform === 'youtube' ? youtubeNativeVideoRef : bilibiliVideoRef}
       tabIndex={0}
       src={proxyUrl}
@@ -1273,20 +1272,22 @@ export default function PlayerModal({
               bilibiliAid={isYt ? null : (bilibiliPlayback?.aid ?? null)}
               bilibiliCid={isYt ? null : (bilibiliPlayback?.cid ?? null)}
               onSummaryChange={setSummaryMarkdown}
+              followMode={followMode}
+              onFollowModeChange={setFollowMode}
             />
           </div>
 
-            <div
-              style={{
-                flex: 1,
-                background: modalColors.background,
-                position: 'relative',
-                overflow: 'visible',
-                display: 'flex',
-                flexDirection: 'column',
-                zIndex: 1,
-              }}
-            >
+          <div
+            style={{
+              flex: 1,
+              background: modalColors.background,
+              position: 'relative',
+              overflow: 'visible',
+              display: 'flex',
+              flexDirection: 'column',
+              zIndex: 1,
+            }}
+          >
             <div
               style={{
                 flex: 1,
@@ -1449,16 +1450,16 @@ export default function PlayerModal({
                     >
                       {bilibiliPlayback?.proxyUrl
                         ? renderNativeVideo(
-                            'bilibili',
-                            bilibiliPlayback.proxyUrl,
-                          )
+                          'bilibili',
+                          bilibiliPlayback.proxyUrl,
+                        )
                         : renderPlaybackStatus(
-                            bilibiliPlaybackLoading
-                              ? '正在解析 B 站可播放流…'
-                              : '当前无法直接播放这个 B 站视频',
-                            bilibiliPlaybackError ||
-                              '这个阶段只支持可直接播放的 MP4 单路流。',
-                          )}
+                          bilibiliPlaybackLoading
+                            ? '正在解析 B 站可播放流…'
+                            : '当前无法直接播放这个 B 站视频',
+                          bilibiliPlaybackError ||
+                          '这个阶段只支持可直接播放的 MP4 单路流。',
+                        )}
                     </div>
                   </div>
                 )}
@@ -1480,8 +1481,8 @@ export default function PlayerModal({
               disabled={
                 isYt
                   ? shouldAttemptNativeYouTube &&
-                    youtubePlaybackLoading &&
-                    !youtubePlayerLoaded
+                  youtubePlaybackLoading &&
+                  !youtubePlayerLoaded
                   : !bilibiliPlayback?.proxyUrl
               }
               trailing={
@@ -1493,8 +1494,8 @@ export default function PlayerModal({
                       {bilibiliPlaybackLoading
                         ? '解析中'
                         : bilibiliPlayback?.qualityLabel ||
-                          bilibiliPlayback?.format ||
-                          'MP4 单路流'}
+                        bilibiliPlayback?.format ||
+                        'MP4 单路流'}
                       {bilibiliPlayback?.authUsed ? ' · 已使用 SESSDATA' : ''}
                     </div>
 
