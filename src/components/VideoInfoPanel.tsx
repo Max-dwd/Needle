@@ -203,8 +203,23 @@ export default forwardRef<VideoInfoPanelRef, VideoInfoPanelProps>(
   const [activePanel, setActivePanel] = useState<
     'subtitle' | 'summary' | 'comments' | 'chat'
   >('summary');
+  const [isMobile, setIsMobile] = useState(false);
+  const [isTabExpanded, setIsTabExpanded] = useState(false);
   const activeSegmentRef = useRef<HTMLButtonElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth <= 900);
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
+  useEffect(() => {
+    setIsTabExpanded(false);
+  }, [video.id]);
 
   const effectiveMarkdown = viewingHistory && summary?.previous?.markdown
     ? summary.previous.markdown
@@ -825,25 +840,46 @@ export default forwardRef<VideoInfoPanelRef, VideoInfoPanelProps>(
           padding: '4px',
           background: 'var(--bg-hover)',
           borderRadius: 12,
-          marginBottom: 12
+          marginBottom: 12,
+          width: isMobile && !isTabExpanded ? 'fit-content' : 'auto',
+          justifyContent: isMobile && !isTabExpanded ? 'flex-start' : 'stretch',
+          transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+          cursor: isMobile && !isTabExpanded ? 'pointer' : 'default',
+        }}
+        onClick={() => {
+          if (isMobile && !isTabExpanded) setIsTabExpanded(true);
         }}
       >
         {panelButtons.map((panel) => {
           const active = activePanel === panel.key;
+          if (isMobile && !isTabExpanded && !active) return null;
+
           return (
             <button
               key={panel.key}
               type="button"
               className={`modal-tab-btn ${active ? 'active' : ''}`}
-              onClick={() => setActivePanel(panel.key)}
+              onClick={(e) => {
+                if (isMobile) {
+                  e.stopPropagation();
+                  if (!isTabExpanded) {
+                    setIsTabExpanded(true);
+                  } else {
+                    setActivePanel(panel.key);
+                    setIsTabExpanded(false);
+                  }
+                } else {
+                  setActivePanel(panel.key);
+                }
+              }}
               style={{
-                flex: 1,
+                flex: isMobile && !isTabExpanded ? 'none' : 1,
                 display: 'flex',
                 flexDirection: 'row',
                 alignItems: 'center',
                 justifyContent: 'center',
                 gap: 6,
-                padding: '8px 0',
+                padding: isMobile && !isTabExpanded ? '8px 12px' : '8px 0',
                 borderRadius: 9,
                 background: active ? 'var(--bg-secondary)' : 'transparent',
                 border: 'none',
@@ -855,50 +891,55 @@ export default forwardRef<VideoInfoPanelRef, VideoInfoPanelProps>(
             >
               <span className="modal-tab-icon" style={{ fontSize: 18 }}>{panel.icon}</span>
               <span style={{ fontSize: 11, fontWeight: active ? 700 : 500 }}>{panel.label}</span>
+              {isMobile && !isTabExpanded && active && (
+                <span style={{ fontSize: 10, opacity: 0.5, marginLeft: 2 }}>▾</span>
+              )}
             </button>
           );
         })}
-        <button
-          type="button"
-          onClick={async () => {
-            if (video.research?.is_favorited) {
-              try {
-                const res = await fetch('/api/research/favorites?video_id=' + video.id);
-                const data = await res.json();
-                const fav = data.items?.[0];
-                if (fav) {
-                  setResearchModalState({
-                    mode: 'edit',
-                    existingFavorite: {
-                      id: fav.id,
-                      intent_type_id: fav.intent_type_id,
-                      note: fav.note || '',
-                    },
-                  });
-                  return;
+        {(!isMobile || isTabExpanded) && (
+          <button
+            type="button"
+            onClick={async () => {
+              if (video.research?.is_favorited) {
+                try {
+                  const res = await fetch('/api/research/favorites?video_id=' + video.id);
+                  const data = await res.json();
+                  const fav = data.items?.[0];
+                  if (fav) {
+                    setResearchModalState({
+                      mode: 'edit',
+                      existingFavorite: {
+                        id: fav.id,
+                        intent_type_id: fav.intent_type_id,
+                        note: fav.note || '',
+                      },
+                    });
+                    return;
+                  }
+                } catch (e) {
+                  console.error('Failed to fetch favorite', e);
                 }
-              } catch (e) {
-                console.error('Failed to fetch favorite', e);
               }
-            }
-            setResearchModalState({ mode: 'add' });
-          }}
-          style={{
-            display: 'flex',
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: '8px 12px',
-            borderRadius: 9,
-            background: video.research?.is_favorited ? 'var(--accent-purple)' : 'transparent',
-            border: `1px solid ${video.research?.is_favorited ? 'var(--accent-purple)' : 'transparent'}`,
-            color: video.research?.is_favorited ? '#fff' : 'var(--text-muted)',
-            cursor: 'pointer'
-          }}
-          title="研究收藏"
-        >
-          <span style={{ fontSize: 14 }}>🔬</span>
-        </button>
+              setResearchModalState({ mode: 'add' });
+            }}
+            style={{
+              display: 'flex',
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '8px 12px',
+              borderRadius: 9,
+              background: video.research?.is_favorited ? 'var(--accent-purple)' : 'transparent',
+              border: `1px solid ${video.research?.is_favorited ? 'var(--accent-purple)' : 'transparent'}`,
+              color: video.research?.is_favorited ? '#fff' : 'var(--text-muted)',
+              cursor: 'pointer'
+            }}
+            title="研究收藏"
+          >
+            <span style={{ fontSize: 14 }}>🔬</span>
+          </button>
+        )}
       </div>
 
       <div style={{ position: 'relative', flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
