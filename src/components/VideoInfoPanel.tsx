@@ -1101,7 +1101,13 @@ export default forwardRef<VideoInfoPanelRef, VideoInfoPanelProps>(
           )}
         </div>
 
-        <div style={{ position: 'relative', flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+        <div style={{
+          position: 'relative',
+          flex: isMobile && currentPlayMode === 'reading' ? 'none' : 1,
+          display: 'flex',
+          flexDirection: 'column',
+          minHeight: isMobile && currentPlayMode === 'reading' ? 'auto' : 0
+        }}>
           {/* Floating Info Icon Controls */}
           <div
             style={{
@@ -1389,8 +1395,8 @@ export default forwardRef<VideoInfoPanelRef, VideoInfoPanelProps>(
             className="mobile-sheet-scrollable"
             style={{
               minWidth: 0,
-              flex: 1,
-              overflowY: 'auto',
+              flex: isMobile && currentPlayMode === 'reading' ? 'none' : 1,
+              overflowY: isMobile && currentPlayMode === 'reading' ? 'visible' : 'auto',
               paddingRight: 4,
               paddingBottom: isMobile ? 'calc(50px + env(safe-area-inset-bottom, 0px))' : 0,
               position: 'relative',

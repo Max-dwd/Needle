@@ -252,7 +252,7 @@ export default function EmbeddedPlayer({
     (playing: boolean) => {
       if (!needsIframeHeartbeat || !hiddenAudioRef.current) return;
       if (playing) {
-        hiddenAudioRef.current.play().catch(() => {});
+        hiddenAudioRef.current.play().catch(() => { });
       } else {
         hiddenAudioRef.current.pause();
       }
@@ -262,7 +262,7 @@ export default function EmbeddedPlayer({
 
   const playMedia = useCallback(() => {
     if (usesNativeVideo) {
-      nativeVideoRef.current?.play().catch(() => {});
+      nativeVideoRef.current?.play().catch(() => { });
       return;
     }
     postYouTubeCommand('playVideo');
@@ -283,7 +283,7 @@ export default function EmbeddedPlayer({
       const media = nativeVideoRef.current;
       if (!media) return;
       if (media.paused) {
-        media.play().catch(() => {});
+        media.play().catch(() => { });
       } else {
         media.pause();
       }
@@ -402,7 +402,7 @@ export default function EmbeddedPlayer({
       }
     }
 
-    media.play().catch(() => {});
+    media.play().catch(() => { });
   }, [onDurationChange]);
 
   const handleNativePlayState = useCallback(
@@ -488,23 +488,23 @@ export default function EmbeddedPlayer({
         style={
           isVisible
             ? {
-                position: 'relative',
-                width: '100%',
-                height: '100%',
-                zIndex: 1,
-                background: '#000',
-              }
+              position: 'relative',
+              width: '100%',
+              height: '100%',
+              zIndex: 1,
+              background: '#000',
+            }
             : {
-                position: 'absolute',
-                opacity: 0.01,
-                pointerEvents: 'none',
-                width: 200,
-                height: 200,
-                overflow: 'hidden',
-                left: -500,
-                top: -500,
-                zIndex: -1,
-              }
+              position: 'absolute',
+              opacity: 0.01,
+              pointerEvents: 'none',
+              width: 200,
+              height: 200,
+              overflow: 'hidden',
+              left: -500,
+              top: -500,
+              zIndex: -1,
+            }
         }
       >
         <audio ref={hiddenAudioRef} src={hiddenAudioSrc} loop playsInline />
