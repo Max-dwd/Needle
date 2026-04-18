@@ -37,8 +37,43 @@ export default function MobileVideoSheet({
   const [dragDirection, setDragDirection] = useState<'none' | 'vertical' | 'horizontal'>('none');
   const [isFirstOpen, setIsFirstOpen] = useState(true);
   const [isFullHeight, setIsFullHeight] = useState(false);
-  const [isAudioPlaying, setIsAudioPlaying] = useState(initialAudioMode);
-  const [isVideoPlaying, setIsVideoPlaying] = useState(false);
+  const [isAudioPlaying, setIsAudioPlaying] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('needle-mobile-play-mode');
+      if (saved) return saved === 'audio';
+    }
+    return initialAudioMode;
+  });
+  const [isVideoPlaying, setIsVideoPlaying] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('needle-mobile-play-mode');
+      if (saved) return saved === 'video';
+    }
+    return false;
+  });
+  const [preferredMode, setPreferredMode] = useState<'audio' | 'video' | 'official' | 'videolite' | 'reading' | 'none'>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('needle-mobile-play-mode');
+      if (saved === 'audio' || saved === 'video' || saved === 'official' || saved === 'videolite' || saved === 'reading') {
+        return saved as any;
+      }
+    }
+    return 'none';
+  });
+
+  // Keep internal playing states in sync with preferredMode changes from picker
+  useEffect(() => {
+    if (preferredMode === 'audio') {
+      setIsAudioPlaying(true);
+      setIsVideoPlaying(false);
+    } else if (preferredMode === 'video') {
+      setIsVideoPlaying(true);
+      setIsAudioPlaying(false);
+    } else {
+      setIsAudioPlaying(false);
+      setIsVideoPlaying(false);
+    }
+  }, [preferredMode]);
   const [isPickerActive, setIsPickerActive] = useState(false);
   const [playerState, setPlayerState] = useState({
     videoId: video.id,
@@ -206,31 +241,48 @@ export default function MobileVideoSheet({
   const executePickerAction = useCallback((index: number) => {
     switch(index) {
         case 0: // 音频
-            setIsAudioPlaying(true);
-            setIsVideoPlaying(false);
+            setPreferredMode('audio');
+            localStorage.setItem('needle-mobile-play-mode', 'audio');
             break;
         case 1: // 视频
-            setIsVideoPlaying(true);
-            setIsAudioPlaying(false);
+            setPreferredMode('video');
+            localStorage.setItem('needle-mobile-play-mode', 'video');
             break;
         case 2: // 官方
+            setPreferredMode('official');
+            localStorage.setItem('needle-mobile-play-mode', 'official');
             const officialUrl = video.platform === 'youtube' 
                 ? `https://www.youtube.com/watch?v=${video.video_id}`
                 : `bilibili://video/${video.video_id}`;
             window.location.href = officialUrl;
             break;
         case 3: // Video Lite
+            setPreferredMode('videolite');
+            localStorage.setItem('needle-mobile-play-mode', 'videolite');
             const videoUrl = video.platform === 'youtube' 
                 ? `www.youtube.com/watch?v=${video.video_id}`
                 : `www.bilibili.com/video/${video.video_id}`;
             const videoLiteUrl = `videolite://${videoUrl}`;
             window.location.href = videoLiteUrl;
             break;
-        case 4: // 取消
+        case 4: // 阅读
+            setPreferredMode('reading');
+            localStorage.setItem('needle-mobile-play-mode', 'reading');
+            break;
+        case 5: // 取消
         default:
             break;
     }
   }, [video]);
+
+  const [followMode, setFollowMode] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return localStorage.getItem('needle-player-follow-mode') === 'true';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('needle-player-follow-mode', String(followMode));
+  }, [followMode]);
 
   const isYt = video.platform === 'youtube';
   const isMediaActive = isAudioPlaying || isVideoPlaying;
@@ -270,6 +322,22 @@ export default function MobileVideoSheet({
     },
     [video.id],
   );
+
+  const handleThumbnailClick = useCallback(() => {
+    if (isMediaActive) return;
+    if (preferredMode === 'official') {
+        const officialUrl = video.platform === 'youtube' 
+            ? `https://www.youtube.com/watch?v=${video.video_id}`
+            : `bilibili://video/${video.video_id}`;
+        window.location.href = officialUrl;
+    } else if (preferredMode === 'videolite') {
+        const videoUrl = video.platform === 'youtube' 
+            ? `www.youtube.com/watch?v=${video.video_id}`
+            : `www.bilibili.com/video/${video.video_id}`;
+        const videoLiteUrl = `videolite://${videoUrl}`;
+        window.location.href = videoLiteUrl;
+    }
+  }, [isMediaActive, preferredMode, video]);
 
   const sheetStyle = useMemo(() => {
     const windowH = typeof window !== 'undefined' ? window.innerHeight : 800;
@@ -347,180 +415,303 @@ export default function MobileVideoSheet({
       >
         <div className="mobile-drag-indicator" />
 
-        <div style={{ padding: '14px 16px 6px', flexShrink: 0, borderBottom: '1px solid var(--border-subtle)' }}>
-          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <h1 style={{ 
-                fontSize: 16, 
-                fontWeight: 800, 
-                lineHeight: 1.4, 
-                color: 'var(--text-primary)', 
-                margin: 0,
-                wordBreak: 'break-word'
-              }}>
-                {video.title}
-              </h1>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4, color: 'var(--text-muted)', fontSize: 12 }}>
-                <span style={{ 
-                  padding: '1px 6px', 
-                  borderRadius: 4, 
-                  background: isYt ? 'rgba(255,0,0,0.1)' : 'rgba(0,161,214,0.1)', 
-                  color: isYt ? 'var(--accent-yt)' : 'var(--accent-bili)', 
-                  fontSize: 10, 
-                  fontWeight: 800,
-                  textTransform: 'uppercase'
+        {/* Header and Fixed Content */}
+        <div style={{ flexShrink: 0 }}>
+          <div style={{ padding: '14px 16px 6px', borderBottom: '1px solid var(--border-subtle)' }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <h1 style={{ 
+                  fontSize: 16, 
+                  fontWeight: 800, 
+                  lineHeight: 1.4, 
+                  color: 'var(--text-primary)', 
+                  margin: 0,
+                  wordBreak: 'break-word'
                 }}>
-                  {isYt ? 'YouTube' : 'Bilibili'}
-                </span>
-                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '40%' }}>
-                  {channelName}
-                </span>
-                {video.published_at && (
+                  {video.title}
+                </h1>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4, color: 'var(--text-muted)', fontSize: 10 }}>
+                  <span style={{ 
+                    padding: '1px 6px', 
+                    borderRadius: 4, 
+                    background: isYt ? 'rgba(255,0,0,0.1)' : 'rgba(0,161,214,0.1)', 
+                    color: isYt ? 'var(--accent-yt)' : 'var(--accent-bili)', 
+                    fontSize: 10, 
+                    fontWeight: 800,
+                    textTransform: 'uppercase'
+                  }}>
+                    {isYt ? 'YouTube' : 'Bilibili'}
+                  </span>
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '40%' }}>
+                    {channelName}
+                  </span>
+                  {video.published_at && (
+                    <>
+                      <span style={{ opacity: 0.5 }}>•</span>
+                      <span>{timeAgo(video.published_at)}</span>
+                    </>
+                  )}
+                </div>
+              </div>
+              <button 
+                onClick={onClose} 
+                style={{ 
+                  width: 32, 
+                  height: 32, 
+                  borderRadius: '50%', 
+                  background: 'var(--bg-hover)', 
+                  border: 'none', 
+                  color: 'var(--text-secondary)', 
+                  fontSize: 20, 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'center', 
+                  lineHeight: 1,
+                  flexShrink: 0,
+                  marginTop: 2
+                }}
+              >
+                ×
+              </button>
+            </div>
+          </div>
+
+          {preferredMode !== 'reading' && (
+            <div style={{ padding: '12px 16px 8px' }}>
+              <div 
+                onClick={handleThumbnailClick}
+                onContextMenu={(e) => e.preventDefault()}
+                className="video-thumb-wrapper"
+                style={{ 
+                  borderRadius: 20, 
+                  cursor: (!isMediaActive && (preferredMode === 'official' || preferredMode === 'videolite')) ? 'pointer' : 'default', 
+                  boxShadow: '0 4px 20px rgba(0,0,0,0.08)',
+                  background: 'var(--bg-secondary)',
+                  border: '1px solid var(--border)',
+                  overflow: 'hidden',
+                  position: 'relative',
+                  aspectRatio: '16/9',
+                  userSelect: 'none',
+                  WebkitUserSelect: 'none',
+                  WebkitTouchCallout: 'none'
+                }}
+              >
+                {(isAudioPlaying || isVideoPlaying) ? (
+                  <EmbeddedPlayer
+                    video={video}
+                    isAudioMode={isAudioPlaying}
+                    isVisible={isVideoPlaying}
+                    seekRequest={activeSeekRequest}
+                    onTimeUpdate={handlePlayerTimeUpdate}
+                    onDurationChange={handlePlayerDurationChange}
+                  >
+                    {({ isPlaying, currentTime, duration, togglePlay, seek }) => (
+                      isAudioPlaying ? (
+                        <AudioModeOverlay
+                          video={video}
+                          isPlaying={isPlaying}
+                          currentTime={currentTime}
+                          duration={duration}
+                          onTogglePlay={togglePlay}
+                          onSeek={seek}
+                          onClose={() => setIsAudioPlaying(false)}
+                        />
+                      ) : null
+                    )}
+                  </EmbeddedPlayer>
+                ) : (
                   <>
-                    <span style={{ opacity: 0.5 }}>•</span>
-                    <span>{timeAgo(video.published_at)}</span>
+                    <div className="video-badges-top">
+                      {subtitleBadge && (
+                        <span className={`subtitle-badge state-${video.subtitle_status || 'unknown'}`}>
+                          {subtitleBadge}
+                        </span>
+                      )}
+                      {video.summary_status === 'completed' && (
+                        <span className="summary-indicator completed" title="已有 AI 总结">✦</span>
+                      )}
+                      {video.summary_status === 'processing' && (
+                        <span className="summary-indicator processing" title="AI 总结生成中">
+                          <span className="status-pulse" style={{ width: 6, height: 6, margin: 0 }} />
+                        </span>
+                      )}
+                      {video.summary_status === 'failed' && (
+                        <span className="summary-indicator failed" title="AI 总结失败">!</span>
+                      )}
+                    </div>
+                    
+                    {video.thumbnail_url ? (
+                      <img 
+                        src={video.thumbnail_url} 
+                        alt="" 
+                        className="video-thumb"
+                        draggable={false}
+                        style={{ 
+                          width: '100%', 
+                          height: '100%', 
+                          objectFit: 'cover',
+                          WebkitTouchCallout: 'none',
+                          WebkitUserSelect: 'none'
+                        }} 
+                      />
+                    ) : (
+                      <div
+                        className="video-thumb"
+                        style={{
+                          background: isYt
+                            ? 'linear-gradient(135deg, #ff0000 0%, #ff4444 50%, #ff0000 100%)'
+                            : 'linear-gradient(135deg, #00a1e4 0%, #23c3f2 50%, #00a1e4 100%)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: 32,
+                          width: '100%',
+                          height: '100%'
+                        }}
+                      >
+                        {isYt ? '▶' : '📺'}
+                      </div>
+                    )}
+                    
+                    <span className="video-duration">{video.duration || '--:--'}</span>
+                    {accessBadge && (
+                      <span className="members-badge" title={accessBadge.title}>
+                        {accessBadge.label}
+                      </span>
+                    )}
                   </>
                 )}
               </div>
             </div>
-            <button 
-              onClick={onClose} 
-              style={{ 
-                width: 32, 
-                height: 32, 
-                borderRadius: '50%', 
-                background: 'var(--bg-hover)', 
-                border: 'none', 
-                color: 'var(--text-secondary)', 
-                fontSize: 20, 
-                display: 'flex', 
-                alignItems: 'center', 
-                justifyContent: 'center', 
-                lineHeight: 1,
-                flexShrink: 0,
-                marginTop: 2
-              }}
-            >
-              ×
-            </button>
-          </div>
+          )}
         </div>
 
-        <div ref={contentRef} className="mobile-sheet-scrollable" style={{ flex: 1, overflowY: 'auto', overscrollBehavior: 'contain', padding: '8px 0 40px 0' }}>
-          <div style={{ padding: '0 16px 12px' }}>
-             <div 
-              onClick={(e) => {
-                if (isAudioPlaying || isVideoPlaying) return;
-                e.stopPropagation();
-                setIsPickerActive(true);
-              }} 
-              onContextMenu={(e) => e.preventDefault()}
-              className="video-thumb-wrapper"
-              style={{ 
-                borderRadius: 20, 
-                cursor: (isAudioPlaying || isVideoPlaying) ? 'default' : 'pointer', 
-                boxShadow: '0 4px 20px rgba(0,0,0,0.08)',
-                background: 'var(--bg-secondary)',
-                border: '1px solid var(--border)',
-                overflow: 'hidden',
-                position: 'relative',
-                aspectRatio: '16/9',
-                userSelect: 'none',
-                WebkitUserSelect: 'none',
-                WebkitTouchCallout: 'none'
-              }}
-            >
-              {(isAudioPlaying || isVideoPlaying) ? (
-                <EmbeddedPlayer
-                  video={video}
-                  isAudioMode={isAudioPlaying}
-                  isVisible={isVideoPlaying}
-                  seekRequest={activeSeekRequest}
-                  onTimeUpdate={handlePlayerTimeUpdate}
-                  onDurationChange={handlePlayerDurationChange}
-                >
-                  {({ isPlaying, currentTime, duration, togglePlay, seek }) => (
-                    isAudioPlaying ? (
-                      <AudioModeOverlay
-                        video={video}
-                        isPlaying={isPlaying}
-                        currentTime={currentTime}
-                        duration={duration}
-                        onTogglePlay={togglePlay}
-                        onSeek={seek}
-                        onClose={() => setIsAudioPlaying(false)}
-                      />
-                    ) : null
-                  )}
-                </EmbeddedPlayer>
-              ) : (
-                <>
-                  <div className="video-badges-top">
-                    {subtitleBadge && (
-                      <span className={`subtitle-badge state-${video.subtitle_status || 'unknown'}`}>
-                        {subtitleBadge}
-                      </span>
+        <div 
+          ref={contentRef} 
+          className={preferredMode === 'reading' ? "mobile-sheet-scrollable" : ""} 
+          style={{ 
+            flex: 1, 
+            overflowY: preferredMode === 'reading' ? 'auto' : 'hidden', 
+            overscrollBehavior: 'contain', 
+            padding: '4px 0 0 0',
+            display: 'flex',
+            flexDirection: 'column'
+          }}
+        >
+          {preferredMode === 'reading' && (
+            <div style={{ padding: '0 16px 12px' }}>
+              <div 
+                onClick={handleThumbnailClick}
+                onContextMenu={(e) => e.preventDefault()}
+                className="video-thumb-wrapper"
+                style={{ 
+                  borderRadius: 20, 
+                  cursor: (!isMediaActive && (preferredMode === 'official' || preferredMode === 'videolite')) ? 'pointer' : 'default', 
+                  boxShadow: '0 4px 20px rgba(0,0,0,0.08)',
+                  background: 'var(--bg-secondary)',
+                  border: '1px solid var(--border)',
+                  overflow: 'hidden',
+                  position: 'relative',
+                  aspectRatio: '16/9',
+                  userSelect: 'none',
+                  WebkitUserSelect: 'none',
+                  WebkitTouchCallout: 'none'
+                }}
+              >
+                {(isAudioPlaying || isVideoPlaying) ? (
+                  <EmbeddedPlayer
+                    video={video}
+                    isAudioMode={isAudioPlaying}
+                    isVisible={isVideoPlaying}
+                    seekRequest={activeSeekRequest}
+                    onTimeUpdate={handlePlayerTimeUpdate}
+                    onDurationChange={handlePlayerDurationChange}
+                  >
+                    {({ isPlaying, currentTime, duration, togglePlay, seek }) => (
+                      isAudioPlaying ? (
+                        <AudioModeOverlay
+                          video={video}
+                          isPlaying={isPlaying}
+                          currentTime={currentTime}
+                          duration={duration}
+                          onTogglePlay={togglePlay}
+                          onSeek={seek}
+                          onClose={() => setIsAudioPlaying(false)}
+                        />
+                      ) : null
                     )}
-                    {video.summary_status === 'completed' && (
-                      <span className="summary-indicator completed" title="已有 AI 总结">✦</span>
-                    )}
-                    {video.summary_status === 'processing' && (
-                      <span className="summary-indicator processing" title="AI 总结生成中">
-                        <span className="status-pulse" style={{ width: 6, height: 6, margin: 0 }} />
-                      </span>
-                    )}
-                    {video.summary_status === 'failed' && (
-                      <span className="summary-indicator failed" title="AI 总结失败">!</span>
-                    )}
-                  </div>
-                  
-                  {video.thumbnail_url ? (
-                    <img 
-                      src={video.thumbnail_url} 
-                      alt="" 
-                      className="video-thumb"
-                      draggable={false}
-                      style={{ 
-                        width: '100%', 
-                        height: '100%', 
-                        objectFit: 'cover',
-                        WebkitTouchCallout: 'none',
-                        WebkitUserSelect: 'none'
-                      }} 
-                    />
-                  ) : (
-                    <div
-                      className="video-thumb"
-                      style={{
-                        background: isYt
-                          ? 'linear-gradient(135deg, #ff0000 0%, #ff4444 50%, #ff0000 100%)'
-                          : 'linear-gradient(135deg, #00a1e4 0%, #23c3f2 50%, #00a1e4 100%)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontSize: 32,
-                        width: '100%',
-                        height: '100%'
-                      }}
-                    >
-                      {isYt ? '▶' : '📺'}
+                  </EmbeddedPlayer>
+                ) : (
+                  <>
+                    <div className="video-badges-top">
+                      {subtitleBadge && (
+                        <span className={`subtitle-badge state-${video.subtitle_status || 'unknown'}`}>
+                          {subtitleBadge}
+                        </span>
+                      )}
+                      {video.summary_status === 'completed' && (
+                        <span className="summary-indicator completed" title="已有 AI 总结">✦</span>
+                      )}
+                      {video.summary_status === 'processing' && (
+                        <span className="summary-indicator processing" title="AI 总结生成中">
+                          <span className="status-pulse" style={{ width: 6, height: 6, margin: 0 }} />
+                        </span>
+                      )}
+                      {video.summary_status === 'failed' && (
+                        <span className="summary-indicator failed" title="AI 总结失败">!</span>
+                      )}
                     </div>
-                  )}
-                  
-                  <span className="video-duration">{video.duration || '--:--'}</span>
-                  {accessBadge && (
-                    <span className="members-badge" title={accessBadge.title}>
-                      {accessBadge.label}
-                    </span>
-                  )}
-                </>
-              )}
+                    
+                    {video.thumbnail_url ? (
+                      <img 
+                        src={video.thumbnail_url} 
+                        alt="" 
+                        className="video-thumb"
+                        draggable={false}
+                        style={{ 
+                          width: '100%', 
+                          height: '100%', 
+                          objectFit: 'cover',
+                          WebkitTouchCallout: 'none',
+                          WebkitUserSelect: 'none'
+                        }} 
+                      />
+                    ) : (
+                      <div
+                        className="video-thumb"
+                        style={{
+                          background: isYt
+                            ? 'linear-gradient(135deg, #ff0000 0%, #ff4444 50%, #ff0000 100%)'
+                            : 'linear-gradient(135deg, #00a1e4 0%, #23c3f2 50%, #00a1e4 100%)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: 32,
+                          width: '100%',
+                          height: '100%'
+                        }}
+                      >
+                        {isYt ? '▶' : '📺'}
+                      </div>
+                    )}
+                    
+                    <span className="video-duration">{video.duration || '--:--'}</span>
+                    {accessBadge && (
+                      <span className="members-badge" title={accessBadge.title}>
+                        {accessBadge.label}
+                      </span>
+                    )}
+                  </>
+                )}
+              </div>
             </div>
-          </div>
+          )}
 
-          <div style={{ padding: '0 16px' }}>
+          <div style={{ padding: '0 16px', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
             <VideoInfoPanel
               video={video}
+              onPlayModeClick={() => setIsPickerActive(true)}
+              currentPlayMode={preferredMode}
               onTimestampClick={(seconds) => {
                 if (isMediaActive) {
                   seekNonceRef.current += 1;
@@ -543,6 +734,8 @@ export default function MobileVideoSheet({
               }}
               currentPlayerSeconds={isMediaActive ? activePlayerSeconds : 0}
               playerDuration={isMediaActive ? activePlayerDuration : 0}
+              followMode={followMode}
+              onFollowModeChange={setFollowMode}
             />
           </div>
         </div>
@@ -593,7 +786,7 @@ export default function MobileVideoSheet({
                   maxWidth: 440,
                   justifyContent: 'space-around'
               }}>
-                  {['音频', '视频', '官方', 'Video Lite', '取消'].map((label, i) => (
+                  {['音频', '视频', '官方', 'Lite', '阅读', '取消'].map((label, i) => (
                       <button 
                         key={label} 
                         onClick={() => {
@@ -608,7 +801,7 @@ export default function MobileVideoSheet({
                           border: 'none',
                           color: '#fff',
                           fontWeight: 900,
-                          fontSize: 12,
+                          fontSize: 10,
                           transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
                           display: 'flex',
                           flexDirection: 'column',
@@ -620,8 +813,8 @@ export default function MobileVideoSheet({
                         onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.05)')}
                         onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
                       >
-                          <span style={{ fontSize: 26, filter: 'drop-shadow(0 4px 8px rgba(0,0,0,0.3))' }}>
-                              {i === 0 ? '🎧' : i === 1 ? '📺' : i === 2 ? '🏛' : i === 3 ? '🎬' : '✕'}
+                          <span style={{ fontSize: 22, filter: 'drop-shadow(0 4px 8px rgba(0,0,0,0.3))' }}>
+                              {i === 0 ? '🎧' : i === 1 ? '📺' : i === 2 ? '🏛' : i === 3 ? '🎬' : i === 4 ? '📖' : '✕'}
                           </span>
                           <span style={{ opacity: 0.9 }}>{label}</span>
                       </button>

@@ -1273,6 +1273,8 @@ export default function PlayerModal({
               bilibiliAid={isYt ? null : (bilibiliPlayback?.aid ?? null)}
               bilibiliCid={isYt ? null : (bilibiliPlayback?.cid ?? null)}
               onSummaryChange={setSummaryMarkdown}
+              followMode={followMode}
+              onFollowModeChange={setFollowMode}
             />
           </div>
 
