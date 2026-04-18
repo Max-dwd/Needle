@@ -230,6 +230,27 @@ export interface SubtitleBrowserFetchConfig {
   updatedAt: string | null;
 }
 
+export interface SubtitleWhisperAiBatchConfig {
+  targetSeconds: number;
+  maxSeconds: number;
+  maxSegments: number;
+  silenceWindow: number;
+  minSeconds: number;
+}
+
+export interface SubtitleWhisperAiHallucinationConfig {
+  noSpeechProbThreshold: number;
+  avgLogprobThreshold: number;
+}
+
+export interface SubtitleWhisperAiConfig {
+  enabled: boolean;
+  whisperModelId: string;
+  batch: SubtitleWhisperAiBatchConfig;
+  hallucination: SubtitleWhisperAiHallucinationConfig;
+  updatedAt: string | null;
+}
+
 export interface SubtitleBackoffPlatformState {
   multiplier: number;
   consecutiveErrors: number;
@@ -239,6 +260,7 @@ export interface SubtitleBackoffPlatformState {
 export interface SubtitlePipelineSettingsResponse {
   apiFallback: SubtitleApiFallbackConfig;
   browserFetch: SubtitleBrowserFetchConfig;
+  whisperAi: SubtitleWhisperAiConfig;
   subtitleInterval: number;
   backoff: Record<'youtube' | 'bilibili', SubtitleBackoffPlatformState>;
 }

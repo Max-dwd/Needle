@@ -1,11 +1,16 @@
 import type { AiModelProtocol, AiSummaryModelConfig } from '@/types';
 
 export type TranscribePriority = 'manual-subtitle' | 'auto-subtitle';
+export type JsonSchema = Record<string, unknown>;
 
 export interface TranscribeAudioInput {
   audioPath: string;
   mediaType: 'audio/mpeg';
   prompt: string;
+  systemPrompt?: string;
+  responseSchema?: JsonSchema;
+  maxOutputTokens?: number;
+  signal?: AbortSignal;
   priority: TranscribePriority;
   label: string;
   estimatedTokens: number;
