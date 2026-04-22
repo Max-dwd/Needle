@@ -30,9 +30,11 @@ interface VideoEnrichedEvent {
   channelId: string;
   channelName: string;
   fields: {
+    title?: string | null;
     thumbnail_url: string | null;
     published_at: string | null;
     duration: string | null;
+    channel_name?: string | null;
     is_members_only?: number;
     access_status?: 'members_only' | 'limited_free' | null;
     availability_status?: 'unavailable' | 'abandoned' | null;
@@ -134,7 +136,10 @@ export async function GET() {
     appEvents.removeListener('summary:error', onSummaryError);
     // Remove realtime video push event listeners
     appEvents.removeListener('video:new-skeleton', onVideoNewSkeleton);
-    appEvents.removeListener('subtitle:status-changed', onSubtitleStatusChanged);
+    appEvents.removeListener(
+      'subtitle:status-changed',
+      onSubtitleStatusChanged,
+    );
     appEvents.removeListener('video:enriched', onVideoEnriched);
     appEvents.removeListener(
       'video:availability-changed',

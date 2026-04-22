@@ -11,7 +11,7 @@
   },
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "next build --webpack",
     "build:docker": "next build --webpack",
     "start": "next start",
     "stop": "node scripts/stop.mjs",

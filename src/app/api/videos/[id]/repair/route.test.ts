@@ -1,20 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { prepareMock, getDbMock } = vi.hoisted(() => {
-  const prepareMock = vi.fn();
-  const getDbMock = vi.fn(() => ({ prepare: prepareMock }));
-  return { prepareMock, getDbMock };
-});
-
-const { ensureEnrichmentQueue, enrichVideo } = vi.hoisted(() => ({
-  ensureEnrichmentQueue: vi.fn(),
-  enrichVideo: vi.fn().mockResolvedValue(undefined),
+const { rescrapeVideo } = vi.hoisted(() => ({
+  rescrapeVideo: vi.fn(),
 }));
 
-vi.mock('@/lib/db', () => ({ getDb: getDbMock }));
-vi.mock('@/lib/enrichment-queue', () => ({
-  ensureEnrichmentQueue,
-  enrichVideo,
+vi.mock('@/lib/video-rescrape', () => ({
+  rescrapeVideo,
 }));
 
 import { POST } from './route';
@@ -26,33 +17,54 @@ function makeParams(id: string) {
 describe('POST /api/videos/[id]/repair', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    prepareMock.mockReset();
   });
 
   it('returns 400 for invalid ids', async () => {
-    const response = await POST(new Request('http://localhost') as Request, makeParams('nope'));
+    const response = await POST(
+      new Request('http://localhost'),
+      makeParams('nope'),
+    );
     expect(response.status).toBe(400);
+    expect(rescrapeVideo).not.toHaveBeenCalled();
   });
 
   it('returns 404 when the video is missing', async () => {
-    prepareMock.mockReturnValueOnce({
-      get: vi.fn().mockReturnValue(undefined),
-    });
+    rescrapeVideo.mockResolvedValueOnce({ ok: false, reason: 'not_found' });
 
-    const response = await POST(new Request('http://localhost') as Request, makeParams('1'));
+    const response = await POST(
+      new Request('http://localhost'),
+      makeParams('1'),
+    );
+
     expect(response.status).toBe(404);
+    expect(rescrapeVideo).toHaveBeenCalledWith(1);
   });
 
-  it('enqueues manual repair and returns 202', async () => {
-    prepareMock.mockReturnValueOnce({
-      get: vi.fn().mockReturnValue({
-        id: 1,
-        video_id: 'BV1xx411c7mD',
-        platform: 'bilibili',
-      }),
+  it('returns 409 when a rescrape is already in progress', async () => {
+    rescrapeVideo.mockResolvedValueOnce({ ok: false, reason: 'in_progress' });
+
+    const response = await POST(
+      new Request('http://localhost'),
+      makeParams('2'),
+    );
+    const result = await response.json();
+
+    expect(response.status).toBe(409);
+    expect(result).toEqual({ error: 'rescrape_in_progress' });
+    expect(rescrapeVideo).toHaveBeenCalledWith(2);
+  });
+
+  it('starts a rescrape and returns 202', async () => {
+    rescrapeVideo.mockResolvedValueOnce({
+      ok: true,
+      videoId: 'BV1xx411c7mD',
+      platform: 'bilibili',
     });
 
-    const response = await POST(new Request('http://localhost') as Request, makeParams('1'));
+    const response = await POST(
+      new Request('http://localhost'),
+      makeParams('1'),
+    );
     const result = await response.json();
 
     expect(response.status).toBe(202);
@@ -61,24 +73,22 @@ describe('POST /api/videos/[id]/repair', () => {
       videoId: 'BV1xx411c7mD',
       platform: 'bilibili',
     });
-    expect(ensureEnrichmentQueue).toHaveBeenCalledTimes(1);
-    expect(enrichVideo).toHaveBeenCalledWith(1);
+    expect(rescrapeVideo).toHaveBeenCalledWith(1);
   });
 
-  it('returns 409 for videos marked as abandoned', async () => {
-    prepareMock.mockReturnValueOnce({
-      get: vi.fn().mockReturnValue({
-        id: 2,
-        video_id: 'gone123',
-        platform: 'youtube',
-        availability_status: 'abandoned',
-      }),
+  it('allows abandoned videos to reach the rescrape path', async () => {
+    rescrapeVideo.mockResolvedValueOnce({
+      ok: true,
+      videoId: 'gone123',
+      platform: 'youtube',
     });
 
-    const response = await POST(new Request('http://localhost') as Request, makeParams('2'));
+    const response = await POST(
+      new Request('http://localhost'),
+      makeParams('3'),
+    );
 
-    expect(response.status).toBe(409);
-    expect(ensureEnrichmentQueue).not.toHaveBeenCalled();
-    expect(enrichVideo).not.toHaveBeenCalled();
+    expect(response.status).toBe(202);
+    expect(rescrapeVideo).toHaveBeenCalledWith(3);
   });
 });

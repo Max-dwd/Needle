@@ -6,9 +6,9 @@ const nextConfig: NextConfig = {
     root: process.cwd(),
   },
 
-  // Exclude .venv from Turbopack's file tracing (it contains Python symlinks)
+  // Exclude local Python envs from file tracing (they contain external symlinks).
   outputFileTracingExcludes: {
-    '*': ['.venv/**'],
+    '*': ['.venv/**', 'venv/**'],
   },
 
   images: {

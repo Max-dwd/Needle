@@ -59,5 +59,7 @@ test/outputs/
 biliscope-repo/
 
 # python cache
+.venv/
+venv/
 __pycache__/
 *.pyc

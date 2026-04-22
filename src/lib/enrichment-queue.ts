@@ -57,6 +57,11 @@ interface EnrichmentJob {
   channelName: string;
 }
 
+interface EnrichVideoOptions {
+  priority?: 0 | 1;
+  onSettled?: () => void;
+}
+
 export interface EnrichmentQueueStatus {
   pool: PoolStatus;
   initialized: boolean;
@@ -64,6 +69,7 @@ export interface EnrichmentQueueStatus {
 
 interface EnrichmentState {
   initialized: boolean;
+  inFlightRescrapes: Set<number>;
 }
 
 // ---------------------------------------------------------------------------
@@ -95,9 +101,23 @@ function getState(): EnrichmentState {
   if (!g[GLOBAL_KEY]) {
     g[GLOBAL_KEY] = {
       initialized: false,
+      inFlightRescrapes: new Set<number>(),
     };
   }
   return g[GLOBAL_KEY]!;
+}
+
+export function acquireRescrapeLock(videoDbId: number): boolean {
+  const state = getState();
+  if (state.inFlightRescrapes.has(videoDbId)) {
+    return false;
+  }
+  state.inFlightRescrapes.add(videoDbId);
+  return true;
+}
+
+export function releaseRescrapeLock(videoDbId: number): void {
+  getState().inFlightRescrapes.delete(videoDbId);
 }
 
 // ---------------------------------------------------------------------------
@@ -144,12 +164,14 @@ function needsEnrichment(video: VideoWithChannel): boolean {
   if (video.availability_status === 'abandoned') {
     return false;
   }
-  const hasThumbnail = Boolean(video.thumbnail_url && video.thumbnail_url.trim() !== '');
+  const hasThumbnail = Boolean(
+    video.thumbnail_url && video.thumbnail_url.trim() !== '',
+  );
   const hasDuration = Boolean(video.duration && video.duration.trim() !== '');
   const hasPublishedAt = Boolean(
     video.published_at &&
-      video.published_at.trim() !== '' &&
-      Number.isFinite(Date.parse(video.published_at)),
+    video.published_at.trim() !== '' &&
+    Number.isFinite(Date.parse(video.published_at)),
   );
   return (
     !hasThumbnail ||
@@ -165,9 +187,12 @@ function needsEnrichment(video: VideoWithChannel): boolean {
 function updateVideoFields(
   videoDbId: number,
   fields: {
+    title?: string | null;
     thumbnail_url?: string | null;
     published_at?: string | null;
     duration?: string | null;
+    channel_name?: string | null;
+    source?: string | null;
     is_members_only?: number;
     access_status?: 'members_only' | 'limited_free' | null;
     members_only_checked_at?: string | null;
@@ -180,6 +205,10 @@ function updateVideoFields(
   const sets: string[] = [];
   const values: (string | null)[] = [];
 
+  if (fields.title !== undefined) {
+    sets.push('title = ?');
+    values.push(fields.title);
+  }
   if (fields.thumbnail_url !== undefined) {
     sets.push('thumbnail_url = ?');
     values.push(fields.thumbnail_url);
@@ -191,6 +220,14 @@ function updateVideoFields(
   if (fields.duration !== undefined) {
     sets.push('duration = ?');
     values.push(fields.duration);
+  }
+  if (fields.channel_name !== undefined) {
+    sets.push('channel_name = ?');
+    values.push(fields.channel_name);
+  }
+  if (fields.source !== undefined) {
+    sets.push('source = ?');
+    values.push(fields.source);
   }
   if (fields.is_members_only !== undefined) {
     sets.push('is_members_only = ?');
@@ -246,13 +283,11 @@ async function runEnrichmentJob(
 
     const hasUsableDetail = Boolean(
       detail &&
-        (
-          (detail.thumbnail_url && detail.thumbnail_url.trim() !== '') ||
-          (detail.published_at && detail.published_at.trim() !== '') ||
-          (detail.duration && detail.duration.trim() !== '') ||
-          detail.access_status !== undefined ||
-          detail.is_members_only === 1
-        ),
+      ((detail.thumbnail_url && detail.thumbnail_url.trim() !== '') ||
+        (detail.published_at && detail.published_at.trim() !== '') ||
+        (detail.duration && detail.duration.trim() !== '') ||
+        detail.access_status !== undefined ||
+        detail.is_members_only === 1),
     );
 
     if (!detail || !hasUsableDetail) {
@@ -302,9 +337,12 @@ async function runEnrichmentJob(
 
     // Build update fields
     const updateFields: {
+      title?: string | null;
       thumbnail_url?: string | null;
       published_at?: string | null;
       duration?: string | null;
+      channel_name?: string | null;
+      source?: string | null;
       is_members_only?: number;
       access_status?: 'members_only' | 'limited_free' | null;
       availability_status?: VideoAvailabilityStatus;
@@ -312,6 +350,10 @@ async function runEnrichmentJob(
       availability_checked_at?: string | null;
     } = {};
 
+    if (detail.title) {
+      updateFields.title = detail.title;
+    }
+    updateFields.source = 'browser';
     if (detail.thumbnail_url) {
       updateFields.thumbnail_url = detail.thumbnail_url;
     }
@@ -320,6 +362,9 @@ async function runEnrichmentJob(
     }
     if (detail.duration) {
       updateFields.duration = detail.duration;
+    }
+    if (detail.channel_name) {
+      updateFields.channel_name = detail.channel_name;
     }
     if (detail.is_members_only !== undefined) {
       updateFields.is_members_only = detail.is_members_only;
@@ -348,9 +393,11 @@ async function runEnrichmentJob(
       channel_id: job.channelId,
       channel_name: job.channelName,
       fields: {
+        title: detail.title ?? null,
         thumbnail_url: detail.thumbnail_url ?? null,
         published_at: detail.published_at ?? null,
         duration: detail.duration ?? null,
+        channel_name: detail.channel_name ?? null,
         is_members_only: detail.is_members_only ?? undefined,
         access_status: detail.access_status ?? null,
         availability_status: null,
@@ -377,7 +424,11 @@ async function runEnrichmentJob(
       videoId: job.videoId,
       error: message,
     });
-    return { success: false, durationMs: Date.now() - startTime, error: message };
+    return {
+      success: false,
+      durationMs: Date.now() - startTime,
+      error: message,
+    };
   }
 }
 
@@ -400,11 +451,13 @@ export async function enrichVideo(
   videoDbId: number,
   channelId?: string,
   channelName?: string,
+  options?: EnrichVideoOptions,
 ): Promise<void> {
   // Get video with channel context
   const video = getVideoWithChannel(videoDbId);
   if (!video) {
     log.warn('enrichment', 'video_not_found', { videoDbId });
+    options?.onSettled?.();
     return;
   }
 
@@ -420,14 +473,15 @@ export async function enrichVideo(
         ? 'skip_abandoned_unavailable'
         : 'skip_already_complete',
       {
-      videoDbId,
-      videoId: video.video_id,
-      platform: video.platform,
-      channel_id: resolvedChannelId,
-      channel_name: resolvedChannelName,
-      availability_status: video.availability_status ?? null,
-    },
+        videoDbId,
+        videoId: video.video_id,
+        platform: video.platform,
+        channel_id: resolvedChannelId,
+        channel_name: resolvedChannelName,
+        availability_status: video.availability_status ?? null,
+      },
     );
+    options?.onSettled?.();
     return;
   }
 
@@ -445,8 +499,14 @@ export async function enrichVideo(
       channelId: video.channel_id__platform,
       channelName: video.channel_name,
     },
-    1, // priority 1 = auto (lower than manual priority 0)
-    runEnrichmentJob,
+    options?.priority ?? 1, // priority 1 = auto (lower than manual priority 0)
+    async (job) => {
+      try {
+        return await runEnrichmentJob(job);
+      } finally {
+        options?.onSettled?.();
+      }
+    },
   );
 }
 

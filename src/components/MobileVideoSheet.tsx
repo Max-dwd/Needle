@@ -667,7 +667,7 @@ export default function MobileVideoSheet({
                   className="video-thumb-wrapper"
                   style={{
                     borderRadius: 20,
-                    cursor: (!isMediaActive && (preferredMode === 'official' || preferredMode === 'videolite')) ? 'pointer' : 'default',
+                    cursor: 'default',
                     boxShadow: '0 4px 20px rgba(0,0,0,0.08)',
                     background: 'var(--bg-secondary)',
                     border: '1px solid var(--border)',

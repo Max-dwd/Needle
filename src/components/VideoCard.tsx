@@ -80,7 +80,7 @@ const VideoCard = memo(function VideoCard({
   });
   const [subtitleRetrying, setSubtitleRetrying] = useState(false);
   const [summaryRetrying, setSummaryRetrying] = useState(false);
-  const [metadataRepairing, setMetadataRepairing] = useState(false);
+  const [rescraping, setRescraping] = useState(false);
   const [researchModalState, setResearchModalState] = useState<{
     mode: 'add' | 'edit';
     existingFavorite?: { id: number; intent_type_id: number; note: string };
@@ -221,7 +221,7 @@ const VideoCard = memo(function VideoCard({
       setBilibiliSummaryEnabled(isYt ? null : cachedBilibiliSummaryEnabled);
       setSubtitleRetrying(false);
       setSummaryRetrying(false);
-      setMetadataRepairing(false);
+      setRescraping(false);
       closeContextMenu();
     } else if (summaryChanged || subtitleChanged) {
       setLocalSummaryChecked(false);
@@ -473,17 +473,17 @@ const VideoCard = memo(function VideoCard({
     }
   }, [summaryModels.length, summaryModelsLoading]);
 
-  const triggerMetadataRepair = useCallback(() => {
-    if (metadataRepairing || video.availability_status === 'abandoned') return;
-    setMetadataRepairing(true);
+  const triggerRescrape = useCallback(() => {
+    if (rescraping) return;
+    setRescraping(true);
     fetch(`/api/videos/${video.id}/repair`, {
       method: 'POST',
     })
       .catch(() => {})
       .finally(() => {
-        setMetadataRepairing(false);
+        setRescraping(false);
       });
-  }, [metadataRepairing, video.availability_status, video.id]);
+  }, [rescraping, video.id]);
 
   const triggerSubtitleRetry = useCallback(
     (
@@ -866,18 +866,18 @@ const VideoCard = memo(function VideoCard({
               type="button"
               onClick={() => {
                 closeContextMenu();
-                triggerMetadataRepair();
+                triggerRescrape();
               }}
-              disabled={metadataRepairing || video.availability_status === 'abandoned'}
+              disabled={rescraping}
               style={contextMenuItemStyle}
             >
-              修
+              重抓
               <span style={contextMenuHintStyle}>
-                {video.availability_status === 'abandoned'
-                  ? '已放弃'
-                  : metadataRepairing
-                    ? '处理中…'
-                    : '元数据'}
+                {rescraping
+                  ? '处理中…'
+                  : video.availability_status === 'abandoned'
+                    ? '复活重抓'
+                    : '元数据+字幕+摘要'}
               </span>
             </button>
 
@@ -1025,6 +1025,8 @@ const VideoCard = memo(function VideoCard({
   return (
     prev.externalOpen === next.externalOpen &&
     prev.video.id === next.video.id &&
+    prev.video.title === next.video.title &&
+    prev.video.channel_name === next.video.channel_name &&
     prev.video.summary_status === next.video.summary_status &&
     prev.video.subtitle_status === next.video.subtitle_status &&
     prev.video.subtitle_error === next.video.subtitle_error &&

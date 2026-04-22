@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getDb, type Video } from '@/lib/db';
-import { ensureEnrichmentQueue, enrichVideo } from '@/lib/enrichment-queue';
+import { rescrapeVideo } from '@/lib/video-rescrape';
 
 export async function POST(
   _request: Request,
@@ -12,30 +11,28 @@ export async function POST(
     return NextResponse.json({ error: 'Invalid video id' }, { status: 400 });
   }
 
-  const db = getDb();
-  const video = db.prepare('SELECT * FROM videos WHERE id = ?').get(videoDbId) as
-    | Video
-    | undefined;
+  const result = await rescrapeVideo(videoDbId);
 
-  if (!video) {
+  if (!result.ok && result.reason === 'not_found') {
     return NextResponse.json({ error: 'Video not found' }, { status: 404 });
   }
 
-  if (video.availability_status === 'abandoned') {
+  if (!result.ok && result.reason === 'in_progress') {
     return NextResponse.json(
-      { error: 'Video has been marked as abandoned' },
+      { error: 'rescrape_in_progress' },
       { status: 409 },
     );
   }
 
-  ensureEnrichmentQueue();
-  void enrichVideo(videoDbId);
+  if (!result.ok) {
+    return NextResponse.json({ error: 'Rescrape failed' }, { status: 500 });
+  }
 
   return NextResponse.json(
     {
       accepted: true,
-      videoId: video.video_id,
-      platform: video.platform,
+      videoId: result.videoId,
+      platform: result.platform,
     },
     { status: 202 },
   );

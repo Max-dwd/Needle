@@ -157,7 +157,7 @@ data/
 - `GET /api/videos/[id]/summary/` — 读取摘要 markdown（含历史版本）
 - `POST /api/videos/[id]/summary/generate/` — 触发单视频摘要生成
 - `GET /api/videos/[id]/comments/` — 经 Piped 获取 YouTube 评论
-- `POST /api/videos/[id]/repair/` — 加入 `enrichment-queue` 补全缺失元数据
+- `POST /api/videos/[id]/repair/` — 清空本地视频元数据 / 字幕 / 摘要后重抓单视频 detail，并以手动优先级触发一次 auto-pipeline
 - `POST /api/videos/[id]/chat/` — 字幕范围内的 AI 问答（SSE 流式），支持 `obsidian` / `roast` 两种 mode
 
 **频道** (`/api/channels/`)
@@ -241,7 +241,8 @@ data/
 
 **事件驱动流水线**
 - `auto-pipeline.ts` — 监听 `video:discovered` / `subtitle:ready` 自动触发字幕/摘要；三层架构（Layer 0 骨架 → Layer 1 enrichment → Layer 2 字幕/摘要池）
-- `enrichment-queue.ts` — Layer 1 元数据补全队列
+- `enrichment-queue.ts` — Layer 1 元数据补全队列；当前是手动补救通道，不从 scheduler/auto-pipeline 主流程自动回扫
+- `video-rescrape.ts` — 首页右键"重抓"入口：清理单视频本地状态、删除磁盘字幕/摘要、重发 `video:discovered` 并排入 enrichment
 - `async-pool.ts` — 自适应并发池（优先级队列、速率限制、暂停/恢复）
 - `events.ts` — `globalThis` 上的单例 EventEmitter（供 SSE 推送）
 

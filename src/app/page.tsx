@@ -558,6 +558,12 @@ function FeedPageContent() {
               v.video_id === videoId
                 ? {
                     ...v,
+                    title:
+                      fields.title === undefined ? v.title : fields.title,
+                    channel_name:
+                      fields.channel_name === undefined
+                        ? v.channel_name
+                        : fields.channel_name,
                     thumbnail_url: fields.thumbnail_url ?? v.thumbnail_url,
                     published_at: fields.published_at ?? v.published_at,
                     duration: fields.duration ?? v.duration,
@@ -1138,7 +1144,7 @@ function FeedPageContent() {
                 {searchInput && (
                   <button
                     className="search-input-clear"
-                    onClick={(e) => {
+                    onClick={() => {
                       handleSearchClear();
                       // Keep focus on input after clearing
                       searchInputRef.current?.focus();
