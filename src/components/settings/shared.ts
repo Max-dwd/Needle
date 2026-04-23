@@ -135,7 +135,8 @@ export type PlayerKeyboardActionId =
   | 'seek-backward'
   | 'seek-forward'
   | 'toggle-summary-follow'
-  | 'toggle-mute';
+  | 'toggle-mute'
+  | 'toggle-subtitle-overlay';
 
 
 

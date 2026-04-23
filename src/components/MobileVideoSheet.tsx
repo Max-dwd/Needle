@@ -3,10 +3,11 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import VideoInfoPanel from '@/components/VideoInfoPanel';
 import { timeAgo, getSubtitleBadgeLabel } from '@/lib/format';
-import type { VideoWithMeta } from '@/types';
+import type { SubtitleData, VideoWithMeta } from '@/types';
 import EmbeddedPlayer from '@/components/player/EmbeddedPlayer';
 import type { EmbeddedPlayerSeekRequest } from '@/components/player/EmbeddedPlayer';
 import AudioModeOverlay from '@/components/AudioModeOverlay';
+import SubtitleOverlay from '@/components/player/SubtitleOverlay';
 
 interface MobileVideoSheetProps {
   video: VideoWithMeta;
@@ -284,6 +285,30 @@ export default function MobileVideoSheet({
     localStorage.setItem('needle-player-follow-mode', String(followMode));
   }, [followMode]);
 
+  const [subtitleOverlay, setSubtitleOverlay] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return localStorage.getItem('needle-player-subtitle-overlay') === 'true';
+  });
+
+  useEffect(() => {
+    localStorage.setItem(
+      'needle-player-subtitle-overlay',
+      String(subtitleOverlay),
+    );
+  }, [subtitleOverlay]);
+
+  const [subtitle, setSubtitle] = useState<SubtitleData | null>(null);
+  const overlaySegments = useMemo(() => {
+    if (
+      !subtitle ||
+      subtitle.status !== 'fetched' ||
+      subtitle.segmentStyle === 'coarse'
+    ) {
+      return [];
+    }
+    return Array.isArray(subtitle.segments) ? subtitle.segments : [];
+  }, [subtitle]);
+
   const isYt = video.platform === 'youtube';
   const isMediaActive = isAudioPlaying || isVideoPlaying;
   const activeSeekRequest =
@@ -506,17 +531,26 @@ export default function MobileVideoSheet({
                     onDurationChange={handlePlayerDurationChange}
                   >
                     {({ isPlaying, currentTime, duration, togglePlay, seek }) => (
-                      isAudioPlaying ? (
-                        <AudioModeOverlay
-                          video={video}
-                          isPlaying={isPlaying}
+                      <>
+                        {isAudioPlaying ? (
+                          <AudioModeOverlay
+                            video={video}
+                            isPlaying={isPlaying}
+                            currentTime={currentTime}
+                            duration={duration}
+                            onTogglePlay={togglePlay}
+                            onSeek={seek}
+                            onClose={() => setIsAudioPlaying(false)}
+                          />
+                        ) : null}
+                        <SubtitleOverlay
+                          segments={overlaySegments}
                           currentTime={currentTime}
-                          duration={duration}
-                          onTogglePlay={togglePlay}
-                          onSeek={seek}
-                          onClose={() => setIsAudioPlaying(false)}
+                          enabled={subtitleOverlay}
+                          bottomOffset={isAudioPlaying ? 110 : 24}
+                          fontSize={16}
                         />
-                      ) : null
+                      </>
                     )}
                   </EmbeddedPlayer>
                 ) : (
@@ -689,17 +723,26 @@ export default function MobileVideoSheet({
                       onDurationChange={handlePlayerDurationChange}
                     >
                       {({ isPlaying, currentTime, duration, togglePlay, seek }) => (
-                        isAudioPlaying ? (
-                          <AudioModeOverlay
-                            video={video}
-                            isPlaying={isPlaying}
+                        <>
+                          {isAudioPlaying ? (
+                            <AudioModeOverlay
+                              video={video}
+                              isPlaying={isPlaying}
+                              currentTime={currentTime}
+                              duration={duration}
+                              onTogglePlay={togglePlay}
+                              onSeek={seek}
+                              onClose={() => setIsAudioPlaying(false)}
+                            />
+                          ) : null}
+                          <SubtitleOverlay
+                            segments={overlaySegments}
                             currentTime={currentTime}
-                            duration={duration}
-                            onTogglePlay={togglePlay}
-                            onSeek={seek}
-                            onClose={() => setIsAudioPlaying(false)}
+                            enabled={subtitleOverlay}
+                            bottomOffset={isAudioPlaying ? 110 : 24}
+                            fontSize={16}
                           />
-                        ) : null
+                        </>
                       )}
                     </EmbeddedPlayer>
                   ) : (
@@ -798,6 +841,9 @@ export default function MobileVideoSheet({
               playerDuration={isMediaActive ? activePlayerDuration : 0}
               followMode={followMode}
               onFollowModeChange={setFollowMode}
+              subtitleOverlay={subtitleOverlay}
+              onSubtitleOverlayChange={setSubtitleOverlay}
+              onSubtitleChange={setSubtitle}
             />
           </div>
         </div>

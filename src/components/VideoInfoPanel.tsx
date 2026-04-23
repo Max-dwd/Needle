@@ -12,6 +12,7 @@ import React, {
 import MarkdownRenderer from '@/components/MarkdownRenderer';
 import ChatPanel from '@/components/ChatPanel';
 import { formatSecondsLabel, normalizeCommentUrl } from '@/lib/format';
+import { findActiveSegmentIndex } from '@/lib/subtitle-segments';
 import { Info, RefreshCw, Cpu, BrainCircuit, History, BarChart3, Languages, FileText } from 'lucide-react';
 import ResearchFavoriteModal from '@/components/ResearchFavoriteModal';
 import type {
@@ -35,10 +36,13 @@ interface VideoInfoPanelProps {
   bilibiliAid?: number | null;
   bilibiliCid?: number | null;
   onSummaryChange?: (markdown: string) => void;
+  onSubtitleChange?: (subtitle: SubtitleData | null) => void;
   onPlayModeClick?: () => void;
   currentPlayMode?: 'audio' | 'video' | 'official' | 'videolite' | 'reading' | 'none';
   followMode?: boolean;
   onFollowModeChange?: (follow: boolean) => void;
+  subtitleOverlay?: boolean;
+  onSubtitleOverlayChange?: (enabled: boolean) => void;
 }
 
 function formatToken(n: number | string | undefined | null): string {
@@ -171,10 +175,13 @@ export default forwardRef<VideoInfoPanelRef, VideoInfoPanelProps>(
       bilibiliAid,
       bilibiliCid,
       onSummaryChange,
+      onSubtitleChange,
       onPlayModeClick,
       currentPlayMode = 'none',
       followMode = false,
       onFollowModeChange,
+      subtitleOverlay = false,
+      onSubtitleOverlayChange,
     }: VideoInfoPanelProps,
     ref,
   ) {
@@ -236,6 +243,10 @@ export default forwardRef<VideoInfoPanelRef, VideoInfoPanelProps>(
     useEffect(() => {
       onSummaryChange?.(effectiveMarkdown);
     }, [effectiveMarkdown, onSummaryChange]);
+
+    useEffect(() => {
+      onSubtitleChange?.(subtitle);
+    }, [subtitle, onSubtitleChange]);
 
     useImperativeHandle(ref, () => ({
       scrollToChapterSeconds: (seconds: number) => {
@@ -722,14 +733,45 @@ export default forwardRef<VideoInfoPanelRef, VideoInfoPanelProps>(
     const subtitleSegments = Array.isArray(subtitle?.segments)
       ? subtitle.segments
       : [];
-    const activeSegmentIndex =
-      subtitleSegments.length > 0
-        ? subtitleSegments.reduce(
-          (bestIdx, seg, idx) =>
-            seg.start <= currentPlayerSeconds ? idx : bestIdx,
-          0,
-        )
-        : -1;
+    const activeSegmentIndex = findActiveSegmentIndex(
+      subtitleSegments,
+      currentPlayerSeconds,
+    );
+
+    // 浮层字幕可用性：四态 —— 可用 / 加载中 / 不可用 / 粒度过粗
+    type SubtitleOverlayAvailability =
+      | 'available'
+      | 'pending'
+      | 'unavailable'
+      | 'coarse';
+    const subtitleOverlayAvailability: SubtitleOverlayAvailability = (() => {
+      const status = subtitle?.status;
+      if (
+        !subtitle ||
+        subtitleLoading ||
+        status === 'pending' ||
+        status === 'fetching'
+      ) {
+        return status === 'fetched' && subtitleSegments.length > 0
+          ? 'available'
+          : 'pending';
+      }
+      if (status !== 'fetched' || subtitleSegments.length === 0) {
+        return 'unavailable';
+      }
+      if (subtitle?.segmentStyle === 'coarse') return 'coarse';
+      return 'available';
+    })();
+    const subtitleOverlayTitle =
+      subtitleOverlayAvailability === 'available'
+        ? subtitleOverlay
+          ? '关闭字幕浮层 (C)'
+          : '开启字幕浮层 (C)'
+        : subtitleOverlayAvailability === 'pending'
+          ? '字幕加载中，稍后再试'
+          : subtitleOverlayAvailability === 'coarse'
+            ? '此视频字幕粒度过粗，无法悬浮显示'
+            : '该视频暂无可用字幕';
 
     const isUserScrolledRef = useRef(false);
     const prevPlayerSecondsRef = useRef(currentPlayerSeconds);
@@ -1011,6 +1053,59 @@ export default forwardRef<VideoInfoPanelRef, VideoInfoPanelProps>(
             <span style={{ fontSize: 13, fontWeight: 700, marginRight: isMobile && !isTabExpanded ? 0 : 2 }}>📍</span>
             {(!isMobile || isTabExpanded) && <span style={{ fontSize: 11, fontWeight: 700 }}>跟随</span>}
           </button>
+
+          {(() => {
+            const canToggle = subtitleOverlayAvailability === 'available';
+            const isOn = subtitleOverlay && canToggle;
+            const isDisabled = !canToggle;
+            return (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (!canToggle) return;
+                  onSubtitleOverlayChange?.(!subtitleOverlay);
+                }}
+                style={{
+                  display: 'flex',
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: '0 12px',
+                  height: 44,
+                  borderRadius: 12,
+                  background: isOn ? 'var(--accent-purple)' : 'var(--bg-hover)',
+                  border: `1px solid ${isOn ? 'var(--accent-purple)' : 'transparent'}`,
+                  color: isOn
+                    ? '#fff'
+                    : isDisabled
+                      ? 'var(--text-muted)'
+                      : 'var(--text-muted)',
+                  opacity: isDisabled ? 0.5 : 1,
+                  cursor: isDisabled ? 'not-allowed' : 'pointer',
+                  flexShrink: 0,
+                  transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                  marginLeft: 8,
+                  zIndex: 5,
+                }}
+                title={subtitleOverlayTitle}
+                aria-disabled={isDisabled}
+              >
+                <span
+                  style={{
+                    fontSize: 13,
+                    fontWeight: 700,
+                    marginRight: isMobile && !isTabExpanded ? 0 : 2,
+                  }}
+                >
+                  📺
+                </span>
+                {(!isMobile || isTabExpanded) && (
+                  <span style={{ fontSize: 11, fontWeight: 700 }}>字幕</span>
+                )}
+              </button>
+            );
+          })()}
 
           {(!isMobile || isTabExpanded) && (
             <button
