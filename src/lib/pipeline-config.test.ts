@@ -79,6 +79,84 @@ describe('pipeline config normalization', () => {
     });
   });
 
+  it('inserts llm-aligner with enabled=false when missing from stored config', () => {
+    mockGetAppSetting.mockImplementation((key: string) => {
+      if (key !== SUBTITLE_PIPELINE_CONFIG_KEY) return null;
+      return JSON.stringify({
+        platforms: [
+          {
+            platform: 'youtube',
+            sources: [
+              { id: 'browser', enabled: true },
+              { id: 'whisper-ai', enabled: true },
+              { id: 'gemini', enabled: false },
+            ],
+          },
+          {
+            platform: 'bilibili',
+            sources: [
+              { id: 'browser', enabled: true },
+              { id: 'whisper-ai', enabled: false },
+              { id: 'gemini', enabled: true },
+            ],
+          },
+        ],
+      });
+    });
+
+    const config = getSubtitlePipelineConfig();
+    const youtube = config.platforms.find((p) => p.platform === 'youtube');
+    const bilibili = config.platforms.find((p) => p.platform === 'bilibili');
+
+    expect(youtube?.sources.map((s) => s.id)).toEqual([
+      'browser',
+      'whisper-ai',
+      'llm-aligner',
+      'gemini',
+    ]);
+    expect(
+      youtube?.sources.find((s) => s.id === 'llm-aligner')?.enabled,
+    ).toBe(false);
+    expect(
+      youtube?.sources.find((s) => s.id === 'gemini')?.enabled,
+    ).toBe(false);
+
+    expect(bilibili?.sources.map((s) => s.id)).toEqual([
+      'browser',
+      'whisper-ai',
+      'llm-aligner',
+      'gemini',
+    ]);
+    expect(
+      bilibili?.sources.find((s) => s.id === 'llm-aligner')?.enabled,
+    ).toBe(false);
+  });
+
+  it('respects stored llm-aligner enabled=true after migration', () => {
+    mockGetAppSetting.mockImplementation((key: string) => {
+      if (key !== SUBTITLE_PIPELINE_CONFIG_KEY) return null;
+      return JSON.stringify({
+        platforms: [
+          {
+            platform: 'youtube',
+            sources: [
+              { id: 'browser', enabled: true },
+              { id: 'llm-aligner', enabled: true },
+              { id: 'whisper-ai', enabled: false },
+              { id: 'gemini', enabled: true },
+            ],
+          },
+        ],
+      });
+    });
+
+    const config = getSubtitlePipelineConfig();
+    const youtube = config.platforms.find((p) => p.platform === 'youtube');
+    expect(
+      youtube?.sources.find((s) => s.id === 'llm-aligner')?.enabled,
+    ).toBe(true);
+  });
+
   it('keeps supported subtitle sources and filters removed ones', () => {
     mockGetAppSetting.mockImplementation((key: string) => {
       if (key !== SUBTITLE_PIPELINE_CONFIG_KEY) return null;
@@ -125,6 +203,13 @@ describe('pipeline config normalization', () => {
               enabled: true,
             },
             {
+              id: 'llm-aligner',
+              label: 'LLM 转写 + 本地对齐',
+              description:
+                '多模态 AI 出完整文本和说话人，MLX forced aligner 出词级时间戳。',
+              enabled: false,
+            },
+            {
               id: 'gemini',
               label: 'AI 多模态 API',
               description: 'AI 提取 fallback，适合无字幕或字幕失效场景。',
@@ -150,6 +235,13 @@ describe('pipeline config normalization', () => {
               description:
                 '本地 Whisper 提供时间戳，多模态 AI 听音频校对文本。',
               enabled: true,
+            },
+            {
+              id: 'llm-aligner',
+              label: 'LLM 转写 + 本地对齐',
+              description:
+                '多模态 AI 出完整文本和说话人，MLX forced aligner 出词级时间戳。',
+              enabled: false,
             },
             {
               id: 'gemini',

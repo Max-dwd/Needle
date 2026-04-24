@@ -451,6 +451,11 @@ export function resolveChatCompletionsUrl(rawEndpoint: string): string {
     return parsed.toString();
   }
 
+  if (parsed.pathname.endsWith('/messages')) {
+    parsed.pathname = parsed.pathname.replace(/\/messages$/, '/chat/completions');
+    return parsed.toString();
+  }
+
   parsed.pathname = `${parsed.pathname.replace(/\/+$/, '')}/chat/completions`;
   return parsed.toString();
 }
@@ -469,6 +474,26 @@ export function detectAiApiProtocol(rawEndpoint: string): AiApiProtocol {
   return 'openai-chat-completions';
 }
 
+function resolveAiApiProtocol(model: AiSummaryModelConfig): AiApiProtocol {
+  if (model.protocol === 'anthropic-messages') {
+    return 'anthropic-messages';
+  }
+
+  if (model.protocol === 'gemini' || model.protocol === 'openai-chat') {
+    return 'openai-chat-completions';
+  }
+
+  return detectAiApiProtocol(model.endpoint);
+}
+
+export function resolveAiApiUrlForModel(model: AiSummaryModelConfig): string {
+  if (resolveAiApiProtocol(model) === 'anthropic-messages') {
+    return model.endpoint.trim();
+  }
+
+  return resolveChatCompletionsUrl(model.endpoint);
+}
+
 export function resolveAiApiUrl(rawEndpoint: string): string {
   if (detectAiApiProtocol(rawEndpoint) === 'anthropic-messages') {
     return rawEndpoint.trim();
@@ -479,7 +504,7 @@ export function resolveAiApiUrl(rawEndpoint: string): string {
 export function createAiApiHeaders(
   model: AiSummaryModelConfig,
 ): Record<string, string> {
-  if (detectAiApiProtocol(model.endpoint) === 'anthropic-messages') {
+  if (resolveAiApiProtocol(model) === 'anthropic-messages') {
     return {
       'Content-Type': 'application/json',
       'anthropic-version': '2023-06-01',
@@ -794,6 +819,27 @@ export function createChatCompletionRequest(
         }
       : prompt;
 
+  const messages = [
+    {
+      role: 'system',
+      content:
+        typeof normalizedPrompt.system === 'string'
+          ? normalizedPrompt.system.trim()
+          : '',
+    },
+    {
+      role: 'user',
+      content:
+        typeof normalizedPrompt.user === 'string'
+          ? normalizedPrompt.user.trim()
+          : '',
+    },
+  ].filter((message) => message.content.length > 0);
+
+  if (messages.length === 0) {
+    throw new Error('AI 请求缺少有效消息内容，请检查 Prompt 模板或输入内容');
+  }
+
   return {
     model: model.model,
     temperature: 0.3,
@@ -803,16 +849,7 @@ export function createChatCompletionRequest(
           stream_options: { include_usage: true },
         }
       : {}),
-    messages: [
-      {
-        role: 'system',
-        content: normalizedPrompt.system,
-      },
-      {
-        role: 'user',
-        content: normalizedPrompt.user,
-      },
-    ],
+    messages,
   };
 }
 
@@ -830,16 +867,29 @@ export function createAiApiRequest(
         }
       : prompt;
 
-  if (detectAiApiProtocol(model.endpoint) === 'anthropic-messages') {
+  if (resolveAiApiProtocol(model) === 'anthropic-messages') {
+    const system =
+      typeof normalizedPrompt.system === 'string'
+        ? normalizedPrompt.system.trim()
+        : '';
+    const user =
+      typeof normalizedPrompt.user === 'string'
+        ? normalizedPrompt.user.trim()
+        : '';
+
+    if (!user) {
+      throw new Error('AI 请求缺少有效用户消息内容，请检查 Prompt 模板或输入内容');
+    }
+
     return {
       model: model.model,
       max_tokens: 4096,
       ...(stream ? { stream: true } : {}),
-      system: normalizedPrompt.system,
+      ...(system ? { system } : {}),
       messages: [
         {
           role: 'user',
-          content: normalizedPrompt.user,
+          content: user,
         },
       ],
     };
@@ -907,7 +957,7 @@ async function generateViaOpenAiCompatibleApi(
     throw new Error('未配置 AI 模型名称，请先到设置页填写后再生成总结');
   }
 
-  const url = resolveAiApiUrl(model.endpoint);
+  const url = resolveAiApiUrlForModel(model);
   const budgetLease = await acquireSharedAiBudget({
     priority:
       options?.triggerSource === 'auto' ? 'auto-summary' : 'manual-summary',
@@ -1080,7 +1130,7 @@ export async function* generateSummaryStream(
     throw new Error('未配置 AI API Key，请先到设置页填写后再生成总结');
   }
 
-  const url = resolveAiApiUrl(selectedModel.endpoint);
+  const url = resolveAiApiUrlForModel(selectedModel);
   emitSummaryProgress(videoId, {
     stage: 'calling_api',
     message: `正在调用 ${selectedModel.name}...`,

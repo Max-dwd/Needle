@@ -13,6 +13,10 @@ import {
   getSubtitleWhisperAiConfig,
   setSubtitleWhisperAiConfig,
 } from '@/lib/subtitle-whisper-ai-settings';
+import {
+  getSubtitleLlmAlignerConfig,
+  setSubtitleLlmAlignerConfig,
+} from '@/lib/subtitle-llm-aligner-settings';
 
 const SUBTITLE_INTERVAL_SETTING_KEY = 'scheduler_subtitle_interval';
 
@@ -21,6 +25,7 @@ export async function GET() {
     apiFallback: getSubtitleApiFallbackConfig(),
     browserFetch: getSubtitleBrowserFetchConfig(),
     whisperAi: getSubtitleWhisperAiConfig(),
+    llmAligner: getSubtitleLlmAlignerConfig(),
     subtitleInterval: getPositiveIntAppSetting(
       SUBTITLE_INTERVAL_SETTING_KEY,
       10,
@@ -55,6 +60,10 @@ export async function POST(request: NextRequest) {
         payload && 'whisperAi' in payload
           ? setSubtitleWhisperAiConfig(payload.whisperAi)
           : getSubtitleWhisperAiConfig(),
+      llmAligner:
+        payload && 'llmAligner' in payload
+          ? setSubtitleLlmAlignerConfig(payload.llmAligner)
+          : getSubtitleLlmAlignerConfig(),
       subtitleInterval:
         typeof payload?.subtitleInterval === 'number'
           ? Math.max(0, Math.floor(payload.subtitleInterval))

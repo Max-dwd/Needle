@@ -3,7 +3,7 @@ import { getAiSummarySettings } from '@/lib/ai-summary-settings';
 import {
   createAiApiHeaders,
   createAiApiRequest,
-  resolveAiApiUrl,
+  resolveAiApiUrlForModel,
 } from '@/lib/ai-summary-client';
 
 export async function POST() {
@@ -15,7 +15,14 @@ export async function POST() {
 
   let endpoint = settings.endpoint.trim();
   try {
-    endpoint = resolveAiApiUrl(endpoint);
+    endpoint = resolveAiApiUrlForModel({
+      id: settings.modelId,
+      name: settings.modelName,
+      endpoint: settings.endpoint,
+      apiKey: settings.apiKey,
+      model: settings.model,
+      protocol: settings.selectedModel.protocol,
+    });
   } catch {
     return NextResponse.json(
       { error: 'API Endpoint 不是有效 URL' },

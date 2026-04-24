@@ -252,6 +252,24 @@ export interface SubtitleWhisperAiConfig {
   updatedAt: string | null;
 }
 
+export interface SubtitleLlmAlignerAlignerConfig {
+  modelId: string;
+  minAvgProb: number;
+  minWordRatio: number;
+}
+
+export interface SubtitleLlmAlignerLlmConfig {
+  expectSpeakerLabels: boolean;
+}
+
+export interface SubtitleLlmAlignerConfig {
+  enabled: boolean;
+  chunkSeconds: number;
+  aligner: SubtitleLlmAlignerAlignerConfig;
+  llm: SubtitleLlmAlignerLlmConfig;
+  updatedAt: string | null;
+}
+
 export interface SubtitleBackoffPlatformState {
   multiplier: number;
   consecutiveErrors: number;
@@ -262,6 +280,7 @@ export interface SubtitlePipelineSettingsResponse {
   apiFallback: SubtitleApiFallbackConfig;
   browserFetch: SubtitleBrowserFetchConfig;
   whisperAi: SubtitleWhisperAiConfig;
+  llmAligner: SubtitleLlmAlignerConfig;
   subtitleInterval: number;
   backoff: Record<'youtube' | 'bilibili', SubtitleBackoffPlatformState>;
 }

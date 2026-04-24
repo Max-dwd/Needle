@@ -32,6 +32,7 @@ import {
 } from './subtitle-backoff';
 import { getSubtitleBrowserFetchConfig } from './subtitle-browser-fetch-settings';
 import { getSubtitleWhisperAiConfig } from './subtitle-whisper-ai-settings';
+import { getSubtitleLlmAlignerConfig } from './subtitle-llm-aligner-settings';
 import { getTranscriber } from './subtitle-providers';
 import type {
   MultimodalTranscriber,
@@ -41,6 +42,17 @@ import type { AiSummaryModelConfig } from '@/types';
 import { getSubtitlePipelineSourceOrder } from './pipeline-config';
 import { getMlxWhisperStatus, runWhisper } from './whisper-runtime';
 import { runWhisperAiCorrection } from './subtitle-whisper-correction';
+import { getForcedAlignerStatus } from './forced-aligner-runtime';
+import { sliceAudioByRange } from './audio-slicer';
+import {
+  assembleSegments as assembleLlmAlignerSegments,
+  alignChunk as runLlmAlignerChunkAlignment,
+  summarizeChunkResults as summarizeLlmAlignerChunks,
+  transcribeChunk as runLlmAlignerChunkTranscribe,
+  type AlignedChunkResult,
+  type TranscribedUtterance,
+  type LlmAlignVideoContext,
+} from './subtitle-llm-align-correction';
 
 const execFileAsync = promisify(execFile);
 
@@ -93,6 +105,7 @@ export interface SubtitleSegment {
   start: number;
   end: number;
   text: string;
+  speaker?: string;
 }
 
 interface SubtitleSourceFile {
@@ -146,7 +159,7 @@ export async function waitForCrawlerResumeIfNeeded(
   await waitIfCrawlerPaused();
 }
 
-type SubtitleMethod = 'browser' | 'whisper-ai' | 'gemini';
+type SubtitleMethod = 'browser' | 'whisper-ai' | 'llm-aligner' | 'gemini';
 
 interface YtDlpAttemptResult {
   selected: SubtitleSourceFile | null;
@@ -1670,6 +1683,260 @@ async function fetchSubtitleViaWhisperAi(
   }
 }
 
+async function fetchSubtitleViaLlmAligner(
+  video: Video,
+  priority: TranscribePriority,
+  respectPause: boolean,
+  selectedModel: AiSummaryModelConfig,
+  signal?: AbortSignal,
+): Promise<AiGeneratedSubtitlePayload> {
+  const llmAlignerConfig = getSubtitleLlmAlignerConfig();
+  if (!llmAlignerConfig.enabled) {
+    throw new Error('llm-aligner source is disabled');
+  }
+  if (selectedModel.isMultimodal === false) {
+    throw new Error('llm-aligner requires a multimodal AI subtitle model');
+  }
+
+  const alignerStatus = await getForcedAlignerStatus();
+  if (!alignerStatus.available) {
+    throw new Error(
+      `mlx forced aligner is unavailable${
+        alignerStatus.error ? `: ${alignerStatus.error}` : ''
+      }`,
+    );
+  }
+
+  const ytDlpBin = pickBinary();
+  const tempDir = fs.mkdtempSync(
+    path.join(os.tmpdir(), `needle-llm-aligner-${video.video_id}-`),
+  );
+  const chunkDir = path.join(tempDir, 'chunks');
+  fs.mkdirSync(chunkDir, { recursive: true });
+  const transcriber = getTranscriber(selectedModel);
+  const chunkSeconds = llmAlignerConfig.chunkSeconds;
+
+  try {
+    const audioPath = await extractAudioViaYtDlp(video, ytDlpBin, tempDir);
+    const audioDurationSeconds =
+      parseVideoDurationSeconds(video.duration) ??
+      Math.ceil((await probeAudioDurationSeconds(audioPath)) || 0);
+    if (!audioDurationSeconds || audioDurationSeconds <= 0) {
+      throw new Error(
+        'llm-aligner could not determine audio duration for chunking',
+      );
+    }
+
+    const chunkRanges = buildLlmAlignerChunkRanges(
+      audioDurationSeconds,
+      chunkSeconds,
+    );
+
+    throwIfAborted(signal);
+
+    const videoCtx: LlmAlignVideoContext = {
+      platform: video.platform,
+      video_id: video.video_id,
+      title: video.title ?? null,
+      channel_name: video.channel_name ?? null,
+      description: null,
+    };
+
+    const chunkResults: AlignedChunkResult[] = [];
+    let totalTokens = 0;
+    let firstChunkTtft: number | undefined;
+
+    for (const range of chunkRanges) {
+      throwIfAborted(signal);
+      await waitForCrawlerResumeIfNeeded(respectPause);
+
+      const chunkAudioPath = await sliceAudioByRange(audioPath, chunkDir, {
+        index: range.index,
+        offsetSec: range.offsetSec,
+        endSec: range.endSec,
+      }, { paddingSeconds: 0.5, signal });
+
+      let utterances: TranscribedUtterance[] = [];
+      let transcribeFailed = false;
+      try {
+        const transcribed = await runLlmAlignerChunkTranscribe({
+          chunk: {
+            chunkIndex: range.index,
+            chunkOffsetSec: range.offsetSec,
+            chunkEndSec: range.endSec,
+            audioPath: chunkAudioPath,
+          },
+          video: videoCtx,
+          model: selectedModel,
+          transcriber,
+          llmConfig: llmAlignerConfig.llm,
+          priority,
+          chunkSeconds,
+          signal,
+        });
+        utterances = transcribed.utterances;
+        if (typeof transcribed.totalTokens === 'number') {
+          totalTokens += transcribed.totalTokens;
+        }
+        if (
+          range.index === 0 &&
+          typeof transcribed.ttftSeconds === 'number'
+        ) {
+          firstChunkTtft = transcribed.ttftSeconds;
+        }
+      } catch (error) {
+        transcribeFailed = true;
+        log.warn('subtitle', 'llm_aligner_transcribe_failed', {
+          platform: video.platform,
+          target: video.video_id,
+          chunk_index: range.index,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+
+      const durationSec = Math.max(0.1, range.endSec - range.offsetSec);
+      if (utterances.length === 0) {
+        chunkResults.push({
+          offsetSec: range.offsetSec,
+          durationSec,
+          utterances: [],
+          alignFallback: 'none',
+          transcribeFailed,
+          avgProb: null,
+          wordCount: 0,
+        });
+        continue;
+      }
+
+      const alignerOutputDir = path.join(
+        tempDir,
+        `aligner-${String(range.index).padStart(3, '0')}`,
+      );
+      const transcriptPath = path.join(
+        alignerOutputDir,
+        'transcript.txt',
+      );
+
+      const aligned = await runLlmAlignerChunkAlignment({
+        chunk: {
+          chunkIndex: range.index,
+          chunkOffsetSec: range.offsetSec,
+          chunkEndSec: range.endSec,
+          audioPath: chunkAudioPath,
+          durationSec,
+        },
+        utterances,
+        alignerConfig: llmAlignerConfig.aligner,
+        llmConfig: llmAlignerConfig.llm,
+        transcriptWritePath: transcriptPath,
+        alignerOutputDir,
+        signal,
+      });
+      chunkResults.push(aligned);
+    }
+
+    const summary = summarizeLlmAlignerChunks(chunkResults, {
+      totalTokens: totalTokens > 0 ? totalTokens : undefined,
+      firstChunkTtft,
+    });
+
+    const assembled = assembleLlmAlignerSegments(chunkResults);
+    const segments: SubtitleSegment[] = assembled.map((segment) => ({
+      start: Math.max(0, Math.floor(segment.start)),
+      end: Math.max(
+        Math.floor(segment.end),
+        Math.floor(segment.start) + 1,
+      ),
+      text: segment.text,
+      ...(segment.speaker ? { speaker: segment.speaker } : {}),
+    }));
+
+    if (segments.length === 0) {
+      throw new Error('llm-aligner produced zero subtitle segments');
+    }
+
+    const rawText = segments
+      .map((segment) => {
+        const prefix = segment.speaker ? `[${segment.speaker}] ` : '';
+        return `[${formatSecondsForAiRange(segment.start)}-${formatSecondsForAiRange(segment.end)}] ${prefix}${segment.text}`;
+      })
+      .join('\n\n');
+
+    log.info('subtitle', 'llm_aligner_metrics', {
+      platform: video.platform,
+      target: video.video_id,
+      chunk_count: summary.chunkCount,
+      interpolated_chunk_count: summary.interpolatedCount,
+      transcribe_failed_chunk_count: summary.transcribeFailedCount,
+      aligner_total_words: summary.totalWordCount,
+      aligner_avg_prob: summary.avgProb,
+    });
+
+    return {
+      ...buildAiSubtitlePayloadFromSegments(
+        video,
+        segments,
+        rawText,
+        'llm-aligner',
+        'fine',
+      ),
+      language: 'unknown',
+      metadata: {
+        ...buildAiSubtitleMetadata(
+          selectedModel,
+          priority,
+          summary.totalTokens,
+          summary.firstChunkTtft,
+        ),
+        chunk_count: summary.chunkCount,
+        chunk_seconds: chunkSeconds,
+        aligner_model: llmAlignerConfig.aligner.modelId,
+        aligner_total_words: summary.totalWordCount,
+        ...(summary.avgProb !== null
+          ? { aligner_avg_prob: Number(summary.avgProb.toFixed(4)) }
+          : {}),
+        interpolated_chunk_count: summary.interpolatedCount,
+        transcribe_failed_chunk_count: summary.transcribeFailedCount,
+        llm_aligner_fallback_ratio:
+          summary.chunkCount > 0
+            ? Number(
+                (summary.interpolatedCount / summary.chunkCount).toFixed(4),
+              )
+            : 0,
+        ...(summary.allInterpolated ? { fallback: 'all-interpolated' } : {}),
+      },
+    };
+  } finally {
+    cleanupTempDirBestEffort(tempDir);
+  }
+}
+
+interface LlmAlignerChunkRange {
+  index: number;
+  offsetSec: number;
+  endSec: number;
+}
+
+function buildLlmAlignerChunkRanges(
+  totalDurationSeconds: number,
+  chunkSeconds: number,
+): LlmAlignerChunkRange[] {
+  if (!Number.isFinite(totalDurationSeconds) || totalDurationSeconds <= 0) {
+    return [];
+  }
+  const safeChunkSeconds = Math.max(60, chunkSeconds);
+  const ranges: LlmAlignerChunkRange[] = [];
+  for (
+    let offset = 0, index = 0;
+    offset < totalDurationSeconds;
+    offset += safeChunkSeconds, index += 1
+  ) {
+    const endSec = Math.min(totalDurationSeconds, offset + safeChunkSeconds);
+    ranges.push({ index, offsetSec: offset, endSec });
+  }
+  return ranges;
+}
+
 function shouldRefetchLegacyBilibiliSubtitle(video: Video): boolean {
   if (video.platform !== 'bilibili') return false;
   if (video.subtitle_status !== 'fetched') return false;
@@ -1953,6 +2220,14 @@ function normalizeRequestedSubtitleMethod(
     return 'whisper-ai';
   }
   if (
+    normalized === 'llm-aligner' ||
+    normalized === 'llm_aligner' ||
+    normalized === 'llm-align' ||
+    normalized === 'llm_align'
+  ) {
+    return 'llm-aligner';
+  }
+  if (
     normalized === BROWSER_METHOD_ID ||
     normalized === 'piped' ||
     normalized === 'bilibili-api' ||
@@ -2106,6 +2381,11 @@ export async function fetchAndStoreSubtitle(
         ? 'Falling back to Whisper anchored AI subtitles'
         : 'Extracting Whisper anchored AI subtitles';
     }
+    if (method === 'llm-aligner') {
+      return isFallback
+        ? 'Falling back to LLM transcription + forced aligner subtitles'
+        : 'Extracting LLM transcription + forced aligner subtitles';
+    }
     if (method === BROWSER_METHOD_ID) {
       return video.platform === 'youtube'
         ? isFallback
@@ -2174,6 +2454,18 @@ export async function fetchAndStoreSubtitle(
         },
       );
       persistStructuredSuccess('whisper-ai', payload);
+      return true;
+    }
+
+    if (method === 'llm-aligner') {
+      const payload = await fetchSubtitleViaLlmAligner(
+        video,
+        aiApiPriority,
+        respectPause,
+        getSelectedApiModel(),
+        externalSignal,
+      );
+      persistStructuredSuccess('llm-aligner', payload);
       return true;
     }
 

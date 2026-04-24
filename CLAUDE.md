@@ -7,7 +7,7 @@
 **Needle** — 本地优先的 Next.js 16 视频订阅管理工具，支持 YouTube 和 Bilibili。核心能力：
 
 - 抓取频道元数据与视频列表
-- 按配置的流水线顺序下载字幕（Needle Browser → Gemini 音频转录 fallback）
+- 按配置的流水线顺序下载字幕（Needle Browser → 本地 mlx_whisper + 多模态 AI 文本校对 → Gemini 音频转录 fallback）
 - 通过 OpenAI 兼容接口生成 AI 摘要
 - **意图 × 主题** 双维度频道组织
 - 内置调度器 + 事件驱动自动流水线（auto-subtitle / auto-summary）
@@ -358,7 +358,8 @@ AI 模型的 endpoint / API key / model 不走环境变量，全部在设置页 
 - **全局单例**：`scheduler.ts`、`summary-queue.ts`、`events.ts`、`shared-ai-budget.ts`、`manual-refresh.ts`、`auto-pipeline.ts` 都通过 `globalThis[Symbol.for(...)]` 持有状态，防止 Next.js HMR 重复实例化
 - **意图系统**：`channels.intent` 是纯 TEXT（非 FK），删除意图时旗下频道 intent 字段被重置为"未分类"。`channels.topics` 是 JSON 字符串数组，与 category/category2 并存
 - **字幕冷却与退避**：状态机 `none` → `pending` → `completed` / `error` / `missing` / `empty`；`subtitle_retry_count` 与 `subtitle_cooldown_until` 控制阶梯重试
-- **流水线配置**：`app_settings` 的 `crawl_pipeline_config` / `subtitle_pipeline_config` 由 `pipeline-config.ts` 单一管理；`fetcher.ts` 和 `subtitles.ts` 运行时从这里取顺序。当前爬取链只剩 `browser`，字幕链只剩 `browser` + `gemini`，其它旧来源（opencli / rss / piped / pipepipe / yt-dlp）会在读取时被归一化掉
+- **流水线配置**：`app_settings` 的 `crawl_pipeline_config` / `subtitle_pipeline_config` 由 `pipeline-config.ts` 单一管理；`fetcher.ts` 和 `subtitles.ts` 运行时从这里取顺序。当前爬取链只剩 `browser`，字幕链有 `browser` + `whisper-ai` + `gemini` 三个 source，其它旧来源（opencli / rss / piped / pipepipe / yt-dlp）会在读取时被归一化掉
+- **whisper-ai source**：本地 `mlx_whisper`（CLI，通过 `MLX_WHISPER_BIN` 指定）分段转写提供时间戳 + 多模态 AI 听原始音频分片批量 JSON 校对文本；由 `whisper-runtime.ts` 封装 CLI，`subtitle-whisper-ai-settings.ts` 管理模型/参数；仅 Apple Silicon 可用
 - **共享 AI 预算**：字幕 Gemini fallback 与摘要生成共用 `shared-ai-budget.ts`；RPM/TPM 60 秒滑动窗口，RPD 近 24 小时窗口；优先级 manual-summary > manual-subtitle > auto-summary > auto-subtitle；`subtitleFallbackTokenReserve` 限制字幕占比
 - **Gemini 字幕 fallback**：需要本地 `ffmpeg` / `ffprobe` 切分音频；默认每段 15 分钟（`AI_SUBTITLE_CHUNK_SECONDS`）
 - **Bilibili WBI**：`wbi.ts` 12 小时缓存 mixin key；跳过会破坏大多数 Bilibili API 调用
