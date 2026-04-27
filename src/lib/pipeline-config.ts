@@ -112,7 +112,6 @@ const SUBTITLE_PIPELINE_DEFINITIONS: PipelinePlatformDefinition[] = [
         label: 'LLM 转写 + 本地对齐',
         description:
           '多模态 AI 出完整文本和说话人，MLX forced aligner 出词级时间戳。',
-        defaultEnabled: false,
       },
       {
         id: 'gemini',
@@ -142,7 +141,6 @@ const SUBTITLE_PIPELINE_DEFINITIONS: PipelinePlatformDefinition[] = [
         label: 'LLM 转写 + 本地对齐',
         description:
           '多模态 AI 出完整文本和说话人，MLX forced aligner 出词级时间戳。',
-        defaultEnabled: false,
       },
       {
         id: 'gemini',
@@ -344,6 +342,23 @@ export function setSubtitlePipelineConfig(input: unknown): PipelineConfig {
     input,
     SUBTITLE_PIPELINE_DEFINITIONS,
   );
+}
+
+export function setSubtitlePipelineSourceEnabled(
+  sourceId: SubtitlePipelineSourceId,
+  enabled: boolean,
+): PipelineConfig {
+  const current = getSubtitlePipelineConfig();
+  const next: StoredPipelineConfig = {
+    platforms: current.platforms.map((platform) => ({
+      platform: platform.platform,
+      sources: platform.sources.map((source) => ({
+        id: source.id,
+        enabled: source.id === sourceId ? enabled : source.enabled,
+      })),
+    })),
+  };
+  return setSubtitlePipelineConfig(next);
 }
 
 function getEnabledSourceIds<T extends string>(

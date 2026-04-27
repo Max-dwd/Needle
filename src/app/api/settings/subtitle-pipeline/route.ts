@@ -17,6 +17,7 @@ import {
   getSubtitleLlmAlignerConfig,
   setSubtitleLlmAlignerConfig,
 } from '@/lib/subtitle-llm-aligner-settings';
+import { setSubtitlePipelineSourceEnabled } from '@/lib/pipeline-config';
 
 const SUBTITLE_INTERVAL_SETTING_KEY = 'scheduler_subtitle_interval';
 
@@ -47,6 +48,22 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const whisperAi =
+      payload && 'whisperAi' in payload
+        ? setSubtitleWhisperAiConfig(payload.whisperAi)
+        : getSubtitleWhisperAiConfig();
+    if (payload && 'whisperAi' in payload) {
+      setSubtitlePipelineSourceEnabled('whisper-ai', whisperAi.enabled);
+    }
+
+    const llmAligner =
+      payload && 'llmAligner' in payload
+        ? setSubtitleLlmAlignerConfig(payload.llmAligner)
+        : getSubtitleLlmAlignerConfig();
+    if (payload && 'llmAligner' in payload) {
+      setSubtitlePipelineSourceEnabled('llm-aligner', llmAligner.enabled);
+    }
+
     return NextResponse.json({
       apiFallback:
         payload && 'apiFallback' in payload
@@ -56,14 +73,8 @@ export async function POST(request: NextRequest) {
         payload && 'browserFetch' in payload
           ? setSubtitleBrowserFetchConfig(payload.browserFetch)
           : getSubtitleBrowserFetchConfig(),
-      whisperAi:
-        payload && 'whisperAi' in payload
-          ? setSubtitleWhisperAiConfig(payload.whisperAi)
-          : getSubtitleWhisperAiConfig(),
-      llmAligner:
-        payload && 'llmAligner' in payload
-          ? setSubtitleLlmAlignerConfig(payload.llmAligner)
-          : getSubtitleLlmAlignerConfig(),
+      whisperAi,
+      llmAligner,
       subtitleInterval:
         typeof payload?.subtitleInterval === 'number'
           ? Math.max(0, Math.floor(payload.subtitleInterval))

@@ -10,6 +10,7 @@ interface SubtitleSegment {
   start: number;
   end: number;
   text: string;
+  speaker?: string;
 }
 
 function getErrorMessage(error: unknown, fallback: string): string {
@@ -635,7 +636,7 @@ export default function ChatPanel({
                                 }}>
                                     [{Math.floor(seg.start / 60)}:{Math.floor(seg.start % 60).toString().padStart(2, '0')}]
                                 </span> 
-                                {seg.text}
+                                {seg.speaker ? `[${seg.speaker}] ` : ''}{seg.text}
                             </div>
                         ))
                     )}
