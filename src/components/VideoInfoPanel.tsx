@@ -210,6 +210,7 @@ export default forwardRef<VideoInfoPanelRef, VideoInfoPanelProps>(
     const [selectedModel, setSelectedModel] = useState<string>('');
     const [selectedSubtitleModel, setSelectedSubtitleModel] =
       useState<string>('');
+    const selectedSubtitleModelRef = useRef('');
     const [viewingHistory, setViewingHistory] = useState(false);
     const [researchModalState, setResearchModalState] = useState<{
       mode: 'add' | 'edit';
@@ -235,6 +236,10 @@ export default forwardRef<VideoInfoPanelRef, VideoInfoPanelProps>(
     useEffect(() => {
       setIsTabExpanded(false);
     }, [video.id]);
+
+    useEffect(() => {
+      selectedSubtitleModelRef.current = selectedSubtitleModel;
+    }, [selectedSubtitleModel]);
 
     const effectiveMarkdown = viewingHistory && summary?.previous?.markdown
       ? summary.previous.markdown
@@ -296,9 +301,9 @@ export default forwardRef<VideoInfoPanelRef, VideoInfoPanelProps>(
         if (
           (preferredMethod === 'gemini' ||
             preferredMethod === 'api-fallback') &&
-          selectedSubtitleModel
+          selectedSubtitleModelRef.current
         ) {
-          params.set('modelId', selectedSubtitleModel);
+          params.set('modelId', selectedSubtitleModelRef.current);
         }
         if (!isYt) {
           if (typeof bilibiliAid === 'number' && bilibiliAid > 0) {
@@ -310,7 +315,7 @@ export default forwardRef<VideoInfoPanelRef, VideoInfoPanelProps>(
         }
         return params;
       },
-      [bilibiliAid, bilibiliCid, isYt, selectedSubtitleModel],
+      [bilibiliAid, bilibiliCid, isYt],
     );
 
     const startSubtitleFetch = useCallback(

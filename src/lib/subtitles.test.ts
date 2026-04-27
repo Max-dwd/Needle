@@ -179,6 +179,14 @@ describe('subtitle retry schedule', () => {
     ).toContain('browser retries exhausted');
   });
 
+  it('adds a default Bilibili page query for yt-dlp audio extraction', () => {
+    expect(
+      __subtitleRetryTestUtils.getYtDlpAudioUrl(
+        createVideo({ platform: 'bilibili', video_id: 'BV1PwoBBREpX' }),
+      ),
+    ).toBe('https://www.bilibili.com/video/BV1PwoBBREpX?p=1');
+  });
+
   it('cleans up temp subtitle directories asynchronously', async () => {
     const pendingCleanup = new Promise<void>(() => {});
     const rmSpy = vi

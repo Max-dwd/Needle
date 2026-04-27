@@ -237,6 +237,12 @@ function getVideoUrl(video: Pick<Video, 'platform' | 'video_id'>): string {
   return `https://www.bilibili.com/video/${video.video_id}`;
 }
 
+function getYtDlpAudioUrl(video: Pick<Video, 'platform' | 'video_id'>): string {
+  const url = getVideoUrl(video);
+  if (video.platform !== 'bilibili') return url;
+  return `${url}?p=1`;
+}
+
 function getVideoLabel(video: Pick<Video, 'title' | 'video_id'>): string {
   return (video.title || '').trim() || video.video_id;
 }
@@ -1266,7 +1272,7 @@ async function extractAudioViaYtDlp(
       '0',
       '--output',
       outputTemplate,
-      getVideoUrl(video),
+      getYtDlpAudioUrl(video),
     ],
     {
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -2748,6 +2754,7 @@ export const __subtitleRetryTestUtils = {
   cleanupTempDirBestEffort,
   getAutoApiFallbackReason,
   getSubtitleRetryDelayMs,
+  getYtDlpAudioUrl,
   isApiFallbackPreferredMethod,
   parseVideoDurationSeconds,
   isRateLimitError,
