@@ -13,11 +13,13 @@ import MarkdownRenderer from '@/components/MarkdownRenderer';
 import ChatPanel from '@/components/ChatPanel';
 import { formatSecondsLabel, normalizeCommentUrl } from '@/lib/format';
 import { findActiveSegmentIndex } from '@/lib/subtitle-segments';
-import { Info, RefreshCw, Cpu, BrainCircuit, History, BarChart3, Languages, FileText } from 'lucide-react';
+import { Info, RefreshCw, Cpu, BrainCircuit, History, BarChart3, Languages, FileText, Download } from 'lucide-react';
 import ResearchFavoriteModal from '@/components/ResearchFavoriteModal';
 import type {
   SubtitleData,
   AiSummaryModelConfig,
+  ChatArtifactData,
+  ResearchFavoriteWithVideo,
   VideoCommentsData,
   VideoSummaryData,
   VideoWithMeta,
@@ -94,6 +96,139 @@ const colors = {
   dangerSoft: 'rgba(220, 38, 38, 0.08)',
   dangerBorder: 'rgba(220, 38, 38, 0.2)',
 } as const;
+
+function makeSafeFilename(value: string): string {
+  const normalized = value
+    .trim()
+    .replace(/[\\/:*?"<>|]/g, '_')
+    .replace(/\s+/g, ' ')
+    .slice(0, 60);
+  return normalized || 'video';
+}
+
+function downloadTextFile(filename: string, content: string, type: string) {
+  const blob = new Blob([content], { type });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function formatSubtitleText(subtitle: SubtitleData): string {
+  if (Array.isArray(subtitle.segments) && subtitle.segments.length > 0) {
+    return subtitle.segments
+      .map((segment) => {
+        const speaker = segment.speaker ? `${segment.speaker}: ` : '';
+        return `[${formatSecondsLabel(segment.start)} - ${formatSecondsLabel(segment.end)}] ${speaker}${segment.text}`;
+      })
+      .join('\n');
+  }
+  return subtitle.text || '';
+}
+
+function formatSubtitlePlainText(subtitle: SubtitleData): string {
+  if (Array.isArray(subtitle.segments) && subtitle.segments.length > 0) {
+    return subtitle.segments
+      .map((segment) => {
+        const speaker = segment.speaker ? `${segment.speaker}: ` : '';
+        return `${speaker}${segment.text}`;
+      })
+      .join('\n');
+  }
+  return (subtitle.text || '')
+    .replace(/^\s*\[[^\]]+\]\s*/gm, '')
+    .trim();
+}
+
+function formatResearchFavoriteMarkdown(favorite: ResearchFavoriteWithVideo) {
+  return [
+    '---',
+    'artifact: research_favorite',
+    `intent_type: ${favorite.intent_type_name}`,
+    `created_at: ${favorite.created_at}`,
+    `updated_at: ${favorite.updated_at}`,
+    '---',
+    '',
+    `# ${favorite.title || favorite.platform_video_id}`,
+    '',
+    `- 平台：${favorite.platform}`,
+    `- 频道：${favorite.channel_name || '未知频道'}`,
+    `- 研究意图：${favorite.intent_type_name}`,
+    '',
+    favorite.note,
+  ].join('\n');
+}
+
+function formatChatArtifactMarkdown(artifact: ChatArtifactData): string {
+  const modeLabel = artifact.mode === 'roast' ? '吐槽模式' : '笔记模式';
+  return [
+    '---',
+    'artifact: chat',
+    `mode: ${artifact.mode}`,
+    `created_at: ${artifact.createdAt}`,
+    `range: ${formatSecondsLabel(artifact.rangeStart)}-${formatSecondsLabel(artifact.rangeEnd)}`,
+    '---',
+    '',
+    `# 视频问答 - ${modeLabel}`,
+    '',
+    `- 时间范围：${formatSecondsLabel(artifact.rangeStart)} - ${formatSecondsLabel(artifact.rangeEnd)}`,
+    `- 用户输入：${artifact.prompt || '无'}`,
+    '',
+    artifact.content,
+  ].join('\n');
+}
+
+function formatAllChatArtifactsMarkdown(artifacts: ChatArtifactData[]): string {
+  return artifacts
+    .map((artifact) => formatChatArtifactMarkdown(artifact))
+    .join('\n\n---\n\n');
+}
+
+function DownloadAction({
+  title,
+  detail,
+  disabled,
+  onClick,
+}: {
+  title: string;
+  detail: string;
+  disabled?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      style={{
+        width: '100%',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 12,
+        padding: '14px',
+        borderRadius: 12,
+        border: '1px solid var(--border)',
+        background: disabled ? 'var(--bg-hover)' : 'var(--bg-secondary)',
+        color: disabled ? 'var(--text-muted)' : 'var(--text-primary)',
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        opacity: disabled ? 0.55 : 1,
+        textAlign: 'left',
+      }}
+    >
+      <Download size={16} />
+      <span style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+        <span style={{ fontSize: 13, fontWeight: 700 }}>{title}</span>
+        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+          {detail}
+        </span>
+      </span>
+    </button>
+  );
+}
 
 function InfoActionPopover({
   children,
@@ -204,6 +339,12 @@ export default forwardRef<VideoInfoPanelRef, VideoInfoPanelProps>(
     const abortRef = useRef<AbortController | null>(null);
     const [comments, setComments] = useState<VideoCommentsData | null>(null);
     const [commentsLoading, setCommentsLoading] = useState(true);
+    const [chatArtifacts, setChatArtifacts] = useState<ChatArtifactData[]>([]);
+    const [chatArtifactsLoading, setChatArtifactsLoading] = useState(false);
+    const [researchFavorite, setResearchFavorite] =
+      useState<ResearchFavoriteWithVideo | null>(null);
+    const [researchFavoriteLoading, setResearchFavoriteLoading] =
+      useState(false);
     const [models, setModels] = useState<
       Pick<AiSummaryModelConfig, 'id' | 'name' | 'isMultimodal'>[]
     >([]);
@@ -217,7 +358,7 @@ export default forwardRef<VideoInfoPanelRef, VideoInfoPanelProps>(
       existingFavorite?: { id: number; intent_type_id: number; note: string };
     } | null>(null);
     const [activePanel, setActivePanel] = useState<
-      'subtitle' | 'summary' | 'comments' | 'chat'
+      'subtitle' | 'summary' | 'comments' | 'chat' | 'download'
     >('summary');
     const [isMobile, setIsMobile] = useState(false);
     const [isTabExpanded, setIsTabExpanded] = useState(false);
@@ -453,6 +594,46 @@ export default forwardRef<VideoInfoPanelRef, VideoInfoPanelProps>(
         active = false;
       };
     }, [video.id]);
+
+    const loadDownloadArtifacts = useCallback(async () => {
+      setChatArtifactsLoading(true);
+      setResearchFavoriteLoading(true);
+
+      const chatRequest = fetch(`/api/videos/${video.id}/chat/artifacts`)
+        .then((res) => res.json())
+        .then((data) => {
+          setChatArtifacts(Array.isArray(data.items) ? data.items : []);
+        })
+        .catch(() => {
+          setChatArtifacts([]);
+        })
+        .finally(() => {
+          setChatArtifactsLoading(false);
+        });
+
+      const researchRequest = fetch(`/api/research/favorites?video_id=${video.id}&limit=1`)
+        .then((res) => res.json())
+        .then((data) => {
+          const favorite = Array.isArray(data.items) ? data.items[0] : null;
+          setResearchFavorite(favorite || null);
+        })
+        .catch(() => {
+          setResearchFavorite(null);
+        })
+        .finally(() => {
+          setResearchFavoriteLoading(false);
+        });
+
+      await Promise.all([chatRequest, researchRequest]);
+    }, [video.id]);
+
+    useEffect(() => {
+      setChatArtifacts([]);
+      setResearchFavorite(null);
+      if (activePanel === 'download') {
+        void loadDownloadArtifacts();
+      }
+    }, [activePanel, loadDownloadArtifacts, video.id]);
 
     // Cleanup abortRef on unmount
     useEffect(
@@ -860,6 +1041,7 @@ export default forwardRef<VideoInfoPanelRef, VideoInfoPanelProps>(
       { key: 'summary' as const, label: '总结', icon: '📝' },
       { key: 'subtitle' as const, label: '字幕', icon: '💬' },
       { key: 'chat' as const, label: '问答', icon: '✦' },
+      { key: 'download' as const, label: '下载', icon: '⬇' },
       { key: 'comments' as const, label: '其他', icon: '💭' },
     ];
 
@@ -949,6 +1131,10 @@ export default forwardRef<VideoInfoPanelRef, VideoInfoPanelProps>(
           : subtitleActiveMethod === 'browser' || subtitleActiveMethod === 'opencli'
             ? 'CLI 字幕抓取已开始，关闭弹窗也会继续处理。'
             : '字幕抓取已开始，关闭弹窗也会继续处理。');
+    const downloadBaseName = makeSafeFilename(video.title || video.video_id);
+    const summaryDownloadMarkdown = summary?.markdown || '';
+    const subtitleDownloadText = subtitle ? formatSubtitleText(subtitle) : '';
+    const subtitlePlainDownloadText = subtitle ? formatSubtitlePlainText(subtitle) : '';
 
     return (
       <>
@@ -1946,6 +2132,154 @@ export default forwardRef<VideoInfoPanelRef, VideoInfoPanelProps>(
                 </div>
               )}
 
+            {activePanel === 'download' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <DownloadAction
+                    title="下载字幕 JSON"
+                    detail={subtitleDownloadText ? '包含原始文本、分段、来源和元数据' : '当前视频暂无可下载字幕'}
+                    disabled={!subtitleDownloadText}
+                    onClick={() => {
+                      if (!subtitle) return;
+                      downloadTextFile(
+                        `${downloadBaseName}_subtitle.json`,
+                        JSON.stringify(subtitle, null, 2),
+                        'application/json;charset=utf-8',
+                      );
+                    }}
+                  />
+                  <DownloadAction
+                    title="下载字幕 TXT"
+                    detail={subtitleDownloadText ? '按时间戳导出纯文本字幕' : '当前视频暂无可下载字幕'}
+                    disabled={!subtitleDownloadText}
+                    onClick={() => {
+                      if (!subtitleDownloadText) return;
+                      downloadTextFile(
+                        `${downloadBaseName}_subtitle.txt`,
+                        subtitleDownloadText,
+                        'text/plain;charset=utf-8',
+                      );
+                    }}
+                  />
+                  <DownloadAction
+                    title="下载字幕 TXT（无时间戳）"
+                    detail={subtitlePlainDownloadText ? '只导出字幕正文，保留说话人标记' : '当前视频暂无可下载字幕'}
+                    disabled={!subtitlePlainDownloadText}
+                    onClick={() => {
+                      if (!subtitlePlainDownloadText) return;
+                      downloadTextFile(
+                        `${downloadBaseName}_subtitle_plain.txt`,
+                        subtitlePlainDownloadText,
+                        'text/plain;charset=utf-8',
+                      );
+                    }}
+                  />
+                  <DownloadAction
+                    title="下载总结 Markdown"
+                    detail={summaryDownloadMarkdown ? '导出当前视频总结正文' : '当前视频暂无总结'}
+                    disabled={!summaryDownloadMarkdown}
+                    onClick={() => {
+                      if (!summaryDownloadMarkdown) return;
+                      downloadTextFile(
+                        `${downloadBaseName}_summary.md`,
+                        summaryDownloadMarkdown,
+                        'text/markdown;charset=utf-8',
+                      );
+                    }}
+                  />
+                  <DownloadAction
+                    title="下载研究意图 Markdown"
+                    detail={
+                      researchFavoriteLoading
+                        ? '正在读取研究收藏'
+                        : researchFavorite
+                          ? `研究意图：${researchFavorite.intent_type_name}`
+                          : '当前视频尚未加入研究收藏'
+                    }
+                    disabled={researchFavoriteLoading || !researchFavorite}
+                    onClick={() => {
+                      if (!researchFavorite) return;
+                      downloadTextFile(
+                        `${downloadBaseName}_research.md`,
+                        formatResearchFavoriteMarkdown(researchFavorite),
+                        'text/markdown;charset=utf-8',
+                      );
+                    }}
+                  />
+                </div>
+
+                <div
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 10,
+                    paddingTop: 4,
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 12,
+                      fontWeight: 700,
+                      color: colors.textMuted,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                    }}
+                  >
+                    <span>已保存问答</span>
+                    <button
+                      type="button"
+                      onClick={() => void loadDownloadArtifacts()}
+                      style={{
+                        border: '1px solid var(--border)',
+                        borderRadius: 8,
+                        background: 'var(--bg-hover)',
+                        color: colors.textMuted,
+                        cursor: 'pointer',
+                        fontSize: 11,
+                        padding: '5px 8px',
+                      }}
+                    >
+                      刷新
+                    </button>
+                  </div>
+                  <DownloadAction
+                    title="下载全部问答 Markdown"
+                    detail={
+                      chatArtifactsLoading
+                        ? '正在读取问答记录'
+                        : chatArtifacts.length > 0
+                          ? `${chatArtifacts.length} 条已保存问答`
+                          : '完整生成后的问答会自动保存到这里'
+                    }
+                    disabled={chatArtifactsLoading || chatArtifacts.length === 0}
+                    onClick={() => {
+                      if (chatArtifacts.length === 0) return;
+                      downloadTextFile(
+                        `${downloadBaseName}_chats.md`,
+                        formatAllChatArtifactsMarkdown(chatArtifacts),
+                        'text/markdown;charset=utf-8',
+                      );
+                    }}
+                  />
+                  {chatArtifacts.map((artifact) => (
+                    <DownloadAction
+                      key={artifact.id}
+                      title={`${artifact.mode === 'roast' ? '吐槽' : '笔记'}问答 #${artifact.id}`}
+                      detail={`${new Date(artifact.createdAt).toLocaleString()} · ${formatSecondsLabel(artifact.rangeStart)}-${formatSecondsLabel(artifact.rangeEnd)}`}
+                      onClick={() => {
+                        downloadTextFile(
+                          `${downloadBaseName}_chat_${artifact.id}.md`,
+                          formatChatArtifactMarkdown(artifact),
+                          'text/markdown;charset=utf-8',
+                        );
+                      }}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
             {activePanel === 'chat' && (
               <ChatPanel
                 video={video}
@@ -1953,6 +2287,7 @@ export default forwardRef<VideoInfoPanelRef, VideoInfoPanelProps>(
                 onTimestampClick={onTimestampClick}
                 currentPlayerSeconds={currentPlayerSeconds}
                 playerDuration={playerDuration}
+                onArtifactSaved={loadDownloadArtifacts}
               />
             )}
           </div>

@@ -12,7 +12,11 @@
 import { appEvents } from './events';
 import { getDb, type Channel, type Intent, type Video } from './db';
 import { ensureSubtitleForVideo, shouldEscapeToApi } from './subtitles';
-import { createSummaryTask, getSummaryTask } from './summary-tasks';
+import {
+  createSummaryTask,
+  getSummaryTask,
+  requeueRetryableFailedSummaryTasks,
+} from './summary-tasks';
 import {
   getQueueState as getSummaryQueueState,
   isQueueRunning,
@@ -35,6 +39,8 @@ import { resolveSubtitleApiFallbackMatch } from './subtitle-api-fallback-setting
 // ---------------------------------------------------------------------------
 
 const MAX_SUBTITLE_QUEUE = 100;
+const RETRY_SWEEP_INTERVAL_MS = 60 * 1000;
+const RETRY_SWEEP_LIMIT = 25;
 // Subtitle pool configuration (per spec section 5.8)
 const SUBTITLE_POOL_CONFIG = {
   name: 'subtitle' as const,
@@ -83,6 +89,8 @@ export interface AutoPipelineState {
   subtitleProcessing: boolean;
   currentSubtitleJob: SubtitleJob | null;
   lastSubtitleStartedAt: Record<SubtitleBackoffPlatform, number | null>;
+  retrySweepTimer: NodeJS.Timeout | null;
+  retrySweepRunning: boolean;
   stats: AutoPipelineStats;
 }
 
@@ -154,6 +162,8 @@ function getState(): AutoPipelineState {
         youtube: null,
         bilibili: null,
       },
+      retrySweepTimer: null,
+      retrySweepRunning: false,
       stats: {
         subtitleQueued: 0,
         subtitleCompleted: 0,
@@ -502,7 +512,11 @@ async function runSubtitleJob(
       }
       // Subtitle fetch failed and no more retries/fallbacks available
       state.stats.subtitleFailed++;
-      return { success: false, durationMs: Date.now() - startTime, error: latestVideo.subtitle_error || 'subtitle not available' };
+      return {
+        success: false,
+        durationMs: Date.now() - startTime,
+        error: latestVideo.subtitle_error || 'subtitle not available',
+      };
     }
 
     // Video no longer needs subtitle fetch (already has path, or status not actionable)
@@ -541,14 +555,10 @@ function dispatchSubtitleJob(job: SubtitleJob): Promise<JobResult> | null {
   const normalizedJob = normalizeSubtitleJob(job);
 
   if (state.subtitleQueue.length >= MAX_SUBTITLE_QUEUE) {
-    log.warn(
-      'system',
-      'auto_pipeline_subtitle_queue_full',
-      {
-        capacity: MAX_SUBTITLE_QUEUE,
-        videoId: normalizedJob.videoId,
-      },
-    );
+    log.warn('system', 'auto_pipeline_subtitle_queue_full', {
+      capacity: MAX_SUBTITLE_QUEUE,
+      videoId: normalizedJob.videoId,
+    });
     return null;
   }
 
@@ -806,6 +816,94 @@ interface SubtitleJobSeed {
   channel_name?: string | null;
   platform_channel_id?: string | null;
   intent?: string | null;
+  subtitle_last_attempt_at?: string | null;
+  subtitle_retry_count?: number | null;
+}
+
+function isSubtitleRetryDue(
+  seed: Pick<
+    SubtitleJobSeed,
+    'platform' | 'subtitle_last_attempt_at' | 'subtitle_retry_count'
+  >,
+  maxRetries: number,
+  now = Date.now(),
+): boolean {
+  if ((seed.subtitle_retry_count || 0) > maxRetries) return false;
+  if (!seed.subtitle_last_attempt_at) return true;
+
+  const lastAttempt = Date.parse(seed.subtitle_last_attempt_at);
+  if (!Number.isFinite(lastAttempt)) return true;
+
+  return now - lastAttempt >= getEffectiveIntervalMs(seed.platform);
+}
+
+function enqueueRetryableSubtitleTasks(limit = RETRY_SWEEP_LIMIT): number {
+  const browserFetchConfig = getSubtitleBrowserFetchConfig();
+  const candidates = getDb()
+    .prepare(
+      `
+        SELECT v.id, v.video_id, v.platform, v.title, v.subtitle_status, v.subtitle_path,
+               v.subtitle_last_attempt_at, v.subtitle_retry_count,
+               COALESCE(c.name, v.channel_name) AS channel_name,
+               c.channel_id AS platform_channel_id,
+               c.intent
+        FROM videos v
+        LEFT JOIN channels c ON c.id = v.channel_id
+        WHERE v.subtitle_path IS NULL
+          AND v.subtitle_status IN ('error', 'missing', 'empty')
+          AND COALESCE(v.subtitle_retry_count, 0) <= ?
+        ORDER BY COALESCE(v.subtitle_cooldown_until, v.subtitle_last_attempt_at, v.created_at) ASC
+        LIMIT ?
+      `,
+    )
+    .all(
+      browserFetchConfig.maxRetries,
+      Math.max(1, Math.floor(limit)),
+    ) as SubtitleJobSeed[];
+
+  let enqueued = 0;
+  const now = Date.now();
+  for (const seed of candidates) {
+    if (!isSubtitleRetryDue(seed, browserFetchConfig.maxRetries, now)) {
+      continue;
+    }
+    if (enqueueSubtitleJob(buildSubtitleJobFromSeed(seed, 2))) {
+      enqueued++;
+    }
+  }
+
+  return enqueued;
+}
+
+async function sweepRetryableTasks(): Promise<void> {
+  const state = getState();
+  if (state.retrySweepRunning) return;
+  state.retrySweepRunning = true;
+
+  try {
+    const subtitleCount = enqueueRetryableSubtitleTasks();
+    if (subtitleCount > 0) {
+      log.info('system', 'auto_pipeline_subtitle_retry_sweep', {
+        count: subtitleCount,
+      });
+    }
+
+    const summaryCount = requeueRetryableFailedSummaryTasks(RETRY_SWEEP_LIMIT);
+    if (summaryCount > 0) {
+      log.info('summary', 'retry_sweep', {
+        count: summaryCount,
+      });
+      if (!isQueueRunning()) {
+        startQueueProcessing();
+      }
+    }
+  } catch (error) {
+    log.error('system', 'auto_pipeline_retry_sweep_failed', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+  } finally {
+    state.retrySweepRunning = false;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -823,6 +921,11 @@ export function ensureAutoPipeline(): void {
 
   appEvents.on('video:discovered', onVideoDiscovered);
   appEvents.on('subtitle:ready', onSubtitleReady);
+  void sweepRetryableTasks();
+  state.retrySweepTimer = setInterval(() => {
+    void sweepRetryableTasks();
+  }, RETRY_SWEEP_INTERVAL_MS);
+  state.retrySweepTimer.unref?.();
 }
 
 // ---------------------------------------------------------------------------
@@ -845,12 +948,11 @@ export function getAutoPipelineStatus(): AutoPipelineStatus {
   // Get subtitle pool status
   const subtitlePool = getSubtitlePool();
   const poolStatus = subtitlePool.getStatus();
-  const activeSubtitleJob =
-    state.currentSubtitleJob
-      ? normalizeSubtitleJob(state.currentSubtitleJob)
-      : state.subtitleQueue[0]
-        ? normalizeSubtitleJob(state.subtitleQueue[0])
-        : null;
+  const activeSubtitleJob = state.currentSubtitleJob
+    ? normalizeSubtitleJob(state.currentSubtitleJob)
+    : state.subtitleQueue[0]
+      ? normalizeSubtitleJob(state.subtitleQueue[0])
+      : null;
   const currentVideoTitle = resolveSubtitleJobTitle(activeSubtitleJob);
   const queueBatchCount = countQueuedSubtitleBatches(state.subtitleQueue);
   const currentBatchId = activeSubtitleJob?.batchId ?? null;
@@ -870,9 +972,9 @@ export function getAutoPipelineStatus(): AutoPipelineStatus {
           ? 'exhausted'
           : cooldownMs > 0
             ? 'backoff'
-          : backoff.consecutiveErrors > 0
-            ? 'backoff'
-            : 'clear';
+            : backoff.consecutiveErrors > 0
+              ? 'backoff'
+              : 'clear';
       const nextRunAt = getSubtitleNextRunAt(
         state.lastSubtitleStartedAt[platform],
         Math.max(intervalMs, cooldownMs),

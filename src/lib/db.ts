@@ -115,12 +115,16 @@ function initSchema(db: Database.Database) {
       status TEXT NOT NULL DEFAULT 'pending',
       method TEXT,
       error TEXT,
+      retry_count INTEGER NOT NULL DEFAULT 0,
+      retry_after DATETIME,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       started_at DATETIME,
       completed_at DATETIME,
       UNIQUE(video_id, platform)
     );
     CREATE INDEX IF NOT EXISTS idx_summary_tasks_status ON summary_tasks(status);
+    CREATE INDEX IF NOT EXISTS idx_summary_tasks_retry
+      ON summary_tasks(status, retry_after);
 
     CREATE TABLE IF NOT EXISTS research_intent_types (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -165,10 +169,22 @@ function initSchema(db: Database.Database) {
       PRIMARY KEY (collection_id, favorite_id)
     );
 
+    CREATE TABLE IF NOT EXISTS chat_artifacts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      video_id INTEGER NOT NULL REFERENCES videos(id) ON DELETE CASCADE,
+      mode TEXT NOT NULL,
+      prompt TEXT NOT NULL,
+      range_start REAL NOT NULL,
+      range_end REAL NOT NULL,
+      content TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
     CREATE INDEX IF NOT EXISTS idx_rf_video_id ON research_favorites(video_id);
     CREATE INDEX IF NOT EXISTS idx_rf_archived_created ON research_favorites(archived_at, created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_rci_collection ON research_collection_items(collection_id);
     CREATE INDEX IF NOT EXISTS idx_rci_favorite ON research_collection_items(favorite_id);
+    CREATE INDEX IF NOT EXISTS idx_chat_artifacts_video_created ON chat_artifacts(video_id, created_at DESC);
   `);
 
   // Migrations — safe to run multiple times
@@ -231,6 +247,23 @@ function initSchema(db: Database.Database) {
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_videos_subtitle_status ON videos(subtitle_status);
     CREATE INDEX IF NOT EXISTS idx_videos_availability_status ON videos(availability_status);
+  `);
+
+  const summaryTaskCols = (
+    db.prepare('PRAGMA table_info(summary_tasks)').all() as Array<{
+      name: string;
+    }>
+  ).map((c) => c.name);
+  if (!summaryTaskCols.includes('retry_count')) {
+    db.exec(
+      'ALTER TABLE summary_tasks ADD COLUMN retry_count INTEGER NOT NULL DEFAULT 0',
+    );
+  }
+  if (!summaryTaskCols.includes('retry_after')) {
+    db.exec('ALTER TABLE summary_tasks ADD COLUMN retry_after DATETIME');
+  }
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_summary_tasks_retry ON summary_tasks(status, retry_after);
   `);
 
   const channelCols = (
@@ -441,6 +474,8 @@ export interface SummaryTask {
   status: SummaryTaskStatus;
   method: 'api' | 'external' | 'mcp' | null;
   error: string | null;
+  retry_count: number;
+  retry_after: string | null;
   created_at: string;
   started_at: string | null;
   completed_at: string | null;
@@ -516,5 +551,16 @@ export interface ResearchCollectionItem {
   sort_order: number;
   override_intent_type_id: number | null;
   override_note: string | null;
+  created_at: string;
+}
+
+export interface ChatArtifact {
+  id: number;
+  video_id: number;
+  mode: 'obsidian' | 'roast';
+  prompt: string;
+  range_start: number;
+  range_end: number;
+  content: string;
   created_at: string;
 }

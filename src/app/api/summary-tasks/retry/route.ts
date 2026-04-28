@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { resetFailedTask, getSummaryTask } from '@/lib/summary-tasks';
+import { isQueueRunning, startQueueProcessing } from '@/lib/summary-queue';
 
 export async function POST(request: NextRequest) {
   const body = (await request.json()) as {
@@ -28,5 +29,8 @@ export async function POST(request: NextRequest) {
   }
 
   resetFailedTask(video_id, platform);
+  if (!isQueueRunning()) {
+    startQueueProcessing();
+  }
   return NextResponse.json({ ok: true });
 }
