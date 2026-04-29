@@ -123,8 +123,6 @@ function initSchema(db: Database.Database) {
       UNIQUE(video_id, platform)
     );
     CREATE INDEX IF NOT EXISTS idx_summary_tasks_status ON summary_tasks(status);
-    CREATE INDEX IF NOT EXISTS idx_summary_tasks_retry
-      ON summary_tasks(status, retry_after);
 
     CREATE TABLE IF NOT EXISTS research_intent_types (
       id INTEGER PRIMARY KEY AUTOINCREMENT,

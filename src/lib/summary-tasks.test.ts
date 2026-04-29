@@ -1,6 +1,7 @@
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import Database from 'better-sqlite3';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 async function loadSummaryTasksModule(dbPath: string) {
@@ -181,5 +182,48 @@ describe('summary-tasks', () => {
       retry_after: null,
       error: null,
     });
+  });
+
+  it('migrates legacy summary_tasks tables before retry index creation', async () => {
+    const tempDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'folo-summary-tasks-'),
+    );
+    tempDirs.push(tempDir);
+    const dbPath = path.join(tempDir, 'test.db');
+
+    const legacyDb = new Database(dbPath);
+    legacyDb.exec(`
+      CREATE TABLE summary_tasks (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        video_id TEXT NOT NULL,
+        platform TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending',
+        method TEXT,
+        error TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        started_at DATETIME,
+        completed_at DATETIME,
+        UNIQUE(video_id, platform)
+      );
+      CREATE INDEX idx_summary_tasks_status ON summary_tasks(status);
+    `);
+    legacyDb.close();
+
+    const { getDb, getSummaryTaskStats } = await loadSummaryTasksModule(dbPath);
+
+    expect(getSummaryTaskStats()).toEqual({
+      pending: 0,
+      processing: 0,
+      completed: 0,
+      failed: 0,
+    });
+
+    const columns = (
+      getDb().prepare('PRAGMA table_info(summary_tasks)').all() as Array<{
+        name: string;
+      }>
+    ).map((column) => column.name);
+    expect(columns).toContain('retry_count');
+    expect(columns).toContain('retry_after');
   });
 });
