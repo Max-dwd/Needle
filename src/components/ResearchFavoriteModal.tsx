@@ -33,18 +33,33 @@ export default function ResearchFavoriteModal({
   
   const [selectedIntentTypeId, setSelectedIntentTypeId] = useState<number | null>(existingFavorite?.intent_type_id || null);
   const [note, setNote] = useState(existingFavorite?.note || '');
+  const [favoriteId, setFavoriteId] = useState<number | null>(existingFavorite?.id || null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     async function fetchData() {
       try {
-        const res = await fetch('/api/research/intent-types');
-        if (!res.ok) throw new Error('获取研究意图失败');
-        const data = await res.json();
-        setIntentTypes(data);
-        
-        if (mode === 'add' && data.length > 0 && !selectedIntentTypeId) {
-          setSelectedIntentTypeId(data[0].id);
+        setLoading(true);
+        // Fetch intent types
+        const intentRes = await fetch('/api/research/intent-types');
+        if (!intentRes.ok) throw new Error('获取研究意图失败');
+        const intentData = await intentRes.json();
+        setIntentTypes(intentData);
+
+        // Fetch favorite details if in edit mode but no data provided
+        if (mode === 'edit' && !favoriteId) {
+          const favRes = await fetch(`/api/research/favorites?video_id=${video.id}`);
+          if (favRes.ok) {
+            const favData = await favRes.json();
+            const fav = favData.items?.[0];
+            if (fav) {
+              setFavoriteId(fav.id);
+              setSelectedIntentTypeId(fav.intent_type_id);
+              setNote(fav.note || '');
+            }
+          }
+        } else if (mode === 'add' && intentData.length > 0 && !selectedIntentTypeId) {
+          setSelectedIntentTypeId(intentData[0].id);
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err));
@@ -53,7 +68,7 @@ export default function ResearchFavoriteModal({
       }
     }
     fetchData();
-  }, [mode, selectedIntentTypeId]);
+  }, [mode, video.id, favoriteId]);
 
   const handleSubmit = async () => {
     if (!selectedIntentTypeId) {
@@ -74,7 +89,7 @@ export default function ResearchFavoriteModal({
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            id: existingFavorite.id,
+            id: favoriteId,
             intent_type_id: selectedIntentTypeId,
             note: note.trim(),
           }),
@@ -104,13 +119,13 @@ export default function ResearchFavoriteModal({
   };
 
   const handleRemove = async () => {
-    if (mode !== 'edit' || !existingFavorite?.id) return;
+    if (mode !== 'edit' || !favoriteId) return;
     if (!confirm('确定要移除此视频的研究收藏吗？')) return;
     
     setSubmitting(true);
     setError(null);
     try {
-      const res = await fetch(`/api/research/favorites/${existingFavorite.id}`, {
+      const res = await fetch(`/api/research/favorites/${favoriteId}`, {
         method: 'DELETE',
       });
       if (!res.ok) throw new Error('移除失败');
@@ -126,12 +141,11 @@ export default function ResearchFavoriteModal({
       style={{
         position: 'fixed',
         inset: 0,
-        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        backgroundColor: 'rgba(0, 0, 0, 0.75)', // Darker, solid-ish background for better performance
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
         zIndex: 100000,
-        backdropFilter: 'blur(4px)',
       }}
       onClick={onClose}
     >

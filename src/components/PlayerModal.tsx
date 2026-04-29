@@ -1523,58 +1523,137 @@ export default function PlayerModal({
                   : !bilibiliPlayback?.proxyUrl
               }
               trailing={
-                !isYt ? (
-                  <div
-                    style={{ display: 'flex', alignItems: 'center', gap: 12 }}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  {/* Follow Button (PC) */}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setFollowMode(!followMode);
+                    }}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      padding: '6px 12px',
+                      borderRadius: 8,
+                      background: followMode ? 'var(--accent-purple)' : 'var(--bg-hover)',
+                      border: `1px solid ${followMode ? 'var(--accent-purple)' : 'transparent'}`,
+                      color: followMode ? '#fff' : 'var(--text-muted)',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
+                    }}
+                    title={followMode ? '关闭跟随模式' : '开启跟随模式'}
                   >
-                    <div style={{ fontSize: 12, color: modalColors.textMuted }}>
-                      {bilibiliPlaybackLoading
-                        ? '解析中'
-                        : bilibiliPlayback?.qualityLabel ||
-                        bilibiliPlayback?.format ||
-                        'MP4 单路流'}
-                      {bilibiliPlayback?.authUsed ? ' · 已使用 SESSDATA' : ''}
-                    </div>
+                    <span style={{ fontSize: 13, marginRight: 6 }}>📍</span>
+                    <span style={{ fontSize: 12, fontWeight: 600 }}>跟随</span>
+                  </button>
 
-                    {bilibiliPlaybackError && (
-                      <div style={{ fontSize: 12, color: modalColors.danger }}>
-                        {bilibiliPlaybackError}
+                  {/* Subtitle Button (PC) */}
+                  {(() => {
+                    const subtitleSegments = Array.isArray(subtitle?.segments) ? subtitle.segments : [];
+                    const status = subtitle?.status;
+                    let availability = 'pending';
+                    if (!subtitle || status === 'pending' || status === 'fetching') {
+                      availability = (status === 'fetched' && subtitleSegments.length > 0) ? 'available' : 'pending';
+                    } else if (status !== 'fetched' || subtitleSegments.length === 0) {
+                      availability = 'unavailable';
+                    } else if (subtitle?.segmentStyle === 'coarse') {
+                      availability = 'coarse';
+                    } else {
+                      availability = 'available';
+                    }
+
+                    const canToggle = availability === 'available';
+                    const isOn = subtitleOverlay && canToggle;
+                    const isDisabled = !canToggle;
+                    const title = canToggle 
+                      ? (subtitleOverlay ? '关闭字幕浮层 (C)' : '开启字幕浮层 (C)')
+                      : availability === 'pending' ? '字幕加载中，稍后再试'
+                      : availability === 'coarse' ? '此视频字幕粒度过粗，无法悬浮显示'
+                      : '该视频暂无可用字幕';
+
+                    return (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (!canToggle) return;
+                          setSubtitleOverlay(!subtitleOverlay);
+                        }}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          padding: '6px 12px',
+                          borderRadius: 8,
+                          background: isOn ? 'var(--accent-purple)' : 'var(--bg-hover)',
+                          border: `1px solid ${isOn ? 'var(--accent-purple)' : 'transparent'}`,
+                          color: isOn ? '#fff' : (isDisabled ? 'var(--text-muted)' : 'var(--text-muted)'),
+                          opacity: isDisabled ? 0.5 : 1,
+                          cursor: isDisabled ? 'not-allowed' : 'pointer',
+                          transition: 'all 0.2s',
+                        }}
+                        title={title}
+                        aria-disabled={isDisabled}
+                      >
+                        <span style={{ fontSize: 13, marginRight: 6 }}>📺</span>
+                        <span style={{ fontSize: 12, fontWeight: 600 }}>字幕</span>
+                      </button>
+                    );
+                  })()}
+
+                  {!isYt && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginLeft: 8, borderLeft: '1px solid var(--border)', paddingLeft: 20 }}>
+                      <div style={{ fontSize: 12, color: modalColors.textMuted }}>
+                        {bilibiliPlaybackLoading
+                          ? '解析中'
+                          : bilibiliPlayback?.qualityLabel ||
+                          bilibiliPlayback?.format ||
+                          'MP4 单路流'}
+                        {bilibiliPlayback?.authUsed ? ' · 已使用 SESSDATA' : ''}
                       </div>
-                    )}
 
-                    {!bilibiliPlaybackLoading &&
-                      !bilibiliPlayback?.proxyUrl && (
-                        <button
-                          type="button"
-                          onClick={() => void loadBilibiliPlayback()}
-                          style={{
-                            border: `1px solid ${modalColors.borderStrong}`,
-                            borderRadius: 8,
-                            background: 'var(--bg-hover)',
-                            color: modalColors.textStrong,
-                            cursor: 'pointer',
-                            padding: '4px 10px',
-                            fontSize: 12,
-                            lineHeight: 1,
-                          }}
-                        >
-                          重试解析
-                        </button>
-                      )}
-
-                    {Array.isArray(bilibiliPlayback?.limitations) &&
-                      bilibiliPlayback.limitations.length > 0 && (
-                        <div
-                          style={{
-                            fontSize: 12,
-                            color: modalColors.textSoft,
-                          }}
-                        >
-                          限制：{bilibiliPlayback.limitations.join('；')}
+                      {bilibiliPlaybackError && (
+                        <div style={{ fontSize: 12, color: modalColors.danger }}>
+                          {bilibiliPlaybackError}
                         </div>
                       )}
-                  </div>
-                ) : undefined
+
+                      {!bilibiliPlaybackLoading &&
+                        !bilibiliPlayback?.proxyUrl && (
+                          <button
+                            type="button"
+                            onClick={() => void loadBilibiliPlayback()}
+                            style={{
+                              border: `1px solid ${modalColors.borderStrong}`,
+                              borderRadius: 8,
+                              background: 'var(--bg-hover)',
+                              color: modalColors.textStrong,
+                              cursor: 'pointer',
+                              padding: '4px 10px',
+                              fontSize: 12,
+                              lineHeight: 1,
+                            }}
+                          >
+                            重试解析
+                          </button>
+                        )}
+
+                      {Array.isArray(bilibiliPlayback?.limitations) &&
+                        bilibiliPlayback.limitations.length > 0 && (
+                          <div
+                            style={{
+                              fontSize: 12,
+                              color: modalColors.textSoft,
+                            }}
+                          >
+                            限制：{bilibiliPlayback.limitations.join('；')}
+                          </div>
+                        )}
+                    </div>
+                  )}
+                </div>
               }
             />
           </div>
