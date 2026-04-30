@@ -175,19 +175,7 @@ export default function PlayerBottomBar({
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-        {followMode && (
-          <div
-            style={{
-              fontSize: 11,
-              color: 'var(--accent-purple)',
-              display: 'flex',
-              alignItems: 'center',
-              fontWeight: 600,
-            }}
-          >
-            ↓ 追随
-          </div>
-        )}
+
         <div
           style={{
             fontSize: 12,

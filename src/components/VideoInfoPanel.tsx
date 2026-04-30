@@ -1246,12 +1246,13 @@ export default forwardRef<VideoInfoPanelRef, VideoInfoPanelProps>(
             <div
               style={{
                 display: 'flex',
-                gap: 4,
+                gap: 2,
                 padding: '4px',
                 background: 'var(--bg-hover)',
                 borderRadius: 12,
                 height: 44,
                 alignItems: 'center',
+                flexShrink: 0,
               }}
             >
               {panelButtons.map((panel) => {
@@ -1266,8 +1267,8 @@ export default forwardRef<VideoInfoPanelRef, VideoInfoPanelProps>(
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      gap: 6,
-                      padding: '0 16px',
+                      gap: active ? 6 : 0,
+                      padding: active ? '0 12px' : '0 10px',
                       borderRadius: 9,
                       background: active ? 'var(--bg-secondary)' : 'transparent',
                       border: 'none',
@@ -1278,10 +1279,12 @@ export default forwardRef<VideoInfoPanelRef, VideoInfoPanelProps>(
                       whiteSpace: 'nowrap',
                       fontSize: 13,
                       fontWeight: 700,
+                      flexShrink: 0,
                     }}
+                    title={panel.label}
                   >
-                    <span>{panel.icon}</span>
-                    <span>{panel.label}</span>
+                    <span style={{ fontSize: 16 }}>{panel.icon}</span>
+                    {active && <span>{panel.label}</span>}
                   </button>
                 );
               })}

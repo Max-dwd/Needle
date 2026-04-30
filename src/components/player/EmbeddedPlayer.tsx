@@ -61,7 +61,9 @@ function getEmbedUrl(
   start: number,
   options: { enableYouTubeJsApi?: boolean } = {},
 ) {
-  const url = new URL(`https://www.youtube-nocookie.com/embed/${video.video_id}`);
+  const url = new URL(
+    `https://www.youtube-nocookie.com/embed/${video.video_id}`,
+  );
   url.searchParams.set('autoplay', '1');
   url.searchParams.set('disablekb', '1');
   url.searchParams.set('playsinline', '1');
@@ -99,6 +101,7 @@ export default function EmbeddedPlayer({
   const youtubeIframeRef = useRef<HTMLIFrameElement>(null);
   const nativeVideoRef = useRef<HTMLVideoElement>(null);
   const hiddenAudioRef = useRef<HTMLAudioElement>(null);
+  const onStateChangeRef = useRef(onStateChange);
   const pendingNativeSeekRef = useRef<number | null>(
     Math.max(0, Math.floor(initialStartSeconds)),
   );
@@ -111,17 +114,21 @@ export default function EmbeddedPlayer({
   const [youtubePlayback, setYoutubePlayback] =
     useState<YouTubePlaybackResponse | null>(null);
   const [youtubePlaybackLoading, setYoutubePlaybackLoading] = useState(false);
-  const [youtubePlaybackError, setYoutubePlaybackError] = useState<string | null>(
-    null,
-  );
+  const [youtubePlaybackError, setYoutubePlaybackError] = useState<
+    string | null
+  >(null);
   const [youtubeNativeReloadToken, setYoutubeNativeReloadToken] = useState(0);
   const [bilibiliPlayback, setBilibiliPlayback] =
     useState<BilibiliPlaybackResponse | null>(null);
   const [bilibiliPlaybackLoading, setBilibiliPlaybackLoading] = useState(false);
-  const [bilibiliPlaybackError, setBilibiliPlaybackError] = useState<string | null>(
-    null,
-  );
+  const [bilibiliPlaybackError, setBilibiliPlaybackError] = useState<
+    string | null
+  >(null);
   const [hiddenAudioSrc, setHiddenAudioSrc] = useState<string>('');
+
+  useEffect(() => {
+    onStateChangeRef.current = onStateChange;
+  }, [onStateChange]);
 
   const useNativeYouTube =
     isYt && Boolean(youtubePlayback?.proxyUrl) && !youtubePlaybackError;
@@ -238,21 +245,63 @@ export default function EmbeddedPlayer({
     return () => controller.abort();
   }, [isYt, video.video_id]);
 
-  const postYouTubeCommand = useCallback((func: string, args: unknown[] = []) => {
+  const postYouTubeCommand = useCallback(
+    (func: string, args: unknown[] = []) => {
+      const iframe = youtubeIframeRef.current;
+      if (!iframe || !iframe.contentWindow) return false;
+      iframe.contentWindow.postMessage(
+        JSON.stringify({ event: 'command', func, args, id: 1 }),
+        resolveYouTubeEmbedOrigin(iframe.src),
+      );
+      return true;
+    },
+    [],
+  );
+
+  const stopPlaybackNodes = useCallback(() => {
+    const nativeVideo = nativeVideoRef.current;
+    if (nativeVideo) {
+      nativeVideo.pause();
+      nativeVideo.removeAttribute('src');
+      nativeVideo.load();
+    }
+
+    const hiddenAudio = hiddenAudioRef.current;
+    if (hiddenAudio) {
+      hiddenAudio.pause();
+      hiddenAudio.removeAttribute('src');
+      hiddenAudio.load();
+    }
+
     const iframe = youtubeIframeRef.current;
-    if (!iframe || !iframe.contentWindow) return false;
-    iframe.contentWindow.postMessage(
-      JSON.stringify({ event: 'command', func, args, id: 1 }),
-      resolveYouTubeEmbedOrigin(iframe.src),
-    );
-    return true;
+    if (iframe) {
+      if (iframe.contentWindow && iframe.src) {
+        iframe.contentWindow.postMessage(
+          JSON.stringify({
+            event: 'command',
+            func: 'pauseVideo',
+            args: [],
+            id: 1,
+          }),
+          resolveYouTubeEmbedOrigin(iframe.src),
+        );
+      }
+      iframe.src = 'about:blank';
+    }
   }, []);
+
+  useEffect(() => {
+    return () => {
+      stopPlaybackNodes();
+      onStateChangeRef.current?.(false);
+    };
+  }, [stopPlaybackNodes]);
 
   const syncIframeHeartbeat = useCallback(
     (playing: boolean) => {
       if (!needsIframeHeartbeat || !hiddenAudioRef.current) return;
       if (playing) {
-        hiddenAudioRef.current.play().catch(() => { });
+        hiddenAudioRef.current.play().catch(() => {});
       } else {
         hiddenAudioRef.current.pause();
       }
@@ -262,7 +311,7 @@ export default function EmbeddedPlayer({
 
   const playMedia = useCallback(() => {
     if (usesNativeVideo) {
-      nativeVideoRef.current?.play().catch(() => { });
+      nativeVideoRef.current?.play().catch(() => {});
       return;
     }
     postYouTubeCommand('playVideo');
@@ -283,7 +332,7 @@ export default function EmbeddedPlayer({
       const media = nativeVideoRef.current;
       if (!media) return;
       if (media.paused) {
-        media.play().catch(() => { });
+        media.play().catch(() => {});
       } else {
         media.pause();
       }
@@ -304,7 +353,10 @@ export default function EmbeddedPlayer({
       if (usesNativeVideo) {
         pendingNativeSeekRef.current = target;
         const media = nativeVideoRef.current;
-        if (media && (media.readyState >= 1 || Number.isFinite(media.duration))) {
+        if (
+          media &&
+          (media.readyState >= 1 || Number.isFinite(media.duration))
+        ) {
           try {
             media.currentTime = clampSeconds(target, media.duration);
             pendingNativeSeekRef.current = null;
@@ -402,7 +454,7 @@ export default function EmbeddedPlayer({
       }
     }
 
-    media.play().catch(() => { });
+    media.play().catch(() => {});
   }, [onDurationChange]);
 
   const handleNativePlayState = useCallback(
@@ -488,23 +540,23 @@ export default function EmbeddedPlayer({
         style={
           isVisible
             ? {
-              position: 'relative',
-              width: '100%',
-              height: '100%',
-              zIndex: 1,
-              background: '#000',
-            }
+                position: 'relative',
+                width: '100%',
+                height: '100%',
+                zIndex: 1,
+                background: '#000',
+              }
             : {
-              position: 'absolute',
-              opacity: 0.01,
-              pointerEvents: 'none',
-              width: 200,
-              height: 200,
-              overflow: 'hidden',
-              left: -500,
-              top: -500,
-              zIndex: -1,
-            }
+                position: 'absolute',
+                opacity: 0.01,
+                pointerEvents: 'none',
+                width: 200,
+                height: 200,
+                overflow: 'hidden',
+                left: -500,
+                top: -500,
+                zIndex: -1,
+              }
         }
       >
         <audio ref={hiddenAudioRef} src={hiddenAudioSrc} loop playsInline />

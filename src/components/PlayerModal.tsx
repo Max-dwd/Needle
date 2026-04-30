@@ -1545,8 +1545,7 @@ export default function PlayerModal({
                     }}
                     title={followMode ? '关闭跟随模式' : '开启跟随模式'}
                   >
-                    <span style={{ fontSize: 13, marginRight: 6 }}>📍</span>
-                    <span style={{ fontSize: 12, fontWeight: 600 }}>跟随</span>
+                    <span style={{ fontSize: 13 }}>📍</span>
                   </button>
 
                   {/* Subtitle Button (PC) */}
@@ -1597,8 +1596,7 @@ export default function PlayerModal({
                         title={title}
                         aria-disabled={isDisabled}
                       >
-                        <span style={{ fontSize: 13, marginRight: 6 }}>📺</span>
-                        <span style={{ fontSize: 12, fontWeight: 600 }}>字幕</span>
+                        <span style={{ fontSize: 13 }}>📺</span>
                       </button>
                     );
                   })()}
