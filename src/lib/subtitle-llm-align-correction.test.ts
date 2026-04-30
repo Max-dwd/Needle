@@ -75,6 +75,51 @@ describe('parseUtterancesJson', () => {
     ).toEqual([{ speaker: 'S1', text: 'ok' }]);
   });
 
+  it('parses common provider transcript shapes', () => {
+    expect(
+      parseUtterancesJson(
+        JSON.stringify({
+          transcript: '各位观众早上好，欢迎收看 AI 早报。',
+        }),
+      ),
+    ).toEqual([
+      { speaker: 'S1', text: '各位观众早上好，欢迎收看 AI 早报。' },
+    ]);
+
+    expect(
+      parseUtterancesJson(
+        JSON.stringify({
+          captions: [
+            { speaker_label: 'Speaker 1', content: '第一句' },
+            { speaker_id: 'S2', transcript: '第二句' },
+          ],
+        }),
+      ),
+    ).toEqual([
+      { speaker: 'S1', text: '第一句' },
+      { speaker: 'S2', text: '第二句' },
+    ]);
+
+    expect(
+      parseUtterancesJson(
+        JSON.stringify({
+          S1: '第一段',
+          S2: ['第二段'],
+        }),
+      ),
+    ).toEqual([
+      { speaker: 'S1', text: '第一段' },
+      { speaker: 'S2', text: '第二段' },
+    ]);
+  });
+
+  it('parses non-json speaker-prefixed transcripts', () => {
+    expect(parseUtterancesJson('S1: 你好\nS2: 大家好')).toEqual([
+      { speaker: 'S1', text: '你好' },
+      { speaker: 'S2', text: '大家好' },
+    ]);
+  });
+
   it('throws on invalid JSON shape', () => {
     expect(() => parseUtterancesJson('not json')).toThrow();
     expect(() => parseUtterancesJson('{"foo":1}')).toThrow();
@@ -348,12 +393,14 @@ describe('transcribeChunk', () => {
 
     expect(transcribeAudio).toHaveBeenCalledTimes(1);
     const call = transcribeAudio.mock.calls[0]?.[1] as {
+      prompt?: string;
       systemPrompt?: string;
       responseSchema?: unknown;
       estimatedTokens?: number;
     };
     expect(call.systemPrompt).toContain('测试视频');
     expect(call.systemPrompt).toContain('S1/S2/S3');
+    expect(call.prompt).toContain('"utterances"');
     expect(call.responseSchema).toMatchObject({
       type: 'object',
       required: ['utterances'],

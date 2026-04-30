@@ -1858,6 +1858,25 @@ async function fetchSubtitleViaLlmAligner(
       firstChunkTtft,
     });
 
+    log.info('subtitle', 'llm_aligner_metrics', {
+      platform: video.platform,
+      target: video.video_id,
+      chunk_count: summary.chunkCount,
+      interpolated_chunk_count: summary.interpolatedCount,
+      transcribe_failed_chunk_count: summary.transcribeFailedCount,
+      aligner_total_words: summary.totalWordCount,
+      aligner_avg_prob: summary.avgProb,
+    });
+
+    if (
+      summary.chunkCount > 0 &&
+      summary.transcribeFailedCount === summary.chunkCount
+    ) {
+      throw new Error(
+        `llm-aligner failed to transcribe all chunks (${summary.transcribeFailedCount}/${summary.chunkCount})`,
+      );
+    }
+
     const assembled = assembleLlmAlignerSegments(chunkResults);
     const segments: SubtitleSegment[] = assembled.map((segment) => ({
       start: Math.max(0, Math.floor(segment.start)),
@@ -1879,16 +1898,6 @@ async function fetchSubtitleViaLlmAligner(
         return `[${formatSecondsForAiRange(segment.start)}-${formatSecondsForAiRange(segment.end)}] ${prefix}${segment.text}`;
       })
       .join('\n\n');
-
-    log.info('subtitle', 'llm_aligner_metrics', {
-      platform: video.platform,
-      target: video.video_id,
-      chunk_count: summary.chunkCount,
-      interpolated_chunk_count: summary.interpolatedCount,
-      transcribe_failed_chunk_count: summary.transcribeFailedCount,
-      aligner_total_words: summary.totalWordCount,
-      aligner_avg_prob: summary.avgProb,
-    });
 
     return {
       ...buildAiSubtitlePayloadFromSegments(
