@@ -1,6 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { IPage } from '../types.js';
-import { runBilibiliFollowing, runBilibiliUserVideos } from './bilibili.js';
+import {
+  runBilibiliFollowing,
+  runBilibiliUserVideos,
+  runBilibiliVideoMeta,
+} from './bilibili.js';
 
 function createPageMock(overrides: Partial<IPage> = {}): IPage {
   return {
@@ -203,5 +207,218 @@ describe('bilibili runtime commands', () => {
         flags: { limit: '20' },
       }),
     ).rejects.toThrow('获取 Bilibili 视频列表失败: 访问权限不足 (-403)');
+  });
+
+  it('does not infer Bilibili user-videos members-only from badge text', async () => {
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce({
+        ok: true,
+        text: async () =>
+          JSON.stringify({
+            code: 0,
+            data: {
+              wbi_img: {
+                img_url:
+                  'https://i0.hdslb.com/bfs/wbi/abcdefghijklmnopqrstuvwxyzabcdef.png',
+                sub_url:
+                  'https://i0.hdslb.com/bfs/wbi/ghijklmnopqrstuvwxyzabcdefghijkl.png',
+              },
+            },
+          }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        text: async () =>
+          JSON.stringify({
+            code: 0,
+            data: {
+              list: {
+                vlist: [
+                  {
+                    bvid: 'BVcharge001',
+                    title: 'Charge Entry Video',
+                    pic: '//i0.hdslb.com/bfs/archive/charge.jpg',
+                    created: 1774708800,
+                    length: '08:01',
+                    badge: {
+                      text: '充电专属',
+                    },
+                  },
+                ],
+              },
+            },
+          }),
+      } as Response);
+    global.fetch = fetchMock;
+
+    const page = createPageMock();
+    await expect(
+      runBilibiliUserVideos(page, {
+        positionals: ['12345'],
+        flags: { limit: '20' },
+      }),
+    ).resolves.toEqual([
+      {
+        video_id: 'BVcharge001',
+        title: 'Charge Entry Video',
+        url: 'https://www.bilibili.com/video/BVcharge001',
+        thumbnail_url: 'https://i0.hdslb.com/bfs/archive/charge.jpg',
+        published_at: '2026-03-28T14:40:00.000Z',
+        duration: '08:01',
+        is_members_only: undefined,
+        access_status: undefined,
+      },
+    ]);
+  });
+
+  it('does not mark Bilibili video-meta as members-only for a charge button alone', async () => {
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce({
+        ok: true,
+        text: async () =>
+          JSON.stringify({
+            code: 0,
+            data: {
+              aid: 111,
+              cid: 222,
+              title: 'Ordinary Video',
+              pic: '//i0.hdslb.com/bfs/archive/ordinary.jpg',
+              pubdate: 1774708800,
+              duration: 481,
+            },
+          }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        text: async () =>
+          JSON.stringify({
+            code: 0,
+            data: {
+              wbi_img: {
+                img_url:
+                  'https://i0.hdslb.com/bfs/wbi/abcdefghijklmnopqrstuvwxyzabcdef.png',
+                sub_url:
+                  'https://i0.hdslb.com/bfs/wbi/ghijklmnopqrstuvwxyzabcdefghijkl.png',
+              },
+            },
+          }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        text: async () =>
+          JSON.stringify({
+            code: 0,
+            data: {
+              elec_high_level: {
+                show_button: true,
+                open: true,
+                title: '充电专属',
+                sub_title: '专属权益入口',
+              },
+              preview_toast: '为创作付费，购买观看完整视频|购买观看',
+            },
+          }),
+      } as Response);
+    global.fetch = fetchMock;
+
+    const page = createPageMock({
+      evaluate: vi.fn().mockResolvedValue({
+        aid: 111,
+        cid: 222,
+        title: 'Ordinary Video',
+        pic: '//i0.hdslb.com/bfs/archive/ordinary.jpg',
+        pubdate: 1774708800,
+        duration: 481,
+      }),
+    });
+
+    await expect(
+      runBilibiliVideoMeta(page, {
+        positionals: ['BVordinary001'],
+        flags: {},
+      }),
+    ).resolves.toEqual({
+      video_id: 'BVordinary001',
+      title: 'Ordinary Video',
+      thumbnail_url: 'https://i0.hdslb.com/bfs/archive/ordinary.jpg',
+      published_at: '2026-03-28T14:40:00.000Z',
+      duration: '8:01',
+      is_members_only: 0,
+      access_status: undefined,
+    });
+  });
+
+  it('still marks Bilibili video-meta as members-only for explicit paid signals', async () => {
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce({
+        ok: true,
+        text: async () =>
+          JSON.stringify({
+            code: 0,
+            data: {
+              aid: 333,
+              cid: 444,
+              title: 'Exclusive Video',
+              pic: '//i0.hdslb.com/bfs/archive/exclusive.jpg',
+              pubdate: 1774708800,
+              duration: 481,
+            },
+          }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        text: async () =>
+          JSON.stringify({
+            code: 0,
+            data: {
+              wbi_img: {
+                img_url:
+                  'https://i0.hdslb.com/bfs/wbi/abcdefghijklmnopqrstuvwxyzabcdef.png',
+                sub_url:
+                  'https://i0.hdslb.com/bfs/wbi/ghijklmnopqrstuvwxyzabcdefghijkl.png',
+              },
+            },
+          }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        text: async () =>
+          JSON.stringify({
+            code: 0,
+            data: {
+              is_upower_exclusive: true,
+              elec_high_level: {
+                show_button: true,
+                open: true,
+              },
+            },
+          }),
+      } as Response);
+    global.fetch = fetchMock;
+
+    const page = createPageMock({
+      evaluate: vi.fn().mockResolvedValue({
+        aid: 333,
+        cid: 444,
+        title: 'Exclusive Video',
+        pic: '//i0.hdslb.com/bfs/archive/exclusive.jpg',
+        pubdate: 1774708800,
+        duration: 481,
+      }),
+    });
+
+    await expect(
+      runBilibiliVideoMeta(page, {
+        positionals: ['BVexclusive001'],
+        flags: {},
+      }),
+    ).resolves.toMatchObject({
+      video_id: 'BVexclusive001',
+      is_members_only: 1,
+      access_status: 'members_only',
+    });
   });
 });

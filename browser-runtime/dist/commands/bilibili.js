@@ -179,60 +179,34 @@ async function resolveUid(page, input) {
     }
     throw new EmptyResultError(`bilibili user search: ${input}`, 'User may not exist or username may have changed.');
 }
-const MEMBERS_ONLY_TEXT_PATTERN = /充电专属|会员专属|购买观看|付费|专属视频/i;
-const LIMITED_FREE_TEXT_PATTERN = /限时免费|限免|免费中|限时开放/i;
-const MEMBERS_ONLY_KEY_HINT = /badge|pay|upower|charge|member|vip|right|label|tip|corner|mark|desc|subtitle|sub_title|reason/i;
-function hasMembersOnlyText(value) {
-    return typeof value === 'string' && MEMBERS_ONLY_TEXT_PATTERN.test(value);
+function isTruthyAccessFlag(value) {
+    if (value === true)
+        return true;
+    if (typeof value === 'number')
+        return value > 0;
+    if (typeof value === 'string') {
+        return /^(1|true|yes)$/i.test(value.trim());
+    }
+    return false;
 }
-function hasLimitedFreeText(value) {
-    return typeof value === 'string' && LIMITED_FREE_TEXT_PATTERN.test(value);
-}
-function detectMembersOnlyFromValue(value, keyHint = '', depth = 0) {
-    if (depth > 4 || value == null)
-        return undefined;
-    if (typeof value === 'boolean') {
-        return value && /pay|upower|member|vip|charge/i.test(keyHint)
-            ? 'members_only'
-            : undefined;
-    }
-    if (hasLimitedFreeText(value)) {
-        return keyHint ? 'limited_free' : undefined;
-    }
-    if (hasMembersOnlyText(value)) {
-        return keyHint && MEMBERS_ONLY_KEY_HINT.test(keyHint)
-            ? 'members_only'
-            : undefined;
-    }
-    if (Array.isArray(value)) {
-        for (const item of value) {
-            const detected = detectMembersOnlyFromValue(item, keyHint, depth + 1);
-            if (detected)
-                return detected;
-        }
-        return undefined;
-    }
-    if (typeof value === 'object') {
-        for (const [key, nested] of Object.entries(value)) {
-            const detected = detectMembersOnlyFromValue(nested, keyHint ? `${keyHint}.${key}` : key, depth + 1);
-            if (detected)
-                return detected;
-        }
+function detectBilibiliAccessStatus(item) {
+    const rights = item.rights || {};
+    if (isTruthyAccessFlag(item.is_upower_exclusive) ||
+        isTruthyAccessFlag(item.is_ugc_pay) ||
+        isTruthyAccessFlag(item.is_ugc_pay_preview) ||
+        isTruthyAccessFlag(rights.pay) ||
+        isTruthyAccessFlag(rights.ugc_pay) ||
+        isTruthyAccessFlag(rights.ugc_pay_preview) ||
+        isTruthyAccessFlag(rights.arc_pay)) {
+        return 'members_only';
     }
     return undefined;
 }
-function detectBilibiliAccessStatus(item) {
-    if (item.is_upower_exclusive === true ||
-        item.is_ugc_pay === true ||
-        item.is_ugc_pay_preview === true) {
+function detectBilibiliPlayerAccessStatus(player) {
+    if (isTruthyAccessFlag(player.is_upower_exclusive) ||
+        isTruthyAccessFlag(player.is_ugc_pay) ||
+        isTruthyAccessFlag(player.is_ugc_pay_preview)) {
         return 'members_only';
-    }
-    for (const [key, value] of Object.entries(item)) {
-        if (key === 'title')
-            continue;
-        const detected = detectMembersOnlyFromValue(value, key);
-        if (detected)
-            return detected;
     }
     return undefined;
 }
@@ -363,19 +337,10 @@ export async function runBilibiliVideoMeta(page, input) {
                 signed: true,
             }).catch(() => null);
             const player = playerPayload?.data || {};
-            const highLevel = player.elec_high_level || {};
-            const previewToast = String(player.preview_toast ?? '');
-            isMembersOnly =
-                player.is_upower_exclusive === true ||
-                    player.is_ugc_pay_preview === true ||
-                    highLevel.show_button === true ||
-                    highLevel.open === true ||
-                    /专属|购买观看|付费/.test(previewToast) ||
-                    /专属|购买观看|付费/.test(String(highLevel.title ?? '')) ||
-                    /专属|购买观看|付费/.test(String(highLevel.sub_title ?? ''))
-                    ? 1
-                    : 0;
-            accessStatus = isMembersOnly ? 'members_only' : undefined;
+            accessStatus =
+                detectBilibiliAccessStatus(viewData) ??
+                    detectBilibiliPlayerAccessStatus(player);
+            isMembersOnly = accessStatus === 'members_only' ? 1 : 0;
         }
         return {
             video_id: bvid,

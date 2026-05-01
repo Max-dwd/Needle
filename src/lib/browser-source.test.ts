@@ -164,7 +164,7 @@ describe('browser source commands', () => {
     ]);
   });
 
-  it('preserves bilibili members-only detection when the list payload exposes badge text', async () => {
+  it('does not infer bilibili members-only from nested badge text', async () => {
     mockJsonOnce([
       {
         bvid: 'BVcharge001',
@@ -189,8 +189,8 @@ describe('browser source commands', () => {
         thumbnail_url: 'https://i0.hdslb.com/bfs/archive/charge.jpg',
         published_at: '2026-03-28T14:40:00.000Z',
         duration: '08:01',
-        is_members_only: 1,
-        access_status: 'members_only',
+        is_members_only: undefined,
+        access_status: undefined,
       },
     ]);
   });

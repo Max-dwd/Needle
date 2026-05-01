@@ -371,6 +371,8 @@ async function runEnrichmentJob(
     }
     if (detail.access_status !== undefined) {
       updateFields.access_status = detail.access_status;
+    } else if (detail.is_members_only === 0) {
+      updateFields.access_status = null;
     }
 
     const shouldMarkChecked = detail.is_members_only !== undefined;
