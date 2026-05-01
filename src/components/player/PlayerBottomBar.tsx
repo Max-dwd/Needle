@@ -30,7 +30,6 @@ export default function PlayerBottomBar({
   video,
   disabled,
   trailing,
-  followMode = false,
   onCursorChapterChange,
 }: PlayerBottomBarProps) {
   const [isDetailedMode, setIsDetailedMode] = useState(false);
@@ -130,6 +129,8 @@ export default function PlayerBottomBar({
   return (
     <div
       style={{
+        position: 'relative',
+        zIndex: 60,
         display: 'flex',
         alignItems: 'center',
         height: 48,
@@ -339,6 +340,7 @@ export default function PlayerBottomBar({
               bottom: 'calc(50% + 12px)',
               left: tooltipLeft,
               transform: 'translateX(-50%)',
+              zIndex: 70,
             }}
             className="player-bottom-bar-tooltip"
           >
@@ -418,4 +420,3 @@ export default function PlayerBottomBar({
     </div>
   );
 }
-
