@@ -453,7 +453,11 @@ function FeedPageContent() {
           setVideos((prev) =>
             prev.map((v) =>
               v.video_id === videoId
-                ? { ...v, summary_status: 'processing' as const }
+                ? {
+                    ...v,
+                    summary_status: 'processing' as const,
+                    summary_error: null,
+                  }
                 : v,
             ),
           );
@@ -467,7 +471,11 @@ function FeedPageContent() {
           setVideos((prev) =>
             prev.map((v) =>
               v.video_id === videoId
-                ? { ...v, summary_status: 'completed' as const }
+                ? {
+                    ...v,
+                    summary_status: 'completed' as const,
+                    summary_error: null,
+                  }
                 : v,
             ),
           );
@@ -477,12 +485,19 @@ function FeedPageContent() {
 
       es.addEventListener('summary-error', (event) => {
         try {
-          const { videoId } = JSON.parse(event.data);
+          const { videoId, error } = JSON.parse(event.data);
           setSummaryProgress(null);
           setVideos((prev) =>
             prev.map((v) =>
               v.video_id === videoId
-                ? { ...v, summary_status: 'failed' as const }
+                ? {
+                    ...v,
+                    summary_status: 'failed' as const,
+                    summary_error:
+                      typeof error === 'string' && error.trim()
+                        ? error
+                        : v.summary_error,
+                  }
                 : v,
             ),
           );
