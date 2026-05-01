@@ -171,6 +171,26 @@ function emitResetEvents(row: RescrapeVideoRow): void {
   });
 }
 
+async function enqueueSubtitleAfterReset(row: RescrapeVideoRow): Promise<void> {
+  try {
+    const { enqueueSubtitleJobForVideoDbId } = await import('./auto-pipeline');
+    const queued = enqueueSubtitleJobForVideoDbId(row.id, 0);
+    log.info('enrichment', 'rescrape_subtitle_enqueue', {
+      videoDbId: row.id,
+      videoId: row.video_id,
+      platform: row.platform,
+      queued,
+    });
+  } catch (error) {
+    log.warn('enrichment', 'rescrape_subtitle_enqueue_failed', {
+      videoDbId: row.id,
+      videoId: row.video_id,
+      platform: row.platform,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
 export async function rescrapeVideo(
   videoDbId: number,
 ): Promise<RescrapeVideoResult> {
@@ -222,6 +242,7 @@ export async function rescrapeVideo(
     });
 
     emitResetEvents(row);
+    await enqueueSubtitleAfterReset(row);
     log.info('enrichment', 'rescrape_enqueued', {
       videoDbId,
       videoId: row.video_id,

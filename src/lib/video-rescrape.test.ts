@@ -8,6 +8,7 @@ const tempDirs: string[] = [];
 const mockAcquireRescrapeLock = vi.fn();
 const mockReleaseRescrapeLock = vi.fn();
 const mockEnrichVideo = vi.fn();
+const mockEnqueueSubtitleJobForVideoDbId = vi.fn();
 const mockEmit = vi.fn();
 const mockLogInfo = vi.fn();
 const mockLogWarn = vi.fn();
@@ -24,6 +25,9 @@ async function loadVideoRescrapeModule(tempDir: string) {
     acquireRescrapeLock: mockAcquireRescrapeLock,
     releaseRescrapeLock: mockReleaseRescrapeLock,
     enrichVideo: mockEnrichVideo,
+  }));
+  vi.doMock('./auto-pipeline', () => ({
+    enqueueSubtitleJobForVideoDbId: mockEnqueueSubtitleJobForVideoDbId,
   }));
   vi.doMock('./events', () => ({
     appEvents: {
@@ -135,6 +139,7 @@ describe('rescrapeVideo', () => {
     vi.clearAllMocks();
     mockAcquireRescrapeLock.mockReturnValue(true);
     mockEnrichVideo.mockResolvedValue(undefined);
+    mockEnqueueSubtitleJobForVideoDbId.mockReturnValue(true);
   });
 
   afterEach(async () => {
@@ -152,6 +157,7 @@ describe('rescrapeVideo', () => {
 
     vi.resetModules();
     vi.doUnmock('./enrichment-queue');
+    vi.doUnmock('./auto-pipeline');
     vi.doUnmock('./events');
     vi.doUnmock('./logger');
 
@@ -227,6 +233,7 @@ describe('rescrapeVideo', () => {
       priority: 0,
       at: expect.any(String),
     });
+    expect(mockEnqueueSubtitleJobForVideoDbId).toHaveBeenCalledWith(10, 0);
     expect(mockEnrichVideo).toHaveBeenCalledWith(10, 'UC123', 'Test Channel', {
       priority: 0,
       onSettled: expect.any(Function),
