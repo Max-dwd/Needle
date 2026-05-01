@@ -352,6 +352,9 @@ export default forwardRef<VideoInfoPanelRef, VideoInfoPanelProps>(
     const [selectedSubtitleModel, setSelectedSubtitleModel] =
       useState<string>('');
     const selectedSubtitleModelRef = useRef('');
+    const [selectedSubtitleFallbackModel, setSelectedSubtitleFallbackModel] =
+      useState<string>('');
+    const selectedSubtitleFallbackModelRef = useRef('');
     const [viewingHistory, setViewingHistory] = useState(false);
     const [activePanel, setActivePanel] = useState<
       'subtitle' | 'summary' | 'comments' | 'chat' | 'download' | 'research'
@@ -377,6 +380,10 @@ export default forwardRef<VideoInfoPanelRef, VideoInfoPanelProps>(
     useEffect(() => {
       selectedSubtitleModelRef.current = selectedSubtitleModel;
     }, [selectedSubtitleModel]);
+
+    useEffect(() => {
+      selectedSubtitleFallbackModelRef.current = selectedSubtitleFallbackModel;
+    }, [selectedSubtitleFallbackModel]);
 
     const effectiveMarkdown = viewingHistory && summary?.previous?.markdown
       ? summary.previous.markdown
@@ -441,6 +448,18 @@ export default forwardRef<VideoInfoPanelRef, VideoInfoPanelProps>(
           selectedSubtitleModelRef.current
         ) {
           params.set('modelId', selectedSubtitleModelRef.current);
+        }
+        if (
+          (preferredMethod === 'gemini' ||
+            preferredMethod === 'api-fallback') &&
+          selectedSubtitleFallbackModelRef.current &&
+          selectedSubtitleFallbackModelRef.current !==
+            selectedSubtitleModelRef.current
+        ) {
+          params.set(
+            'fallbackModelId',
+            selectedSubtitleFallbackModelRef.current,
+          );
         }
         if (!isYt) {
           if (typeof bilibiliAid === 'number' && bilibiliAid > 0) {
@@ -1620,42 +1639,79 @@ export default forwardRef<VideoInfoPanelRef, VideoInfoPanelProps>(
                   {/* Actions Section */}
                   <div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                      <select
-                        value={selectedSubtitleModel}
-                        onChange={(event) =>
-                          setSelectedSubtitleModel(event.target.value)
-                        }
-                        disabled={subtitleApiExtracting || multimodalModels.length === 0}
-                        style={{
-                          width: '100%',
-                          background: 'rgba(255, 255, 255, 0.05)',
-                          color: colors.textStrong,
-                          border: '1px solid rgba(255, 255, 255, 0.1)',
-                          borderRadius: 8,
-                          fontSize: 12,
-                          padding: '8px 10px',
-                          outline: 'none',
-                        }}
-                      >
-                        {multimodalModels.length === 0 ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        <span style={{ color: colors.textMuted, fontSize: 11 }}>主模型</span>
+                        <select
+                          value={selectedSubtitleModel}
+                          onChange={(event) =>
+                            setSelectedSubtitleModel(event.target.value)
+                          }
+                          disabled={subtitleApiExtracting || multimodalModels.length === 0}
+                          style={{
+                            width: '100%',
+                            background: 'rgba(255, 255, 255, 0.05)',
+                            color: colors.textStrong,
+                            border: '1px solid rgba(255, 255, 255, 0.1)',
+                            borderRadius: 8,
+                            fontSize: 12,
+                            padding: '8px 10px',
+                            outline: 'none',
+                          }}
+                        >
+                          {multimodalModels.length === 0 ? (
+                            <option value="" style={{ background: 'var(--bg-secondary)' }}>
+                              无多模态模型
+                            </option>
+                          ) : (
+                            <option value="" style={{ background: 'var(--bg-secondary)' }}>
+                              默认多模态模型
+                            </option>
+                          )}
+                          {multimodalModels.map((model) => (
+                            <option
+                              key={model.id}
+                              value={model.id}
+                              style={{ background: 'var(--bg-secondary)' }}
+                            >
+                              {model.name || model.id}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        <span style={{ color: colors.textMuted, fontSize: 11 }}>备用模型</span>
+                        <select
+                          value={selectedSubtitleFallbackModel}
+                          onChange={(event) =>
+                            setSelectedSubtitleFallbackModel(event.target.value)
+                          }
+                          disabled={subtitleApiExtracting || multimodalModels.length === 0}
+                          style={{
+                            width: '100%',
+                            background: 'rgba(255, 255, 255, 0.05)',
+                            color: colors.textStrong,
+                            border: '1px solid rgba(255, 255, 255, 0.1)',
+                            borderRadius: 8,
+                            fontSize: 12,
+                            padding: '8px 10px',
+                            outline: 'none',
+                          }}
+                        >
                           <option value="" style={{ background: 'var(--bg-secondary)' }}>
-                            无多模态模型
+                            不使用备用模型
                           </option>
-                        ) : (
-                          <option value="" style={{ background: 'var(--bg-secondary)' }}>
-                            默认多模态模型
-                          </option>
-                        )}
-                        {multimodalModels.map((model) => (
-                          <option
-                            key={model.id}
-                            value={model.id}
-                            style={{ background: 'var(--bg-secondary)' }}
-                          >
-                            {model.name || model.id}
-                          </option>
-                        ))}
-                      </select>
+                          {multimodalModels.map((model) => (
+                            <option
+                              key={model.id}
+                              value={model.id}
+                              style={{ background: 'var(--bg-secondary)' }}
+                              disabled={model.id === selectedSubtitleModel}
+                            >
+                              {model.name || model.id}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
                       <button
                         onClick={() => void handleExtractSubtitleViaApi(true)}
                         disabled={
@@ -1990,33 +2046,66 @@ export default forwardRef<VideoInfoPanelRef, VideoInfoPanelProps>(
                         {subtitleRetrying ? '重试中...' : '立即重试'}
                       </button>
                     )}
-                    <select
-                      value={selectedSubtitleModel}
-                      onChange={(event) =>
-                        setSelectedSubtitleModel(event.target.value)
-                      }
-                      disabled={subtitleApiExtracting || multimodalModels.length === 0}
-                      style={{
-                        background: colors.inputBg,
-                        border: `1px solid ${colors.borderStrong}`,
-                        borderRadius: 8,
-                        color: colors.textStrong,
-                        fontSize: 13,
-                        minWidth: 150,
-                        padding: '9px 12px',
-                      }}
-                    >
-                      {multimodalModels.length === 0 ? (
-                        <option value="">无多模态模型</option>
-                      ) : (
-                        <option value="">默认多模态模型</option>
-                      )}
-                      {multimodalModels.map((model) => (
-                        <option key={model.id} value={model.id}>
-                          {model.name || model.id}
-                        </option>
-                      ))}
-                    </select>
+                    <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      <span style={{ color: colors.textMuted, fontSize: 11 }}>主模型</span>
+                      <select
+                        value={selectedSubtitleModel}
+                        onChange={(event) =>
+                          setSelectedSubtitleModel(event.target.value)
+                        }
+                        disabled={subtitleApiExtracting || multimodalModels.length === 0}
+                        style={{
+                          background: colors.inputBg,
+                          border: `1px solid ${colors.borderStrong}`,
+                          borderRadius: 8,
+                          color: colors.textStrong,
+                          fontSize: 13,
+                          minWidth: 150,
+                          padding: '9px 12px',
+                        }}
+                      >
+                        {multimodalModels.length === 0 ? (
+                          <option value="">无多模态模型</option>
+                        ) : (
+                          <option value="">默认多模态模型</option>
+                        )}
+                        {multimodalModels.map((model) => (
+                          <option key={model.id} value={model.id}>
+                            {model.name || model.id}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      <span style={{ color: colors.textMuted, fontSize: 11 }}>备用模型</span>
+                      <select
+                        value={selectedSubtitleFallbackModel}
+                        onChange={(event) =>
+                          setSelectedSubtitleFallbackModel(event.target.value)
+                        }
+                        disabled={subtitleApiExtracting || multimodalModels.length === 0}
+                        style={{
+                          background: colors.inputBg,
+                          border: `1px solid ${colors.borderStrong}`,
+                          borderRadius: 8,
+                          color: colors.textStrong,
+                          fontSize: 13,
+                          minWidth: 150,
+                          padding: '9px 12px',
+                        }}
+                      >
+                        <option value="">不使用备用模型</option>
+                        {multimodalModels.map((model) => (
+                          <option
+                            key={model.id}
+                            value={model.id}
+                            disabled={model.id === selectedSubtitleModel}
+                          >
+                            {model.name || model.id}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
                     <button
                       type="button"
                       onClick={() => void handleExtractSubtitleViaApi()}
@@ -2045,7 +2134,7 @@ export default forwardRef<VideoInfoPanelRef, VideoInfoPanelProps>(
                     </button>
                   </div>
                   <div style={{ color: colors.textFaint, fontSize: 11 }}>
-                    API 提取会调用多模态模型并使用设置页中的字幕提示词模板。
+                    API 提取会调用多模态模型并使用设置页中的字幕提示词模板；主模型失败时会尝试备用模型。
                   </div>
                 </div>
               )}

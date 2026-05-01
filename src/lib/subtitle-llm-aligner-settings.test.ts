@@ -34,7 +34,7 @@ describe('subtitle-llm-aligner-settings', () => {
         minAvgProb: 0.3,
         minWordRatio: 0.3,
       },
-      llm: { expectSpeakerLabels: true },
+      llm: { expectSpeakerLabels: true, maxSegmentSeconds: 12 },
       updatedAt: null,
     });
   });
@@ -45,7 +45,7 @@ describe('subtitle-llm-aligner-settings', () => {
         enabled: true,
         chunkSeconds: 10,
         aligner: { modelId: '  custom/id  ', minAvgProb: 2, minWordRatio: -1 },
-        llm: { expectSpeakerLabels: false },
+        llm: { expectSpeakerLabels: false, maxSegmentSeconds: 120 },
       }),
     );
 
@@ -57,7 +57,7 @@ describe('subtitle-llm-aligner-settings', () => {
         minAvgProb: 1,
         minWordRatio: 0,
       },
-      llm: { expectSpeakerLabels: false },
+      llm: { expectSpeakerLabels: false, maxSegmentSeconds: 60 },
       updatedAt: null,
     });
   });
@@ -71,7 +71,7 @@ describe('subtitle-llm-aligner-settings', () => {
         minAvgProb: 0.4,
         minWordRatio: 0.5,
       },
-      llm: { expectSpeakerLabels: true },
+      llm: { expectSpeakerLabels: true, maxSegmentSeconds: 8 },
     });
 
     expect(mockSetAppSetting).toHaveBeenCalledTimes(1);
@@ -88,7 +88,7 @@ describe('subtitle-llm-aligner-settings', () => {
         minAvgProb: 0.4,
         minWordRatio: 0.5,
       },
-      llm: { expectSpeakerLabels: true },
+      llm: { expectSpeakerLabels: true, maxSegmentSeconds: 8 },
     });
 
     mockGetAppSetting.mockReturnValue(serialized);
@@ -100,7 +100,7 @@ describe('subtitle-llm-aligner-settings', () => {
         minAvgProb: 0.4,
         minWordRatio: 0.5,
       },
-      llm: { expectSpeakerLabels: true },
+      llm: { expectSpeakerLabels: true, maxSegmentSeconds: 8 },
       updatedAt: null,
     });
   });

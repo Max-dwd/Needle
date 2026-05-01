@@ -41,6 +41,7 @@ const DEFAULT_API_FALLBACK_CONFIG: SubtitleApiFallbackConfig = {
   scope: 'global',
   globalMaxWaitSeconds: 0,
   globalModelId: '',
+  globalFallbackModelId: '',
   customRules: [],
   updatedAt: null,
 };
@@ -77,6 +78,7 @@ const DEFAULT_LLM_ALIGNER_CONFIG: SubtitleLlmAlignerConfig = {
   },
   llm: {
     expectSpeakerLabels: true,
+    maxSegmentSeconds: 12,
   },
   updatedAt: null,
 };
@@ -110,7 +112,9 @@ export default function SubtitlesTab({ showToast }: SubtitlesTabProps) {
   const t = useT();
 
   useEffect(() => {
-    void load().catch(() => showToast(t.settings.subtitles.toastReadSettingsFailed, 'error'));
+    void load().catch(() =>
+      showToast(t.settings.subtitles.toastReadSettingsFailed, 'error'),
+    );
   }, [load, showToast, t]);
 
   useEffect(() => {
@@ -122,7 +126,8 @@ export default function SubtitlesTab({ showToast }: SubtitlesTabProps) {
           fetch('/api/settings/intents', { cache: 'no-store' }),
           fetch('/api/channels', { cache: 'no-store' }),
         ]);
-        if (!pipelineRes.ok) throw new Error(t.settings.subtitles.toastReadPipelineFailed);
+        if (!pipelineRes.ok)
+          throw new Error(t.settings.subtitles.toastReadPipelineFailed);
         setPipelineConfig(
           (await pipelineRes.json()) as SubtitlePipelineSettingsResponse,
         );
@@ -204,7 +209,7 @@ export default function SubtitlesTab({ showToast }: SubtitlesTabProps) {
   if (!config || !pipelineConfig) return null;
 
   return (
-      <SubtitlesTabForm
+    <SubtitlesTabForm
       key={[
         config.updatedAt || 'subtitles',
         pipelineConfig.apiFallback.updatedAt || 'fallback',
@@ -278,8 +283,7 @@ function SubtitlesTabForm({
   const browserFetch =
     pipelineConfig.browserFetch || DEFAULT_BROWSER_FETCH_CONFIG;
   const whisperAi = pipelineConfig.whisperAi || DEFAULT_WHISPER_CONFIG;
-  const llmAligner =
-    pipelineConfig.llmAligner || DEFAULT_LLM_ALIGNER_CONFIG;
+  const llmAligner = pipelineConfig.llmAligner || DEFAULT_LLM_ALIGNER_CONFIG;
   const [checkingWhisper, setCheckingWhisper] = useState(false);
   const [checkingAligner, setCheckingAligner] = useState(false);
   const backoffFlows = useMemo(
@@ -354,7 +358,9 @@ function SubtitlesTabForm({
       showToast(t.settings.subtitles.toastSaveSettingsSuccess);
     } catch (error) {
       showToast(
-        error instanceof Error ? error.message : t.settings.subtitles.toastSaveSettingsError,
+        error instanceof Error
+          ? error.message
+          : t.settings.subtitles.toastSaveSettingsError,
         'error',
       );
     }
@@ -388,6 +394,7 @@ function SubtitlesTabForm({
             scope: apiFallback.scope,
             globalMaxWaitSeconds: apiFallback.globalMaxWaitSeconds,
             globalModelId: apiFallback.globalModelId,
+            globalFallbackModelId: apiFallback.globalFallbackModelId,
             customRules: apiFallback.customRules,
           },
         }),
@@ -396,7 +403,10 @@ function SubtitlesTabForm({
         error?: string;
       };
       if (!res.ok) {
-        showToast(data.error || t.settings.subtitles.toastSavePipelineError, 'error');
+        showToast(
+          data.error || t.settings.subtitles.toastSavePipelineError,
+          'error',
+        );
         return;
       }
       onPipelineConfigChange(data);
@@ -426,7 +436,10 @@ function SubtitlesTabForm({
         error?: string;
       };
       if (!res.ok) {
-        showToast(data.error || t.settings.subtitles.toastResetPipelineFailed, 'error');
+        showToast(
+          data.error || t.settings.subtitles.toastResetPipelineFailed,
+          'error',
+        );
         return;
       }
       onPipelineConfigChange(data);
@@ -481,6 +494,7 @@ function SubtitlesTabForm({
               : getChannelLabel(defaultChannel),
           maxWaitSeconds: 0,
           modelId: defaultModel.id,
+          fallbackModelId: '',
         },
       ],
     });
@@ -573,11 +587,15 @@ function SubtitlesTabForm({
   return (
     <div className="settings-section-wrapper animate-in fade-in slide-in-from-bottom-4 duration-300">
       <div className="settings-group">
-        <h2 className="settings-group-title">{t.settings.subtitles.browserFetch}</h2>
+        <h2 className="settings-group-title">
+          {t.settings.subtitles.browserFetch}
+        </h2>
         <div className="settings-card-group">
           <div className="setting-row">
             <div className="setting-info">
-              <span className="setting-label">{t.settings.subtitles.baseInterval}</span>
+              <span className="setting-label">
+                {t.settings.subtitles.baseInterval}
+              </span>
               <span className="setting-description">
                 {t.settings.subtitles.baseIntervalDesc}
               </span>
@@ -602,7 +620,9 @@ function SubtitlesTabForm({
 
           <div className="setting-row">
             <div className="setting-info">
-              <span className="setting-label">{t.settings.subtitles.maxRetries}</span>
+              <span className="setting-label">
+                {t.settings.subtitles.maxRetries}
+              </span>
               <span className="setting-description">
                 {t.settings.subtitles.maxRetriesDesc}
               </span>
@@ -629,7 +649,9 @@ function SubtitlesTabForm({
 
           <div className="setting-row">
             <div className="setting-info">
-              <span className="setting-label">{t.settings.subtitles.currentBackoff}</span>
+              <span className="setting-label">
+                {t.settings.subtitles.currentBackoff}
+              </span>
               <span className="setting-description">
                 {t.settings.subtitles.currentBackoffDesc}
               </span>
@@ -660,7 +682,8 @@ function SubtitlesTabForm({
                     }}
                   >
                     {label} · ×{pipelineConfig.backoff[id].multiplier} ·
-                    {t.settings.subtitles.consecutiveErrors} {pipelineConfig.backoff[id].consecutiveErrors}
+                    {t.settings.subtitles.consecutiveErrors}{' '}
+                    {pipelineConfig.backoff[id].consecutiveErrors}
                   </span>
                   <div
                     style={{
@@ -698,11 +721,15 @@ function SubtitlesTabForm({
       </div>
 
       <div className="settings-group">
-        <h2 className="settings-group-title">{t.settings.subtitles.whisperAi}</h2>
+        <h2 className="settings-group-title">
+          {t.settings.subtitles.whisperAi}
+        </h2>
         <div className="settings-card-group">
           <div className="setting-row">
             <div className="setting-info">
-              <span className="setting-label">{t.settings.subtitles.enableWhisperAi}</span>
+              <span className="setting-label">
+                {t.settings.subtitles.enableWhisperAi}
+              </span>
               <span className="setting-description">
                 {t.settings.subtitles.enableWhisperAiDesc}
               </span>
@@ -722,7 +749,9 @@ function SubtitlesTabForm({
 
           <div className="setting-row">
             <div className="setting-info">
-              <span className="setting-label">{t.settings.subtitles.checkWhisperStatus}</span>
+              <span className="setting-label">
+                {t.settings.subtitles.checkWhisperStatus}
+              </span>
             </div>
             <button
               className="premium-button"
@@ -738,7 +767,9 @@ function SubtitlesTabForm({
 
           <div className="setting-row">
             <div className="setting-info">
-              <span className="setting-label">{t.settings.subtitles.whisperTargetSeconds}</span>
+              <span className="setting-label">
+                {t.settings.subtitles.whisperTargetSeconds}
+              </span>
               <span className="setting-description">
                 {t.settings.subtitles.whisperTargetSecondsDesc} (
                 {formatWhisperChunkDuration(whisperAi.batch.targetSeconds)})
@@ -765,7 +796,9 @@ function SubtitlesTabForm({
 
           <div className="setting-row">
             <div className="setting-info">
-              <span className="setting-label">{t.settings.subtitles.whisperModelId}</span>
+              <span className="setting-label">
+                {t.settings.subtitles.whisperModelId}
+              </span>
               <span className="setting-description">
                 {t.settings.subtitles.whisperModelIdDesc}
               </span>
@@ -778,18 +811,34 @@ function SubtitlesTabForm({
               }
               disabled={pipelineSaving || !whisperAi.enabled}
             >
-              <option value="mlx-community/whisper-tiny-mlx-q4">tiny-q4 (极速)</option>
-              <option value="mlx-community/whisper-base-mlx-q4">base-q4 (平衡)</option>
-              <option value="mlx-community/whisper-small-mlx-q4">small-q4 (精准)</option>
-              <option value="mlx-community/whisper-turbo">turbo (极速精准)</option>
+              <option value="mlx-community/whisper-tiny-mlx-q4">
+                tiny-q4 (极速)
+              </option>
+              <option value="mlx-community/whisper-base-mlx-q4">
+                base-q4 (平衡)
+              </option>
+              <option value="mlx-community/whisper-small-mlx-q4">
+                small-q4 (精准)
+              </option>
+              <option value="mlx-community/whisper-turbo">
+                turbo (极速精准)
+              </option>
             </select>
           </div>
 
           <div className="setting-row">
             <div className="setting-info" style={{ width: '100%' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'flex-start',
+                }}
+              >
                 <div>
-                  <span className="setting-label">{t.settings.subtitles.whisperPrompt}</span>
+                  <span className="setting-label">
+                    {t.settings.subtitles.whisperPrompt}
+                  </span>
                   <span className="setting-description">
                     {t.settings.subtitles.whisperPromptDesc}
                   </span>
@@ -815,11 +864,14 @@ function SubtitlesTabForm({
                 ].join('\n')}
                 disabled
                 rows={11}
-                style={{ marginTop: '12px', fontSize: '13px', fontFamily: 'monospace' }}
+                style={{
+                  marginTop: '12px',
+                  fontSize: '13px',
+                  fontFamily: 'monospace',
+                }}
               />
             </div>
           </div>
-
         </div>
       </div>
 
@@ -830,7 +882,8 @@ function SubtitlesTabForm({
             <div className="setting-info">
               <span className="setting-label">启用 LLM 转写 + 本地对齐</span>
               <span className="setting-description">
-                多模态 AI 负责完整转写和说话人分段，MLX forced aligner 负责词级对齐。仅 Apple Silicon。
+                多模态 AI 负责完整转写和说话人分段，MLX forced aligner
+                负责词级对齐。仅 Apple Silicon。
               </span>
             </div>
             <label className="switch">
@@ -865,9 +918,10 @@ function SubtitlesTabForm({
 
           <div className="setting-row">
             <div className="setting-info">
-              <span className="setting-label">分段时长</span>
+              <span className="setting-label">LLM 音频时长</span>
               <span className="setting-description">
-                每一段 LLM 单独转写和对齐，过长会放大 token 成本。
+                每个批次发送给多模态 LLM
+                的音频长度；最终字幕会在下方输出上限内继续拆短。
               </span>
             </div>
             <select
@@ -886,6 +940,33 @@ function SubtitlesTabForm({
                 </option>
               ))}
             </select>
+          </div>
+
+          <div className="setting-row">
+            <div className="setting-info">
+              <span className="setting-label">字幕段最长时长</span>
+              <span className="setting-description">
+                只限制最终字幕 segment，不改变发给 LLM 的音频批次长度。
+              </span>
+            </div>
+            <input
+              type="number"
+              className="premium-input"
+              min={3}
+              max={60}
+              step={1}
+              value={llmAligner.llm.maxSegmentSeconds}
+              onChange={(event) =>
+                updateLlmAligner({
+                  llm: {
+                    ...llmAligner.llm,
+                    maxSegmentSeconds: Number(event.target.value) || 12,
+                  },
+                })
+              }
+              disabled={pipelineSaving || !llmAligner.enabled}
+              style={{ width: 120 }}
+            />
           </div>
 
           <div className="setting-row">
@@ -917,7 +998,8 @@ function SubtitlesTabForm({
             <div className="setting-info">
               <span className="setting-label">Forced Aligner 模型</span>
               <span className="setting-description">
-                HuggingFace 模型 ID，默认 mlx-community/Qwen3-ForcedAligner-0.6B-8bit。
+                HuggingFace 模型 ID，默认
+                mlx-community/Qwen3-ForcedAligner-0.6B-8bit。
               </span>
             </div>
             <input
@@ -994,11 +1076,15 @@ function SubtitlesTabForm({
       </div>
 
       <div className="settings-group">
-        <h2 className="settings-group-title">{t.settings.subtitles.apiFetch}</h2>
+        <h2 className="settings-group-title">
+          {t.settings.subtitles.apiFetch}
+        </h2>
         <div className="settings-card-group">
           <div className="setting-row">
             <div className="setting-info">
-              <span className="setting-label">{t.settings.subtitles.enableApiFallback}</span>
+              <span className="setting-label">
+                {t.settings.subtitles.enableApiFallback}
+              </span>
               <span className="setting-description">
                 {t.settings.subtitles.enableApiFallbackDesc}
               </span>
@@ -1018,7 +1104,9 @@ function SubtitlesTabForm({
 
           <div className="setting-row">
             <div className="setting-info">
-              <span className="setting-label">{t.settings.subtitles.scope}</span>
+              <span className="setting-label">
+                {t.settings.subtitles.scope}
+              </span>
               <span className="setting-description">
                 {t.settings.subtitles.scopeDesc}
               </span>
@@ -1042,7 +1130,9 @@ function SubtitlesTabForm({
             <>
               <div className="setting-row">
                 <div className="setting-info">
-                  <span className="setting-label">{t.settings.subtitles.maxWait}</span>
+                  <span className="setting-label">
+                    {t.settings.subtitles.maxWait}
+                  </span>
                   <span className="setting-description">
                     {t.settings.subtitles.maxWaitDesc}
                   </span>
@@ -1066,7 +1156,9 @@ function SubtitlesTabForm({
               </div>
               <div className="setting-row">
                 <div className="setting-info">
-                  <span className="setting-label">{t.settings.subtitles.apiModel}</span>
+                  <span className="setting-label">
+                    {t.settings.subtitles.apiModel}
+                  </span>
                   <span className="setting-description">
                     {t.settings.subtitles.apiModelDesc}
                   </span>
@@ -1084,10 +1176,49 @@ function SubtitlesTabForm({
                   }
                 >
                   {multimodalModels.length === 0 ? (
-                    <option value="">{t.settings.subtitles.noMultimodalModels}</option>
+                    <option value="">
+                      {t.settings.subtitles.noMultimodalModels}
+                    </option>
                   ) : null}
                   {multimodalModels.map((model) => (
                     <option key={model.id} value={model.id}>
+                      {model.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="setting-row">
+                <div className="setting-info">
+                  <span className="setting-label">
+                    {t.settings.subtitles.apiFallbackModel}
+                  </span>
+                  <span className="setting-description">
+                    {t.settings.subtitles.apiFallbackModelDesc}
+                  </span>
+                </div>
+                <select
+                  className="premium-select"
+                  value={apiFallback.globalFallbackModelId || ''}
+                  onChange={(event) =>
+                    updateApiFallback({
+                      globalFallbackModelId: event.target.value,
+                    })
+                  }
+                  disabled={
+                    pipelineSaving ||
+                    !apiFallback.enabled ||
+                    multimodalModels.length === 0
+                  }
+                >
+                  <option value="">
+                    {t.settings.subtitles.noApiFallbackModel}
+                  </option>
+                  {multimodalModels.map((model) => (
+                    <option
+                      key={model.id}
+                      value={model.id}
+                      disabled={model.id === apiFallback.globalModelId}
+                    >
                       {model.name}
                     </option>
                   ))}
@@ -1098,7 +1229,9 @@ function SubtitlesTabForm({
             <>
               <div className="setting-row" style={{ borderBottom: 'none' }}>
                 <div className="setting-info">
-                  <span className="setting-label">{t.settings.subtitles.customRules}</span>
+                  <span className="setting-label">
+                    {t.settings.subtitles.customRules}
+                  </span>
                   <span className="setting-description">
                     {t.settings.subtitles.customRulesDesc}
                   </span>
@@ -1125,7 +1258,7 @@ function SubtitlesTabForm({
                     style={{
                       display: 'grid',
                       gridTemplateColumns:
-                        '96px minmax(0, 1fr) 120px 140px auto',
+                        '96px minmax(0, 1fr) 120px 140px 140px auto',
                       gap: 10,
                       padding: '0 2px',
                       fontSize: 12,
@@ -1139,6 +1272,7 @@ function SubtitlesTabForm({
                       description={t.settings.subtitles.escapeWaitDesc}
                     />
                     <span>{t.settings.subtitles.model}</span>
+                    <span>{t.settings.subtitles.fallbackModel}</span>
                     <span>{t.settings.subtitles.actions}</span>
                   </div>
                 ) : null}
@@ -1166,7 +1300,7 @@ function SubtitlesTabForm({
                         background: '#fff',
                         display: 'grid',
                         gridTemplateColumns:
-                          '96px minmax(0, 1fr) 120px 140px auto',
+                          '96px minmax(0, 1fr) 120px 140px 140px auto',
                         gap: 10,
                         alignItems: 'center',
                       }}
@@ -1184,8 +1318,12 @@ function SubtitlesTabForm({
                         }
                         disabled={pipelineSaving || !apiFallback.enabled}
                       >
-                        <option value="intent">{t.settings.subtitles.intent}</option>
-                        <option value="channel">{t.settings.subtitles.channel}</option>
+                        <option value="intent">
+                          {t.settings.subtitles.intent}
+                        </option>
+                        <option value="channel">
+                          {t.settings.subtitles.channel}
+                        </option>
                       </select>
 
                       <select
@@ -1270,6 +1408,30 @@ function SubtitlesTabForm({
                         ))}
                       </select>
 
+                      <select
+                        className="premium-select"
+                        value={rule.fallbackModelId || ''}
+                        onChange={(event) =>
+                          updateRule(rule.id, {
+                            fallbackModelId: event.target.value,
+                          })
+                        }
+                        disabled={pipelineSaving || !apiFallback.enabled}
+                      >
+                        <option value="">
+                          {t.settings.subtitles.noApiFallbackModel}
+                        </option>
+                        {multimodalModels.map((model) => (
+                          <option
+                            key={model.id}
+                            value={model.id}
+                            disabled={model.id === rule.modelId}
+                          >
+                            {model.name}
+                          </option>
+                        ))}
+                      </select>
+
                       <button
                         className="premium-button"
                         type="button"
@@ -1302,18 +1464,24 @@ function SubtitlesTabForm({
               onClick={savePipelineConfig}
               disabled={pipelineSaving}
             >
-              {pipelineSaving ? t.settings.subtitles.savingPipeline : t.settings.subtitles.savePipeline}
+              {pipelineSaving
+                ? t.settings.subtitles.savingPipeline
+                : t.settings.subtitles.savePipeline}
             </button>
           </div>
         </div>
       </div>
 
       <div className="settings-group">
-        <h2 className="settings-group-title">{t.settings.subtitles.promptTemplate}</h2>
+        <h2 className="settings-group-title">
+          {t.settings.subtitles.promptTemplate}
+        </h2>
         <div className="settings-card-group">
           <div className="setting-row" style={{ borderBottom: 'none' }}>
             <div className="setting-info">
-              <span className="setting-label">{t.settings.subtitles.apiPrompt}</span>
+              <span className="setting-label">
+                {t.settings.subtitles.apiPrompt}
+              </span>
               <span className="setting-description">
                 {t.settings.subtitles.apiPromptDesc}
               </span>
@@ -1351,7 +1519,9 @@ function SubtitlesTabForm({
 
           <div className="setting-row" style={{ borderBottom: 'none' }}>
             <div className="setting-info">
-              <span className="setting-label">{t.settings.subtitles.segmentPrompt}</span>
+              <span className="setting-label">
+                {t.settings.subtitles.segmentPrompt}
+              </span>
               <span className="setting-description">
                 {t.settings.subtitles.segmentPromptDesc}
               </span>
@@ -1396,7 +1566,9 @@ function SubtitlesTabForm({
               onClick={savePrompts}
               disabled={saving}
             >
-              {saving ? t.settings.subtitles.savingSettings : t.settings.subtitles.saveSettings}
+              {saving
+                ? t.settings.subtitles.savingSettings
+                : t.settings.subtitles.saveSettings}
             </button>
           </div>
         </div>

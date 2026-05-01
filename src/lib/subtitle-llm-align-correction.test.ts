@@ -82,9 +82,7 @@ describe('parseUtterancesJson', () => {
           transcript: '各位观众早上好，欢迎收看 AI 早报。',
         }),
       ),
-    ).toEqual([
-      { speaker: 'S1', text: '各位观众早上好，欢迎收看 AI 早报。' },
-    ]);
+    ).toEqual([{ speaker: 'S1', text: '各位观众早上好，欢迎收看 AI 早报。' }]);
 
     expect(
       parseUtterancesJson(
@@ -154,6 +152,19 @@ describe('buildTranscriptText / mapAlignedWordsToUtterances', () => {
     expect(mapped.avgProb).toBeCloseTo((0.9 + 0.8 + 0.7 + 0.6) / 4);
   });
 
+  it('does not send speaker labels into aligner transcript text', () => {
+    const utterances = [
+      { speaker: 'S1', text: '你好世界' },
+      { speaker: 'S2', text: '继续测试' },
+    ];
+    const { text, charMapping } = buildTranscriptText(utterances, true);
+
+    expect(text).toBe('你好世界\n继续测试');
+    expect(text).not.toContain('S1:');
+    expect(text).not.toContain('S2:');
+    expect(charMapping).toHaveLength('你好世界继续测试'.length);
+  });
+
   it('interpolates utterances evenly when char counts tie', () => {
     expect(
       interpolateUtterances(
@@ -179,7 +190,7 @@ describe('alignChunk fallbacks', () => {
     durationSec: 10,
   };
 
-  const llmConfig = { expectSpeakerLabels: false };
+  const llmConfig = { expectSpeakerLabels: false, maxSegmentSeconds: 12 };
 
   it('returns interpolated fallback when aligner throws', async () => {
     const result = await alignChunk({
@@ -201,9 +212,7 @@ describe('alignChunk fallbacks', () => {
     expect(result.alignFallback).toBe('interpolated');
     expect(result.utterances).toHaveLength(2);
     expect(result.utterances[0].start).toBe(0);
-    expect(result.utterances[1].end).toBeGreaterThan(
-      result.utterances[0].end,
-    );
+    expect(result.utterances[1].end).toBeGreaterThan(result.utterances[0].end);
   });
 
   it('falls back to interpolation when avgProb is too low', async () => {
@@ -297,6 +306,27 @@ describe('assembleSegments', () => {
     });
   });
 
+  it('caps failed transcription placeholder segment duration', () => {
+    const result = buildTranscribeFailedChunk({
+      chunkIndex: 2,
+      chunkOffsetSec: 120,
+      durationSec: 30,
+      maxSegmentSeconds: 12,
+    });
+
+    expect(result.utterances).toHaveLength(3);
+    expect(result.utterances[0]).toMatchObject({
+      text: '[转写失败] 1/3',
+      start: 0,
+      end: 10,
+    });
+    expect(result.utterances[2]).toMatchObject({
+      text: '[转写失败] 3/3',
+      start: 20,
+      end: 30,
+    });
+  });
+
   it('adds chunk offsets and preserves speakers', () => {
     const chunks: AlignedChunkResult[] = [
       {
@@ -333,6 +363,42 @@ describe('assembleSegments', () => {
       { start: 1, end: 2, text: 'hi', speaker: 'S1' },
       { start: 10, end: 13, text: 'there', speaker: 'S2' },
     ]);
+  });
+
+  it('splits long output segments without changing chunk duration', () => {
+    const chunks: AlignedChunkResult[] = [
+      {
+        offsetSec: 100,
+        durationSec: 60,
+        utterances: [
+          {
+            speaker: 'S1',
+            text: '第一句很长，需要拆成更短的字幕段。第二句继续说明同一个说话人也不能合成长段。',
+            start: 0,
+            end: 30,
+            avgProb: null,
+          },
+        ],
+        alignFallback: 'none',
+        transcribeFailed: false,
+        avgProb: null,
+        wordCount: 1,
+      },
+    ];
+
+    const segments = assembleSegments(chunks, { maxSegmentSeconds: 12 });
+
+    expect(segments.length).toBe(3);
+    expect(segments[0].start).toBe(100);
+    expect(segments.at(-1)?.end).toBe(130);
+    expect(segments.every((segment) => segment.end - segment.start <= 12)).toBe(
+      true,
+    );
+    expect(segments.every((segment) => segment.speaker === 'S1')).toBe(true);
+    expect(segments.map((segment) => segment.text).join('')).toBe(
+      chunks[0].utterances[0].text,
+    );
+    expect(chunks[0].durationSec).toBe(60);
   });
 
   it('skips empty text and drops undefined speakers', () => {
@@ -386,7 +452,7 @@ describe('transcribeChunk', () => {
       },
       model: TEST_MODEL,
       transcriber,
-      llmConfig: { expectSpeakerLabels: true },
+      llmConfig: { expectSpeakerLabels: true, maxSegmentSeconds: 12 },
       priority: 'manual-subtitle',
       chunkSeconds: 600,
     });
@@ -400,7 +466,9 @@ describe('transcribeChunk', () => {
     };
     expect(call.systemPrompt).toContain('测试视频');
     expect(call.systemPrompt).toContain('S1/S2/S3');
+    expect(call.systemPrompt).toContain('短句');
     expect(call.prompt).toContain('"utterances"');
+    expect(call.prompt).toContain('12 秒');
     expect(call.responseSchema).toMatchObject({
       type: 'object',
       required: ['utterances'],
@@ -433,7 +501,7 @@ describe('transcribeChunk', () => {
         video: { platform: 'youtube', video_id: 'abc' },
         model: TEST_MODEL,
         transcriber,
-        llmConfig: { expectSpeakerLabels: false },
+        llmConfig: { expectSpeakerLabels: false, maxSegmentSeconds: 12 },
         priority: 'auto-subtitle',
         chunkSeconds: 600,
       }),

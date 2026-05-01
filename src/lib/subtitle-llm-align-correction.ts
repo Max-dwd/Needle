@@ -135,10 +135,10 @@ export function buildLlmTranscribeSystemPrompt(
     `描述摘要：${description.slice(0, 500)}`,
     '规则：',
     '1. 严格按原话转写，不改写、不意译、不删减语气词。',
-    '2. 按说话人轮次切段；同一说话人连续说话算一段。',
+    '2. 按自然语句和字幕阅读节奏切段；即使同一说话人连续发言，也要拆成多个短句段。',
     speakerRule,
-    '4. 不输出时间戳，不输出解释，只输出 JSON。',
-    '5. 音频前后各有 0.5 秒边界余量，属于上下文，忽略即可。',
+    '4. 单段尽量是一句完整短句，避免整段独白；不要为了说话人一致而合并长段。',
+    '5. 不输出时间戳，不输出解释，只输出 JSON。',
   ].join('\n');
 }
 
@@ -232,9 +232,7 @@ function normalizeUtteranceItem(
   for (const key of UTTERANCE_ARRAY_KEYS) {
     const nested = value[key];
     if (Array.isArray(nested)) {
-      return nested.flatMap((entry) =>
-        normalizeUtteranceItem(entry, speaker),
-      );
+      return nested.flatMap((entry) => normalizeUtteranceItem(entry, speaker));
     }
   }
 
@@ -352,6 +350,7 @@ export async function transcribeChunk(
     prompt: [
       '请听音频并只输出严格 JSON，不要 Markdown，不要解释。',
       'JSON 形状必须是：{"utterances":[{"speaker":"S1","text":"逐字转写内容"}]}',
+      `每个 utterance 是最终字幕候选段，尽量控制在 ${options.llmConfig.maxSegmentSeconds} 秒左右的自然短句；同一说话人连续讲话也要拆短，不要合成长段。`,
       options.llmConfig.expectSpeakerLabels
         ? 'speaker 用 S1/S2/S3 等编号；如果无法区分说话人，全部用 S1。'
         : 'speaker 全部写 S1。',
@@ -390,12 +389,11 @@ export function buildTranscriptText(
   const charMapping: CharMapping[] = [];
 
   utterances.forEach((utterance, index) => {
-    // The speaker prefix is cosmetic for the aligner; we only count text chars
-    // towards the utterance mapping to make alignment robust to prefix tokens.
-    const prefix = expectSpeakerLabels ? `${utterance.speaker}: ` : '';
-    lines.push(`${prefix}${utterance.text}`);
-    // Push actual text chars into mapping, skipping whitespace tracking for
-    // start-of-line (which we treat as utterance boundary separator).
+    // Speaker labels are metadata. Sending them to the aligner shifts the
+    // char-based mapping because the aligned tokens include labels that are not
+    // part of the subtitle text.
+    lines.push(utterance.text);
+    // Push actual text chars into mapping, skipping whitespace tracking.
     for (const char of utterance.text) {
       if (/\s/.test(char)) continue;
       charMapping.push({ char, utteranceIndex: index });
@@ -445,10 +443,7 @@ export function mapAlignedWordsToUtterances(
     const stripped = stripWhitespace(word.text);
     if (!stripped) continue;
     const consumeCount = stripped.length;
-    const endPointer = Math.min(
-      charMapping.length,
-      charPointer + consumeCount,
-    );
+    const endPointer = Math.min(charMapping.length, charPointer + consumeCount);
     if (endPointer <= charPointer) continue;
 
     const utteranceCounts = new Map<number, number>();
@@ -555,23 +550,35 @@ export function buildTranscribeFailedChunk(input: {
   chunkIndex: number;
   chunkOffsetSec: number;
   durationSec: number;
+  maxSegmentSeconds?: number;
   speaker?: string;
   text?: string;
 }): AlignedChunkResult {
   const speaker = input.speaker?.trim() || 'S1';
   const text = input.text?.trim() || '[转写失败]';
+  const durationSec = Math.max(0.1, input.durationSec);
+  const maxSegmentSeconds =
+    Number.isFinite(input.maxSegmentSeconds) &&
+    Number(input.maxSegmentSeconds) > 0
+      ? Number(input.maxSegmentSeconds)
+      : durationSec;
+  const partCount = Math.max(1, Math.ceil(durationSec / maxSegmentSeconds));
+  const partDuration = durationSec / partCount;
   return {
     offsetSec: input.chunkOffsetSec,
-    durationSec: Math.max(0.1, input.durationSec),
-    utterances: [
-      {
+    durationSec,
+    utterances: Array.from({ length: partCount }, (_, index) => {
+      const start = partDuration * index;
+      const end =
+        index === partCount - 1 ? durationSec : partDuration * (index + 1);
+      return {
         speaker,
-        text,
-        start: 0,
-        end: Math.max(0.1, input.durationSec),
+        text: partCount > 1 ? `${text} ${index + 1}/${partCount}` : text,
+        start,
+        end: Math.max(start + 0.05, end),
         avgProb: null,
-      },
-    ],
+      };
+    }),
     alignFallback: 'interpolated',
     transcribeFailed: true,
     avgProb: null,
@@ -652,11 +659,7 @@ export async function alignChunk(
     : MIN_WORD_RATIO_DEFAULT;
 
   if (!alignerResult) {
-    return buildInterpolatedChunk(
-      chunk,
-      utterances,
-      'aligner-error',
-    );
+    return buildInterpolatedChunk(chunk, utterances, 'aligner-error');
   }
 
   const mapping = mapAlignedWordsToUtterances(
@@ -668,10 +671,7 @@ export async function alignChunk(
   const wordCharRatio =
     charMapping.length === 0 ? 0 : mapping.matchedChars / charMapping.length;
 
-  if (
-    mapping.avgProb !== null &&
-    mapping.avgProb < minAvgProb
-  ) {
+  if (mapping.avgProb !== null && mapping.avgProb < minAvgProb) {
     return buildInterpolatedChunk(
       chunk,
       utterances,
@@ -691,8 +691,8 @@ export async function alignChunk(
     );
   }
 
-  const alignedUtterances: AlignedUtterance[] = utterances.map(
-    (utterance, index) => {
+  const alignedUtterances: AlignedUtterance[] = utterances
+    .map((utterance, index) => {
       const timing = mapping.utteranceTimings[index];
       if (!timing) {
         // Missing timing for this utterance — interpolate within neighbours
@@ -706,8 +706,8 @@ export async function alignChunk(
         end: bounded.end,
         avgProb: timing.avgProb,
       };
-    },
-  ).filter((value): value is AlignedUtterance => value !== null);
+    })
+    .filter((value): value is AlignedUtterance => value !== null);
 
   if (alignedUtterances.length === 0) {
     return buildInterpolatedChunk(
@@ -742,10 +742,7 @@ function boundTiming(
 ): { start: number; end: number } {
   const safeDuration = Math.max(0.1, durationSec);
   const clampedStart = Math.max(0, Math.min(safeDuration, start));
-  const clampedEnd = Math.max(
-    clampedStart + 0.05,
-    Math.min(safeDuration, end),
-  );
+  const clampedEnd = Math.max(clampedStart + 0.05, Math.min(safeDuration, end));
   return { start: clampedStart, end: clampedEnd };
 }
 
@@ -781,23 +778,98 @@ function buildInterpolatedChunk(
 
 export function assembleSegments(
   chunks: AlignedChunkResult[],
+  options: { maxSegmentSeconds?: number } = {},
 ): AssembledSubtitleSegment[] {
   const segments: AssembledSubtitleSegment[] = [];
+  const maxSegmentSeconds = Number.isFinite(options.maxSegmentSeconds)
+    ? Math.max(0.5, Number(options.maxSegmentSeconds))
+    : null;
   for (const chunk of chunks) {
     for (const utterance of chunk.utterances) {
       const text = utterance.text.trim();
       if (!text) continue;
       const start = chunk.offsetSec + utterance.start;
       const end = chunk.offsetSec + utterance.end;
-      segments.push({
+      const segment = {
         start: Math.max(0, start),
         end: Math.max(start + 0.05, end),
         text,
         speaker: utterance.speaker || undefined,
-      });
+      };
+      segments.push(
+        ...(maxSegmentSeconds
+          ? splitLongSegment(segment, maxSegmentSeconds)
+          : [segment]),
+      );
     }
   }
   return segments;
+}
+
+function splitLongSegment(
+  segment: AssembledSubtitleSegment,
+  maxSegmentSeconds: number,
+): AssembledSubtitleSegment[] {
+  const duration = segment.end - segment.start;
+  if (duration <= maxSegmentSeconds) return [segment];
+
+  const partCount = Math.max(1, Math.ceil(duration / maxSegmentSeconds));
+  const textParts = splitTextIntoParts(segment.text, partCount);
+  if (textParts.length <= 1) return [segment];
+
+  const partDuration = duration / textParts.length;
+  return textParts.map((text, index) => {
+    const start = segment.start + partDuration * index;
+    const end =
+      index === textParts.length - 1
+        ? segment.end
+        : segment.start + partDuration * (index + 1);
+    return {
+      start,
+      end: Math.max(start + 0.05, end),
+      text,
+      speaker: segment.speaker,
+    };
+  });
+}
+
+function splitTextIntoParts(text: string, partCount: number): string[] {
+  const chars = Array.from(text.trim());
+  if (chars.length === 0 || partCount <= 1)
+    return [text.trim()].filter(Boolean);
+
+  const parts: string[] = [];
+  let start = 0;
+  for (let partIndex = 1; partIndex < partCount; partIndex += 1) {
+    const target = Math.round((chars.length * partIndex) / partCount);
+    const boundary = findTextBoundary(chars, start, target);
+    if (boundary <= start || boundary >= chars.length) continue;
+    parts.push(chars.slice(start, boundary).join('').trim());
+    start = boundary;
+    while (start < chars.length && /\s/.test(chars[start])) start += 1;
+  }
+  parts.push(chars.slice(start).join('').trim());
+  return parts.filter(Boolean);
+}
+
+function findTextBoundary(
+  chars: string[],
+  start: number,
+  target: number,
+): number {
+  const boundedTarget = Math.max(start + 1, Math.min(chars.length - 1, target));
+  const window = Math.max(6, Math.round(chars.length * 0.08));
+  const min = Math.max(start + 1, boundedTarget - window);
+  const max = Math.min(chars.length - 1, boundedTarget + window);
+  const punctuation = /[。！？!?；;，,、\s]/;
+
+  for (let distance = 0; distance <= window; distance += 1) {
+    const right = boundedTarget + distance;
+    if (right <= max && punctuation.test(chars[right])) return right + 1;
+    const left = boundedTarget - distance;
+    if (left >= min && punctuation.test(chars[left])) return left + 1;
+  }
+  return boundedTarget;
 }
 
 export interface LlmAlignerChunkSummary {

@@ -447,6 +447,11 @@ export const en: typeof zh = {
       apiModel: 'API Model',
       apiModelDesc:
         'Only models marked as multimodal on the Models page are shown.',
+      apiFallbackModel: 'API Fallback Model',
+      apiFallbackModelDesc:
+        'If the primary model call fails, try this multimodal model next. Leave empty to disable model-level fallback.',
+      fallbackModel: 'Fallback Model',
+      noApiFallbackModel: 'No fallback model',
       noMultimodalModels:
         'Mark a multimodal model on the Models page first',
       customRules: 'Custom Rules',

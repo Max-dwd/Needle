@@ -411,6 +411,11 @@ export const zh = {
         '累计等待超过这个阈值后，如果 AI budget 有余量，就会提前逃逸到 API。',
       apiModel: 'API 模型',
       apiModelDesc: '只显示在模型页勾选为多模态的模型。',
+      apiFallbackModel: 'API 备用模型',
+      apiFallbackModelDesc:
+        '主模型调用失败时，再尝试这个多模态模型；留空则不做模型级 fallback。',
+      fallbackModel: '备用模型',
+      noApiFallbackModel: '不使用备用模型',
       noMultimodalModels: '请先在模型页勾选多模态模型',
       customRules: '自定义规则',
       customRulesDesc:

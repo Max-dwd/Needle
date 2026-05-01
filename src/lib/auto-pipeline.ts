@@ -452,6 +452,8 @@ async function runSubtitleJob(
         ? {
             preferredMethod: 'api-fallback',
             apiModelId: apiFallbackMatch?.modelId || undefined,
+            apiFallbackModelId:
+              apiFallbackMatch?.fallbackModelId || undefined,
             signal,
             force: true,
           }
@@ -492,6 +494,7 @@ async function runSubtitleJob(
         const apiResult = await ensureSubtitleForVideo(job.videoDbId, {
           preferredMethod: 'api-fallback',
           apiModelId: apiFallbackMatch.modelId || undefined,
+          apiFallbackModelId: apiFallbackMatch.fallbackModelId || undefined,
           signal,
           force: true,
         });

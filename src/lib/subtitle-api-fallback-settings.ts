@@ -17,6 +17,7 @@ export interface SubtitleApiFallbackRule {
   targetLabel: string;
   maxWaitSeconds: number;
   modelId: string;
+  fallbackModelId: string;
 }
 
 export interface SubtitleApiFallbackConfig {
@@ -24,6 +25,7 @@ export interface SubtitleApiFallbackConfig {
   scope: SubtitleApiFallbackScope;
   globalMaxWaitSeconds: number;
   globalModelId: string;
+  globalFallbackModelId: string;
   customRules: SubtitleApiFallbackRule[];
   updatedAt: string | null;
 }
@@ -35,6 +37,7 @@ interface StoredSubtitleApiFallbackRule {
   targetLabel?: unknown;
   maxWaitSeconds?: unknown;
   modelId?: unknown;
+  fallbackModelId?: unknown;
 }
 
 interface StoredSubtitleApiFallbackConfig {
@@ -42,6 +45,7 @@ interface StoredSubtitleApiFallbackConfig {
   scope?: unknown;
   globalMaxWaitSeconds?: unknown;
   globalModelId?: unknown;
+  globalFallbackModelId?: unknown;
   customRules?: unknown;
 }
 
@@ -49,6 +53,7 @@ export interface SubtitleApiFallbackMatch {
   source: SubtitleApiFallbackScope;
   maxWaitSeconds: number;
   modelId: string | null;
+  fallbackModelId: string | null;
   ruleId: string | null;
 }
 
@@ -81,6 +86,7 @@ function normalizeRule(
   const targetId = normalizeText(raw.targetId);
   const targetLabel = normalizeText(raw.targetLabel);
   const modelId = normalizeText(raw.modelId);
+  const fallbackModelId = normalizeText(raw.fallbackModelId);
   if (!targetType || !targetId || !targetLabel || !modelId) return null;
   if (!validModelIds.has(modelId)) return null;
   return {
@@ -90,6 +96,10 @@ function normalizeRule(
     targetLabel,
     maxWaitSeconds: normalizeNonNegativeInt(raw.maxWaitSeconds, 0),
     modelId,
+    fallbackModelId:
+      fallbackModelId && fallbackModelId !== modelId && validModelIds.has(fallbackModelId)
+        ? fallbackModelId
+        : '',
   };
 }
 
@@ -123,6 +133,17 @@ function normalizeConfig(
     globalModelId: validModelIds.has(normalizeText(value.globalModelId))
       ? normalizeText(value.globalModelId)
       : preferredGlobalModelId,
+    globalFallbackModelId: (() => {
+      const fallbackModelId = normalizeText(value.globalFallbackModelId);
+      const globalModelId = validModelIds.has(normalizeText(value.globalModelId))
+        ? normalizeText(value.globalModelId)
+        : preferredGlobalModelId;
+      return fallbackModelId &&
+        fallbackModelId !== globalModelId &&
+        validModelIds.has(fallbackModelId)
+        ? fallbackModelId
+        : '';
+    })(),
     customRules: customRulesRaw
       .map((rule, index) =>
         normalizeRule(
@@ -168,6 +189,7 @@ export function setSubtitleApiFallbackConfig(
       scope: normalized.scope,
       globalMaxWaitSeconds: normalized.globalMaxWaitSeconds,
       globalModelId: normalized.globalModelId,
+      globalFallbackModelId: normalized.globalFallbackModelId,
       customRules: normalized.customRules,
     }),
   );
@@ -185,6 +207,7 @@ export function resolveSubtitleApiFallbackMatch(
       source: 'global',
       maxWaitSeconds: config.globalMaxWaitSeconds,
       modelId: config.globalModelId || null,
+      fallbackModelId: config.globalFallbackModelId || null,
       ruleId: null,
     };
   }
@@ -207,6 +230,7 @@ export function resolveSubtitleApiFallbackMatch(
     source: 'custom',
     maxWaitSeconds: matchedRule.maxWaitSeconds,
     modelId: matchedRule.modelId,
+    fallbackModelId: matchedRule.fallbackModelId || null,
     ruleId: matchedRule.id,
   };
 }

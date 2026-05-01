@@ -55,6 +55,7 @@ describe('subtitle api fallback settings', () => {
       scope: 'global',
       globalMaxWaitSeconds: 0,
       globalModelId: 'default',
+      globalFallbackModelId: '',
       customRules: [],
       updatedAt: null,
     });
@@ -72,6 +73,7 @@ describe('subtitle api fallback settings', () => {
             targetId: '12',
             targetLabel: '工作',
             modelId: 'fast',
+            fallbackModelId: 'default',
           },
           {
             id: 'bad-model',
@@ -92,6 +94,7 @@ describe('subtitle api fallback settings', () => {
         targetLabel: '工作',
         maxWaitSeconds: 0,
         modelId: 'fast',
+        fallbackModelId: 'default',
       },
     ]);
   });
@@ -108,6 +111,7 @@ describe('subtitle api fallback settings', () => {
             targetId: '7',
             targetLabel: '频道 A',
             modelId: 'fast',
+            fallbackModelId: 'default',
           },
           {
             id: 'intent-rule',
@@ -115,6 +119,7 @@ describe('subtitle api fallback settings', () => {
             targetId: '3',
             targetLabel: '探索',
             modelId: 'default',
+            fallbackModelId: 'fast',
           },
         ],
       }),
@@ -125,6 +130,7 @@ describe('subtitle api fallback settings', () => {
     ).toMatchObject({
       source: 'custom',
       modelId: 'fast',
+      fallbackModelId: 'default',
       ruleId: 'channel-rule',
     });
 
@@ -133,6 +139,7 @@ describe('subtitle api fallback settings', () => {
     ).toMatchObject({
       source: 'custom',
       modelId: 'default',
+      fallbackModelId: 'fast',
       ruleId: 'intent-rule',
     });
 
@@ -147,6 +154,7 @@ describe('subtitle api fallback settings', () => {
       scope: 'global',
       globalMaxWaitSeconds: 10,
       globalModelId: 'fast',
+      globalFallbackModelId: 'default',
       customRules: [],
     });
 
@@ -154,6 +162,9 @@ describe('subtitle api fallback settings', () => {
     expect(mockSetAppSetting.mock.calls[0]?.[1]).toContain('"enabled":true');
     expect(mockSetAppSetting.mock.calls[0]?.[1]).toContain('"scope":"global"');
     expect(mockSetAppSetting.mock.calls[0]?.[1]).toContain('"globalModelId":"fast"');
+    expect(mockSetAppSetting.mock.calls[0]?.[1]).toContain(
+      '"globalFallbackModelId":"default"',
+    );
   });
 
   it('only allows multimodal models for api fallback selection', () => {
@@ -183,6 +194,7 @@ describe('subtitle api fallback settings', () => {
         enabled: true,
         scope: 'custom',
         globalModelId: 'text',
+        globalFallbackModelId: 'vision',
         customRules: [
           {
             id: 'bad-text-model',
@@ -190,6 +202,7 @@ describe('subtitle api fallback settings', () => {
             targetId: '12',
             targetLabel: '工作',
             modelId: 'text',
+            fallbackModelId: 'vision',
           },
           {
             id: 'ok-vision-model',
@@ -197,6 +210,7 @@ describe('subtitle api fallback settings', () => {
             targetId: '5',
             targetLabel: '频道',
             modelId: 'vision',
+            fallbackModelId: 'text',
           },
         ],
       }),
@@ -205,6 +219,7 @@ describe('subtitle api fallback settings', () => {
     const config = getSubtitleApiFallbackConfig();
 
     expect(config.globalModelId).toBe('vision');
+    expect(config.globalFallbackModelId).toBe('');
     expect(config.customRules).toEqual([
       {
         id: 'ok-vision-model',
@@ -213,6 +228,7 @@ describe('subtitle api fallback settings', () => {
         targetLabel: '频道',
         maxWaitSeconds: 0,
         modelId: 'vision',
+        fallbackModelId: '',
       },
     ]);
   });

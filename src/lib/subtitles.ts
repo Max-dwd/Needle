@@ -126,6 +126,7 @@ export interface SubtitleFetchOptions {
   requestSource?: 'default' | 'player';
   preferredMethod?: string;
   apiModelId?: string;
+  apiFallbackModelId?: string;
   allowBrowser?: boolean;
   allowOpenCli?: boolean;
   bilibiliContext?: BilibiliSubtitleFetchContext;
@@ -1757,11 +1758,16 @@ async function fetchSubtitleViaLlmAligner(
       throwIfAborted(signal);
       await waitForCrawlerResumeIfNeeded(respectPause);
 
-      const chunkAudioPath = await sliceAudioByRange(audioPath, chunkDir, {
-        index: range.index,
-        offsetSec: range.offsetSec,
-        endSec: range.endSec,
-      }, { paddingSeconds: 0.5, signal });
+      const chunkAudioPath = await sliceAudioByRange(
+        audioPath,
+        chunkDir,
+        {
+          index: range.index,
+          offsetSec: range.offsetSec,
+          endSec: range.endSec,
+        },
+        { paddingSeconds: 0, signal },
+      );
 
       let utterances: TranscribedUtterance[] = [];
       let transcribeFailed = false;
@@ -1785,10 +1791,7 @@ async function fetchSubtitleViaLlmAligner(
         if (typeof transcribed.totalTokens === 'number') {
           totalTokens += transcribed.totalTokens;
         }
-        if (
-          range.index === 0 &&
-          typeof transcribed.ttftSeconds === 'number'
-        ) {
+        if (range.index === 0 && typeof transcribed.ttftSeconds === 'number') {
           firstChunkTtft = transcribed.ttftSeconds;
         }
       } catch (error) {
@@ -1808,6 +1811,7 @@ async function fetchSubtitleViaLlmAligner(
             chunkIndex: range.index,
             chunkOffsetSec: range.offsetSec,
             durationSec,
+            maxSegmentSeconds: llmAlignerConfig.llm.maxSegmentSeconds,
           }),
         );
         continue;
@@ -1830,10 +1834,7 @@ async function fetchSubtitleViaLlmAligner(
         tempDir,
         `aligner-${String(range.index).padStart(3, '0')}`,
       );
-      const transcriptPath = path.join(
-        alignerOutputDir,
-        'transcript.txt',
-      );
+      const transcriptPath = path.join(alignerOutputDir, 'transcript.txt');
 
       const aligned = await runLlmAlignerChunkAlignment({
         chunk: {
@@ -1877,13 +1878,12 @@ async function fetchSubtitleViaLlmAligner(
       );
     }
 
-    const assembled = assembleLlmAlignerSegments(chunkResults);
+    const assembled = assembleLlmAlignerSegments(chunkResults, {
+      maxSegmentSeconds: llmAlignerConfig.llm.maxSegmentSeconds,
+    });
     const segments: SubtitleSegment[] = assembled.map((segment) => ({
       start: Math.max(0, Math.floor(segment.start)),
-      end: Math.max(
-        Math.floor(segment.end),
-        Math.floor(segment.start) + 1,
-      ),
+      end: Math.max(Math.floor(segment.end), Math.floor(segment.start) + 1),
       text: segment.text,
       ...(segment.speaker ? { speaker: segment.speaker } : {}),
     }));
@@ -1917,6 +1917,7 @@ async function fetchSubtitleViaLlmAligner(
         ),
         chunk_count: summary.chunkCount,
         chunk_seconds: chunkSeconds,
+        max_segment_seconds: llmAlignerConfig.llm.maxSegmentSeconds,
         aligner_model: llmAlignerConfig.aligner.modelId,
         aligner_total_words: summary.totalWordCount,
         ...(summary.avgProb !== null
@@ -2150,6 +2151,28 @@ function resolveSubtitleApiModel(
   throw new Error('未配置多模态 AI 模型，无法执行 API 字幕提取');
 }
 
+function resolveSubtitleApiFallbackModel(
+  primaryModel: AiSummaryModelConfig,
+  fallbackModelId: string | null | undefined,
+): AiSummaryModelConfig | null {
+  const normalizedFallbackId = fallbackModelId?.trim();
+  if (!normalizedFallbackId || normalizedFallbackId === primaryModel.id) {
+    return null;
+  }
+
+  const settings = getAiSummarySettings();
+  const fallbackModel = settings.models.find(
+    (model) => model.id === normalizedFallbackId,
+  );
+  if (!fallbackModel) {
+    throw new Error('选择的 API 字幕备用模型不存在');
+  }
+  if (fallbackModel.isMultimodal === false) {
+    throw new Error('API 字幕备用模型必须是多模态模型');
+  }
+  return fallbackModel;
+}
+
 function classifySubtitleFailure(
   status: string,
   error: string | null | undefined,
@@ -2339,12 +2362,23 @@ export async function fetchAndStoreSubtitle(
     effectiveAllowBrowser,
   );
   const statusPreferredMethod = methodOrder[0] || BROWSER_METHOD_ID;
-  let selectedApiModel: AiSummaryModelConfig | null = null;
-  const getSelectedApiModel = () => {
-    selectedApiModel ??= resolveSubtitleApiModel(
-      options?.apiModelId || autoApiFallbackMatch?.modelId,
-    );
-    return selectedApiModel;
+  let selectedApiModels:
+    | { primary: AiSummaryModelConfig; fallback: AiSummaryModelConfig | null }
+    | null = null;
+  const getSelectedApiModels = () => {
+    if (!selectedApiModels) {
+      const primary = resolveSubtitleApiModel(
+        options?.apiModelId || autoApiFallbackMatch?.modelId,
+      );
+      selectedApiModels = {
+        primary,
+        fallback: resolveSubtitleApiFallbackModel(
+          primary,
+          options?.apiFallbackModelId || autoApiFallbackMatch?.fallbackModelId,
+        ),
+      };
+    }
+    return selectedApiModels;
   };
   const externalSignal = options?.signal;
   let innerWroteState = false;
@@ -2451,75 +2485,119 @@ export async function fetchAndStoreSubtitle(
       getMethodMessage(method, isFallback),
     );
 
-    if (method === 'whisper-ai') {
-      const payload = await fetchSubtitleViaWhisperAi(
-        video,
-        aiApiPriority,
-        respectPause,
-        getSelectedApiModel(),
-        externalSignal,
-        async (partialPayload) => {
-          const stored = persistStructuredSubtitle(video, partialPayload);
-          updateSubtitleStateAndTrack({
-            subtitle_path: getJsonTargetPath(video),
-            subtitle_language: stored.language,
-            subtitle_format: stored.format,
-            subtitle_status: 'fetching',
-            subtitle_error: null,
-            subtitle_last_attempt_at: attemptAt,
-            subtitle_retry_count: video.subtitle_retry_count,
-            subtitle_cooldown_until: null,
-          });
-          appEvents.emit('subtitle:status-changed', {
-            videoId: video.video_id,
-            platform: video.platform,
-            status: 'fetching',
-            error: null,
-            cooldownUntil: null,
-            preferredMethod: statusPreferredMethod,
-            activeMethod: method,
-            isFallback,
-            hasPartial: true,
-            partialSegmentCount: stored.segments?.length || 0,
-            completedBatchCount:
-              partialPayload.metadata?.completed_batch_count ?? null,
-            batchCount: partialPayload.metadata?.batch_count ?? null,
-            message: `Whisper 校对字幕已加载 ${partialPayload.metadata?.completed_batch_count ?? '?'} / ${partialPayload.metadata?.batch_count ?? '?'} 个分片`,
-          });
-        },
-      );
-      persistStructuredSuccess('whisper-ai', payload);
-      return true;
-    }
+    if (
+      method === 'whisper-ai' ||
+      method === 'llm-aligner' ||
+      method === 'gemini'
+    ) {
+      const { primary, fallback } = getSelectedApiModels();
+      const modelCandidates = fallback ? [primary, fallback] : [primary];
+      const modelErrors: string[] = [];
 
-    if (method === 'llm-aligner') {
-      const payload = await fetchSubtitleViaLlmAligner(
-        video,
-        aiApiPriority,
-        respectPause,
-        getSelectedApiModel(),
-        externalSignal,
-      );
-      persistStructuredSuccess('llm-aligner', payload);
-      return true;
-    }
+      for (const [modelIndex, model] of modelCandidates.entries()) {
+        const isModelFallback = modelIndex > 0;
+        if (isModelFallback) {
+          const reason =
+            modelErrors[modelErrors.length - 1] || 'primary model failed';
+          logSubtitleFallback(
+            video,
+            `${method}:${primary.id}`,
+            `${method}:${model.id}`,
+            reason,
+          );
+          markSubtitleRunning(
+            video,
+            statusPreferredMethod,
+            method,
+            true,
+            `主模型失败，切换备用多模态模型 ${model.name || model.model || model.id}`,
+          );
+        }
 
-    if (method === 'gemini') {
-      const payload =
-        video.platform === 'youtube'
-          ? await fetchYoutubeSubtitleViaAiApi(
+        try {
+          if (method === 'whisper-ai') {
+            const payload = await fetchSubtitleViaWhisperAi(
               video,
               aiApiPriority,
               respectPause,
-              getSelectedApiModel(),
-            )
-          : await fetchBilibiliSubtitleViaAiApi(
-              video,
-              aiApiPriority,
-              respectPause,
-              getSelectedApiModel(),
+              model,
+              externalSignal,
+              async (partialPayload) => {
+                const stored = persistStructuredSubtitle(video, partialPayload);
+                updateSubtitleStateAndTrack({
+                  subtitle_path: getJsonTargetPath(video),
+                  subtitle_language: stored.language,
+                  subtitle_format: stored.format,
+                  subtitle_status: 'fetching',
+                  subtitle_error: null,
+                  subtitle_last_attempt_at: attemptAt,
+                  subtitle_retry_count: video.subtitle_retry_count,
+                  subtitle_cooldown_until: null,
+                });
+                appEvents.emit('subtitle:status-changed', {
+                  videoId: video.video_id,
+                  platform: video.platform,
+                  status: 'fetching',
+                  error: null,
+                  cooldownUntil: null,
+                  preferredMethod: statusPreferredMethod,
+                  activeMethod: method,
+                  isFallback: isFallback || isModelFallback,
+                  hasPartial: true,
+                  partialSegmentCount: stored.segments?.length || 0,
+                  completedBatchCount:
+                    partialPayload.metadata?.completed_batch_count ?? null,
+                  batchCount: partialPayload.metadata?.batch_count ?? null,
+                  message: `Whisper 校对字幕已加载 ${partialPayload.metadata?.completed_batch_count ?? '?'} / ${partialPayload.metadata?.batch_count ?? '?'} 个分片`,
+                });
+              },
             );
-      persistStructuredSuccess('gemini', payload);
+            persistStructuredSuccess('whisper-ai', payload);
+            return true;
+          }
+
+          if (method === 'llm-aligner') {
+            const payload = await fetchSubtitleViaLlmAligner(
+              video,
+              aiApiPriority,
+              respectPause,
+              model,
+              externalSignal,
+            );
+            persistStructuredSuccess('llm-aligner', payload);
+            return true;
+          }
+
+          const payload =
+            video.platform === 'youtube'
+              ? await fetchYoutubeSubtitleViaAiApi(
+                  video,
+                  aiApiPriority,
+                  respectPause,
+                  model,
+                )
+              : await fetchBilibiliSubtitleViaAiApi(
+                  video,
+                  aiApiPriority,
+                  respectPause,
+                  model,
+                );
+          persistStructuredSuccess('gemini', payload);
+          return true;
+        } catch (error) {
+          if (isAbortError(error)) {
+            throw error;
+          }
+          const message = `${model.name || model.model || model.id}: ${
+            error instanceof Error ? error.message : String(error)
+          }`;
+          modelErrors.push(compactLogValue(message));
+          if (!fallback || modelIndex === modelCandidates.length - 1) {
+            throw new Error(modelErrors.join(' | '));
+          }
+        }
+      }
+
       return true;
     }
 

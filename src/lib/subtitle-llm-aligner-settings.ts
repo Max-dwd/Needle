@@ -20,6 +20,7 @@ export interface SubtitleLlmAlignerAlignerConfig {
 
 export interface SubtitleLlmAlignerLlmConfig {
   expectSpeakerLabels: boolean;
+  maxSegmentSeconds: number;
 }
 
 export interface SubtitleLlmAlignerConfig {
@@ -45,6 +46,7 @@ const DEFAULT_ALIGNER_CONFIG: SubtitleLlmAlignerAlignerConfig = {
 
 const DEFAULT_LLM_CONFIG: SubtitleLlmAlignerLlmConfig = {
   expectSpeakerLabels: true,
+  maxSegmentSeconds: 12,
 };
 
 function normalizeText(value: unknown, fallback: string): string {
@@ -70,9 +72,7 @@ function normalizeRatio(value: unknown, fallback: number): number {
   return Math.min(1, Math.max(0, numeric));
 }
 
-function normalizeAlignerConfig(
-  raw: unknown,
-): SubtitleLlmAlignerAlignerConfig {
+function normalizeAlignerConfig(raw: unknown): SubtitleLlmAlignerAlignerConfig {
   const value =
     raw && typeof raw === 'object'
       ? (raw as Partial<SubtitleLlmAlignerAlignerConfig>)
@@ -100,6 +100,12 @@ function normalizeLlmConfig(raw: unknown): SubtitleLlmAlignerLlmConfig {
       value.expectSpeakerLabels === undefined
         ? DEFAULT_LLM_CONFIG.expectSpeakerLabels
         : Boolean(value.expectSpeakerLabels),
+    maxSegmentSeconds: normalizeInteger(
+      value.maxSegmentSeconds,
+      DEFAULT_LLM_CONFIG.maxSegmentSeconds,
+      3,
+      60,
+    ),
   };
 }
 

@@ -112,6 +112,7 @@ const SUBTITLE_PIPELINE_DEFINITIONS: PipelinePlatformDefinition[] = [
         label: 'LLM 转写 + 本地对齐',
         description:
           '多模态 AI 出完整文本和说话人，MLX forced aligner 出词级时间戳。',
+        defaultEnabled: false,
       },
       {
         id: 'gemini',
@@ -141,6 +142,7 @@ const SUBTITLE_PIPELINE_DEFINITIONS: PipelinePlatformDefinition[] = [
         label: 'LLM 转写 + 本地对齐',
         description:
           '多模态 AI 出完整文本和说话人，MLX forced aligner 出词级时间戳。',
+        defaultEnabled: false,
       },
       {
         id: 'gemini',

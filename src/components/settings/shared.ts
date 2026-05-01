@@ -138,8 +138,6 @@ export type PlayerKeyboardActionId =
   | 'toggle-mute'
   | 'toggle-subtitle-overlay';
 
-
-
 export interface PlayerKeyboardBinding {
   action: PlayerKeyboardActionId;
   key: string;
@@ -215,6 +213,7 @@ export interface SubtitleApiFallbackRule {
   targetLabel: string;
   maxWaitSeconds: number;
   modelId: string;
+  fallbackModelId: string;
 }
 
 export interface SubtitleApiFallbackConfig {
@@ -222,6 +221,7 @@ export interface SubtitleApiFallbackConfig {
   scope: SubtitleApiFallbackScope;
   globalMaxWaitSeconds: number;
   globalModelId: string;
+  globalFallbackModelId: string;
   customRules: SubtitleApiFallbackRule[];
   updatedAt: string | null;
 }
@@ -260,6 +260,7 @@ export interface SubtitleLlmAlignerAlignerConfig {
 
 export interface SubtitleLlmAlignerLlmConfig {
   expectSpeakerLabels: boolean;
+  maxSegmentSeconds: number;
 }
 
 export interface SubtitleLlmAlignerConfig {
