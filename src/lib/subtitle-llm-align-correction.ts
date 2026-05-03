@@ -67,6 +67,10 @@ export interface AlignedChunkResult {
   transcribeFailed: boolean;
   avgProb: number | null;
   wordCount: number;
+  missingTimingUtteranceCount?: number;
+  collapsedTimingUtteranceCount?: number;
+  localInterpolatedUtteranceCount?: number;
+  matchedCharRatio?: number;
 }
 
 export interface AssembledSubtitleSegment {
@@ -350,6 +354,13 @@ export async function transcribeChunk(
     prompt: [
       '请听音频并只输出严格 JSON，不要 Markdown，不要解释。',
       'JSON 形状必须是：{"utterances":[{"speaker":"S1","text":"逐字转写内容"}]}',
+      ...(options.llmConfig.verbatimCoveragePrompt
+        ? [
+            '必须从音频开头到结尾完整覆盖，不能跳过任何句子、重复、口头禅、转折词或列举项。',
+            '按听到的原话逐字转写；不要总结、改写、润色、合并相邻观点或用同义词替换。',
+            '英文产品名、公司名、缩写、数字、金额、百分比和专有名词要尽量保留原文；听不清时写最接近的音译或拼写，不要删除。',
+          ]
+        : []),
       `每个 utterance 是最终字幕候选段，尽量控制在 ${options.llmConfig.maxSegmentSeconds} 秒左右的自然短句；同一说话人连续讲话也要拆短，不要合成长段。`,
       options.llmConfig.expectSpeakerLabels
         ? 'speaker 用 S1/S2/S3 等编号；如果无法区分说话人，全部用 S1。'
@@ -381,6 +392,11 @@ interface CharMapping {
   utteranceIndex: number;
 }
 
+interface NormalizedCharMapping {
+  char: string;
+  utteranceIndex: number;
+}
+
 export function buildTranscriptText(
   utterances: TranscribedUtterance[],
   expectSpeakerLabels: boolean,
@@ -407,6 +423,28 @@ function stripWhitespace(text: string): string {
   return text.replace(/\s+/g, '');
 }
 
+function normalizeMatchChars(text: string): string[] {
+  const normalized = text.normalize('NFKC').toLowerCase();
+  return Array.from(normalized).filter((char) => isMatchableChar(char));
+}
+
+function isMatchableChar(char: string): boolean {
+  if (!char || /\s/u.test(char)) return false;
+  return !/^[\p{P}\p{S}]$/u.test(char);
+}
+
+function normalizeCharMapping(
+  charMapping: Array<{ char?: string; utteranceIndex: number }>,
+): NormalizedCharMapping[] {
+  const normalized: NormalizedCharMapping[] = [];
+  for (const mapping of charMapping) {
+    for (const char of normalizeMatchChars(mapping.char || '')) {
+      normalized.push({ char, utteranceIndex: mapping.utteranceIndex });
+    }
+  }
+  return normalized;
+}
+
 interface UtteranceTimingAccumulator {
   start: number;
   end: number;
@@ -430,25 +468,30 @@ export interface MapAlignedWordsResult {
 export function mapAlignedWordsToUtterances(
   words: AlignedWord[],
   utterances: TranscribedUtterance[],
-  charMapping: Array<{ utteranceIndex: number }>,
+  charMapping: Array<{ char?: string; utteranceIndex: number }>,
 ): MapAlignedWordsResult {
   const accumulators: Array<UtteranceTimingAccumulator | null> = utterances.map(
     () => null,
   );
+  const normalizedMapping = normalizeCharMapping(charMapping);
   let charPointer = 0;
+  let matchedChars = 0;
   let totalProbSum = 0;
   let totalProbCount = 0;
 
   for (const word of words) {
-    const stripped = stripWhitespace(word.text);
-    if (!stripped) continue;
-    const consumeCount = stripped.length;
-    const endPointer = Math.min(charMapping.length, charPointer + consumeCount);
-    if (endPointer <= charPointer) continue;
+    const wordChars = normalizeMatchChars(stripWhitespace(word.text));
+    if (wordChars.length === 0) continue;
+    const match = findLocalNormalizedMatch(
+      normalizedMapping,
+      wordChars,
+      charPointer,
+    );
+    if (!match) continue;
 
     const utteranceCounts = new Map<number, number>();
-    for (let i = charPointer; i < endPointer; i += 1) {
-      const mapping = charMapping[i];
+    for (let i = match.start; i < match.end; i += 1) {
+      const mapping = normalizedMapping[i];
       if (!mapping) continue;
       utteranceCounts.set(
         mapping.utteranceIndex,
@@ -491,7 +534,8 @@ export function mapAlignedWordsToUtterances(
       }
     }
 
-    charPointer = endPointer;
+    matchedChars += match.matchedCount;
+    charPointer = match.end;
   }
 
   return {
@@ -507,8 +551,61 @@ export function mapAlignedWordsToUtterances(
         : null,
     ),
     avgProb: totalProbCount > 0 ? totalProbSum / totalProbCount : null,
-    matchedChars: charPointer,
-    sourceChars: charMapping.length,
+    matchedChars,
+    sourceChars: normalizedMapping.length,
+  };
+}
+
+function findLocalNormalizedMatch(
+  source: NormalizedCharMapping[],
+  wordChars: string[],
+  cursor: number,
+): { start: number; end: number; matchedCount: number } | null {
+  if (source.length === 0 || wordChars.length === 0) return null;
+
+  const searchStart = Math.max(0, cursor);
+  const searchEnd = Math.min(source.length, cursor + 48);
+
+  for (let start = searchStart; start < searchEnd; start += 1) {
+    if (source[start]?.char !== wordChars[0]) continue;
+    let matchedCount = 0;
+    while (
+      matchedCount < wordChars.length &&
+      start + matchedCount < source.length &&
+      source[start + matchedCount]?.char === wordChars[matchedCount]
+    ) {
+      matchedCount += 1;
+    }
+    if (matchedCount === wordChars.length) {
+      return {
+        start,
+        end: start + matchedCount,
+        matchedCount,
+      };
+    }
+  }
+
+  let best: { start: number; matchedCount: number } | null = null;
+  for (let start = searchStart; start < searchEnd; start += 1) {
+    let matchedCount = 0;
+    while (
+      matchedCount < wordChars.length &&
+      start + matchedCount < source.length &&
+      source[start + matchedCount]?.char === wordChars[matchedCount]
+    ) {
+      matchedCount += 1;
+    }
+    if (!best || matchedCount > best.matchedCount) {
+      best = { start, matchedCount };
+    }
+  }
+
+  const minPartialMatch = Math.min(wordChars.length, 2);
+  if (!best || best.matchedCount < minPartialMatch) return null;
+  return {
+    start: best.start,
+    end: best.start + best.matchedCount,
+    matchedCount: best.matchedCount,
   };
 }
 
@@ -669,7 +766,10 @@ export async function alignChunk(
   );
 
   const wordCharRatio =
-    charMapping.length === 0 ? 0 : mapping.matchedChars / charMapping.length;
+    mapping.sourceChars === 0
+      ? 0
+      : mapping.matchedChars / mapping.sourceChars;
+  const matchedCharRatio = Number(wordCharRatio.toFixed(4));
 
   if (mapping.avgProb !== null && mapping.avgProb < minAvgProb) {
     return buildInterpolatedChunk(
@@ -691,25 +791,13 @@ export async function alignChunk(
     );
   }
 
-  const alignedUtterances: AlignedUtterance[] = utterances
-    .map((utterance, index) => {
-      const timing = mapping.utteranceTimings[index];
-      if (!timing) {
-        // Missing timing for this utterance — interpolate within neighbours
-        return null;
-      }
-      const bounded = boundTiming(timing.start, timing.end, chunk.durationSec);
-      return {
-        speaker: utterance.speaker,
-        text: utterance.text,
-        start: bounded.start,
-        end: bounded.end,
-        avgProb: timing.avgProb,
-      };
-    })
-    .filter((value): value is AlignedUtterance => value !== null);
+  const aligned = buildAlignedUtterancesWithInterpolation(
+    utterances,
+    mapping.utteranceTimings,
+    chunk.durationSec,
+  );
 
-  if (alignedUtterances.length === 0) {
+  if (aligned.utterances.length === 0) {
     return buildInterpolatedChunk(
       chunk,
       utterances,
@@ -722,11 +810,15 @@ export async function alignChunk(
   return {
     offsetSec: chunk.chunkOffsetSec,
     durationSec: chunk.durationSec,
-    utterances: alignedUtterances,
+    utterances: aligned.utterances,
     alignFallback: 'none',
     transcribeFailed: false,
     avgProb: mapping.avgProb,
     wordCount: alignerResult.words.length,
+    missingTimingUtteranceCount: aligned.missingTimingCount,
+    collapsedTimingUtteranceCount: aligned.collapsedTimingCount,
+    localInterpolatedUtteranceCount: aligned.localInterpolatedCount,
+    matchedCharRatio,
   };
 }
 
@@ -744,6 +836,148 @@ function boundTiming(
   const clampedStart = Math.max(0, Math.min(safeDuration, start));
   const clampedEnd = Math.max(clampedStart + 0.05, Math.min(safeDuration, end));
   return { start: clampedStart, end: clampedEnd };
+}
+
+function buildAlignedUtterancesWithInterpolation(
+  utterances: TranscribedUtterance[],
+  timings: MapAlignedWordsResult['utteranceTimings'],
+  durationSec: number,
+): {
+  utterances: AlignedUtterance[];
+  missingTimingCount: number;
+  collapsedTimingCount: number;
+  localInterpolatedCount: number;
+} {
+  const safeDuration = Math.max(0.1, durationSec);
+  let missingTimingCount = 0;
+  let collapsedTimingCount = 0;
+  let localInterpolatedCount = 0;
+  const aligned: Array<AlignedUtterance | null> = utterances.map(
+    (utterance, index) => {
+      const timing = timings[index];
+      if (!timing) {
+        missingTimingCount += 1;
+        return null;
+      }
+      if (isSuspiciouslyCollapsedTiming(timing, utterance.text)) {
+        collapsedTimingCount += 1;
+        return null;
+      }
+      const bounded = boundTiming(timing.start, timing.end, safeDuration);
+      return {
+        speaker: utterance.speaker,
+        text: utterance.text,
+        start: bounded.start,
+        end: bounded.end,
+        avgProb: timing.avgProb,
+      };
+    },
+  );
+
+  let index = 0;
+  while (index < utterances.length) {
+    if (aligned[index]) {
+      index += 1;
+      continue;
+    }
+
+    const runStart = index;
+    while (index < utterances.length && !aligned[index]) index += 1;
+    const runEnd = index;
+    const previous = runStart > 0 ? aligned[runStart - 1] : null;
+    const next = runEnd < aligned.length ? aligned[runEnd] : null;
+    const window = buildInterpolationWindow(
+      previous,
+      next,
+      runEnd - runStart,
+      safeDuration,
+    );
+    const interpolated = interpolateUtteranceRun(
+      utterances.slice(runStart, runEnd),
+      window.start,
+      window.end,
+    );
+    localInterpolatedCount += interpolated.length;
+    interpolated.forEach((utterance, offset) => {
+      aligned[runStart + offset] = utterance;
+    });
+  }
+
+  return {
+    utterances: aligned.filter(
+      (value): value is AlignedUtterance => value !== null,
+    ),
+    missingTimingCount,
+    collapsedTimingCount,
+    localInterpolatedCount,
+  };
+}
+
+function isSuspiciouslyCollapsedTiming(
+  timing: NonNullable<MapAlignedWordsResult['utteranceTimings'][number]>,
+  text: string,
+): boolean {
+  const duration = timing.end - timing.start;
+  if (duration >= 0.2) return false;
+
+  const matchableChars = normalizeMatchChars(text).length;
+  if (matchableChars < 8) return false;
+
+  return duration <= 0.05 || matchableChars / Math.max(duration, 0.01) > 40;
+}
+
+function buildInterpolationWindow(
+  previous: AlignedUtterance | null,
+  next: AlignedUtterance | null,
+  count: number,
+  durationSec: number,
+): { start: number; end: number } {
+  const minDuration = Math.max(1, count) * 0.05;
+  const start = previous ? previous.end : 0;
+  const end = next ? next.start : durationSec;
+  if (end > start) return { start, end };
+
+  if (next) {
+    return {
+      start: Math.max(0, end - minDuration),
+      end: Math.max(0, end),
+    };
+  }
+
+  return {
+    start: Math.max(0, Math.min(start, durationSec - minDuration)),
+    end: durationSec,
+  };
+}
+
+function interpolateUtteranceRun(
+  utterances: TranscribedUtterance[],
+  startSec: number,
+  endSec: number,
+): AlignedUtterance[] {
+  if (utterances.length === 0) return [];
+  const safeEnd = Math.max(startSec + 0.05 * utterances.length, endSec);
+  const totalChars = utterances.reduce(
+    (sum, utterance) => sum + Math.max(1, Array.from(utterance.text).length),
+    0,
+  );
+  let cursor = startSec;
+  return utterances.map((utterance, index) => {
+    const isLast = index === utterances.length - 1;
+    const share =
+      ((Math.max(1, Array.from(utterance.text).length) / totalChars) *
+        (safeEnd - startSec));
+    const end = isLast ? safeEnd : cursor + share;
+    const aligned = {
+      speaker: utterance.speaker,
+      text: utterance.text,
+      start: cursor,
+      end: Math.max(cursor + 0.05, end),
+      avgProb: null,
+    };
+    cursor = aligned.end;
+    return aligned;
+  });
 }
 
 function buildInterpolatedChunk(
@@ -877,6 +1111,10 @@ export interface LlmAlignerChunkSummary {
   interpolatedCount: number;
   transcribeFailedCount: number;
   totalWordCount: number;
+  missingTimingUtteranceCount: number;
+  collapsedTimingUtteranceCount: number;
+  localInterpolatedUtteranceCount: number;
+  avgMatchedCharRatio: number | null;
   avgProb: number | null;
   totalTokens: number | undefined;
   firstChunkTtft: number | undefined;
@@ -905,6 +1143,26 @@ export function summarizeChunkResults(
     (sum, chunk) => sum + chunk.wordCount,
     0,
   );
+  const missingTimingUtteranceCount = chunks.reduce(
+    (sum, chunk) => sum + (chunk.missingTimingUtteranceCount || 0),
+    0,
+  );
+  const collapsedTimingUtteranceCount = chunks.reduce(
+    (sum, chunk) => sum + (chunk.collapsedTimingUtteranceCount || 0),
+    0,
+  );
+  const localInterpolatedUtteranceCount = chunks.reduce(
+    (sum, chunk) => sum + (chunk.localInterpolatedUtteranceCount || 0),
+    0,
+  );
+  const matchedRatios = chunks
+    .map((chunk) => chunk.matchedCharRatio)
+    .filter((value): value is number => typeof value === 'number');
+  const avgMatchedCharRatio =
+    matchedRatios.length === 0
+      ? null
+      : matchedRatios.reduce((sum, value) => sum + value, 0) /
+        matchedRatios.length;
   const allInterpolated =
     chunks.length > 0 && interpolated.length === chunks.length;
 
@@ -913,6 +1171,10 @@ export function summarizeChunkResults(
     interpolatedCount: interpolated.length,
     transcribeFailedCount: transcribeFailed.length,
     totalWordCount,
+    missingTimingUtteranceCount,
+    collapsedTimingUtteranceCount,
+    localInterpolatedUtteranceCount,
+    avgMatchedCharRatio,
     avgProb,
     totalTokens: options.totalTokens,
     firstChunkTtft: options.firstChunkTtft,

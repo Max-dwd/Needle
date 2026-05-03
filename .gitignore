@@ -57,6 +57,7 @@ plans/
 test/outputs/
 .tmp/biliscope/
 biliscope-repo/
+eval/runs/
 
 # python cache
 .venv/

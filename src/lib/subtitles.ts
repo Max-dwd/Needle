@@ -51,6 +51,7 @@ import {
   summarizeChunkResults as summarizeLlmAlignerChunks,
   transcribeChunk as runLlmAlignerChunkTranscribe,
   type AlignedChunkResult,
+  type AssembledSubtitleSegment,
   type TranscribedUtterance,
   type LlmAlignVideoContext,
 } from './subtitle-llm-align-correction';
@@ -1085,6 +1086,25 @@ function shiftSubtitleSegments(
   }));
 }
 
+function roundSecondsToMillis(seconds: number): number {
+  return Math.round(seconds * 1000) / 1000;
+}
+
+function buildLlmAlignerSubtitleSegments(
+  segments: AssembledSubtitleSegment[],
+): SubtitleSegment[] {
+  return segments.map((segment) => {
+    const start = Math.max(0, roundSecondsToMillis(segment.start));
+    const rawEnd = roundSecondsToMillis(segment.end);
+    return {
+      start,
+      end: Math.max(rawEnd, roundSecondsToMillis(start + 0.05)),
+      text: segment.text,
+      ...(segment.speaker ? { speaker: segment.speaker } : {}),
+    };
+  });
+}
+
 async function splitAudioIntoChunks(
   audioPath: string,
   tempDir: string,
@@ -1727,7 +1747,10 @@ async function fetchSubtitleViaLlmAligner(
   const chunkDir = path.join(tempDir, 'chunks');
   fs.mkdirSync(chunkDir, { recursive: true });
   const transcriber = getTranscriber(selectedModel);
-  const chunkSeconds = llmAlignerConfig.chunkSeconds;
+  const chunkSeconds = Math.min(
+    llmAlignerConfig.chunkSeconds,
+    transcriber.maxAudioChunkSeconds,
+  );
 
   try {
     const audioPath = await extractAudioViaYtDlp(video, ytDlpBin, tempDir);
@@ -1872,6 +1895,11 @@ async function fetchSubtitleViaLlmAligner(
       transcribe_failed_chunk_count: summary.transcribeFailedCount,
       aligner_total_words: summary.totalWordCount,
       aligner_avg_prob: summary.avgProb,
+      missing_timing_utterance_count: summary.missingTimingUtteranceCount,
+      collapsed_timing_utterance_count: summary.collapsedTimingUtteranceCount,
+      local_interpolated_utterance_count:
+        summary.localInterpolatedUtteranceCount,
+      avg_matched_char_ratio: summary.avgMatchedCharRatio,
     });
 
     const rejectionReason = getLlmAlignerRejectionReason(summary);
@@ -1882,12 +1910,7 @@ async function fetchSubtitleViaLlmAligner(
     const assembled = assembleLlmAlignerSegments(chunkResults, {
       maxSegmentSeconds: llmAlignerConfig.llm.maxSegmentSeconds,
     });
-    const segments: SubtitleSegment[] = assembled.map((segment) => ({
-      start: Math.max(0, Math.floor(segment.start)),
-      end: Math.max(Math.floor(segment.end), Math.floor(segment.start) + 1),
-      text: segment.text,
-      ...(segment.speaker ? { speaker: segment.speaker } : {}),
-    }));
+    const segments = buildLlmAlignerSubtitleSegments(assembled);
 
     if (segments.length === 0) {
       throw new Error('llm-aligner produced zero subtitle segments');
@@ -1924,8 +1947,19 @@ async function fetchSubtitleViaLlmAligner(
         ...(summary.avgProb !== null
           ? { aligner_avg_prob: Number(summary.avgProb.toFixed(4)) }
           : {}),
+        ...(summary.avgMatchedCharRatio !== null
+          ? {
+              aligner_matched_char_ratio: Number(
+                summary.avgMatchedCharRatio.toFixed(4),
+              ),
+            }
+          : {}),
         interpolated_chunk_count: summary.interpolatedCount,
         transcribe_failed_chunk_count: summary.transcribeFailedCount,
+        missing_timing_utterance_count: summary.missingTimingUtteranceCount,
+        collapsed_timing_utterance_count: summary.collapsedTimingUtteranceCount,
+        local_interpolated_utterance_count:
+          summary.localInterpolatedUtteranceCount,
         llm_aligner_fallback_ratio:
           summary.chunkCount > 0
             ? Number(
@@ -2845,6 +2879,7 @@ export function readStoredSubtitle(
 
 export const __subtitleRetryTestUtils = {
   buildFailureState,
+  buildLlmAlignerSubtitleSegments,
   buildSegmentedSubtitlePrompt,
   classifySubtitleFailure,
   cleanupTempDirBestEffort,

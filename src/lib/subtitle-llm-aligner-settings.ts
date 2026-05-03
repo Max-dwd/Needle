@@ -10,7 +10,7 @@ export const DEFAULT_FORCED_ALIGNER_MODEL_ID =
   process.env.FORCED_ALIGNER_MODEL_ID ||
   'mlx-community/Qwen3-ForcedAligner-0.6B-8bit';
 
-export const DEFAULT_LLM_ALIGNER_CHUNK_SECONDS = 900; // 15 分钟
+export const DEFAULT_LLM_ALIGNER_CHUNK_SECONDS = 300; // 5 分钟
 
 export interface SubtitleLlmAlignerAlignerConfig {
   modelId: string;
@@ -21,6 +21,7 @@ export interface SubtitleLlmAlignerAlignerConfig {
 export interface SubtitleLlmAlignerLlmConfig {
   expectSpeakerLabels: boolean;
   maxSegmentSeconds: number;
+  verbatimCoveragePrompt?: boolean;
 }
 
 export interface SubtitleLlmAlignerConfig {
@@ -46,7 +47,8 @@ const DEFAULT_ALIGNER_CONFIG: SubtitleLlmAlignerAlignerConfig = {
 
 const DEFAULT_LLM_CONFIG: SubtitleLlmAlignerLlmConfig = {
   expectSpeakerLabels: true,
-  maxSegmentSeconds: 12,
+  maxSegmentSeconds: 3,
+  verbatimCoveragePrompt: false,
 };
 
 function normalizeText(value: unknown, fallback: string): string {
@@ -106,6 +108,10 @@ function normalizeLlmConfig(raw: unknown): SubtitleLlmAlignerLlmConfig {
       3,
       60,
     ),
+    verbatimCoveragePrompt:
+      value.verbatimCoveragePrompt === undefined
+        ? DEFAULT_LLM_CONFIG.verbatimCoveragePrompt
+        : Boolean(value.verbatimCoveragePrompt),
   };
 }
 
@@ -123,7 +129,7 @@ function normalizeConfig(
     chunkSeconds: normalizeInteger(
       value.chunkSeconds,
       DEFAULT_LLM_ALIGNER_CHUNK_SECONDS,
-      5 * 60,
+      60,
       60 * 60,
     ),
     aligner: normalizeAlignerConfig(value.aligner),

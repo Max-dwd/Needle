@@ -34,7 +34,11 @@ describe('subtitle-llm-aligner-settings', () => {
         minAvgProb: 0.3,
         minWordRatio: 0.3,
       },
-      llm: { expectSpeakerLabels: true, maxSegmentSeconds: 12 },
+      llm: {
+        expectSpeakerLabels: true,
+        maxSegmentSeconds: 3,
+        verbatimCoveragePrompt: false,
+      },
       updatedAt: null,
     });
   });
@@ -51,13 +55,17 @@ describe('subtitle-llm-aligner-settings', () => {
 
     expect(getSubtitleLlmAlignerConfig()).toEqual({
       enabled: true,
-      chunkSeconds: 5 * 60,
+      chunkSeconds: 60,
       aligner: {
         modelId: 'custom/id',
         minAvgProb: 1,
         minWordRatio: 0,
       },
-      llm: { expectSpeakerLabels: false, maxSegmentSeconds: 60 },
+      llm: {
+        expectSpeakerLabels: false,
+        maxSegmentSeconds: 60,
+        verbatimCoveragePrompt: false,
+      },
       updatedAt: null,
     });
   });
@@ -71,7 +79,11 @@ describe('subtitle-llm-aligner-settings', () => {
         minAvgProb: 0.4,
         minWordRatio: 0.5,
       },
-      llm: { expectSpeakerLabels: true, maxSegmentSeconds: 8 },
+      llm: {
+        expectSpeakerLabels: true,
+        maxSegmentSeconds: 8,
+        verbatimCoveragePrompt: false,
+      },
     });
 
     expect(mockSetAppSetting).toHaveBeenCalledTimes(1);
@@ -88,7 +100,11 @@ describe('subtitle-llm-aligner-settings', () => {
         minAvgProb: 0.4,
         minWordRatio: 0.5,
       },
-      llm: { expectSpeakerLabels: true, maxSegmentSeconds: 8 },
+      llm: {
+        expectSpeakerLabels: true,
+        maxSegmentSeconds: 8,
+        verbatimCoveragePrompt: false,
+      },
     });
 
     mockGetAppSetting.mockReturnValue(serialized);
@@ -100,7 +116,11 @@ describe('subtitle-llm-aligner-settings', () => {
         minAvgProb: 0.4,
         minWordRatio: 0.5,
       },
-      llm: { expectSpeakerLabels: true, maxSegmentSeconds: 8 },
+      llm: {
+        expectSpeakerLabels: true,
+        maxSegmentSeconds: 8,
+        verbatimCoveragePrompt: false,
+      },
       updatedAt: null,
     });
   });

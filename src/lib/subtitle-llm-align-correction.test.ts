@@ -20,6 +20,7 @@ import {
   transcribeChunk,
   type AlignedChunkResult,
 } from './subtitle-llm-align-correction';
+import { scoreLlmAlignerQuality } from '../../eval/llm-aligner-pipeline';
 import type { SubtitleLlmAlignerAlignerConfig } from './subtitle-llm-aligner-settings';
 import type { MultimodalTranscriber } from './subtitle-providers';
 import type { AiSummaryModelConfig } from '@/types';
@@ -152,6 +153,39 @@ describe('buildTranscriptText / mapAlignedWordsToUtterances', () => {
     expect(mapped.avgProb).toBeCloseTo((0.9 + 0.8 + 0.7 + 0.6) / 4);
   });
 
+  it('matches normalized chars and only counts real matches', () => {
+    const utterances = [
+      { speaker: 'S1', text: 'ＡＩ，Hello!' },
+      { speaker: 'S2', text: '下一句' },
+    ];
+    const { charMapping } = buildTranscriptText(utterances, false);
+
+    const mapped = mapAlignedWordsToUtterances(
+      [
+        { text: 'ai', start: 0, end: 0.2, prob: 0.9 },
+        { text: 'not-in-source', start: 0.3, end: 0.4, prob: 0.1 },
+        { text: 'HELLO', start: 0.5, end: 1.1, prob: 0.8 },
+        { text: '下一句', start: 2, end: 3, prob: 0.7 },
+      ],
+      utterances,
+      charMapping,
+    );
+
+    expect(mapped.sourceChars).toBe('aihello下一句'.length);
+    expect(mapped.matchedChars).toBe('aihello下一句'.length);
+    expect(mapped.utteranceTimings[0]).toMatchObject({
+      start: 0,
+      end: 1.1,
+      wordCount: 2,
+    });
+    expect(mapped.utteranceTimings[1]).toMatchObject({
+      start: 2,
+      end: 3,
+      wordCount: 1,
+    });
+    expect(mapped.avgProb).toBeCloseTo((0.9 + 0.8 + 0.7) / 3);
+  });
+
   it('does not send speaker labels into aligner transcript text', () => {
     const utterances = [
       { speaker: 'S1', text: '你好世界' },
@@ -257,7 +291,7 @@ describe('alignChunk fallbacks', () => {
         { speaker: 'S1', text: 'abcd' },
         { speaker: 'S2', text: 'efgh' },
       ],
-      alignerConfig: { ...ALIGNER_CONFIG, minAvgProb: 0.3, minWordRatio: 0.5 },
+      alignerConfig: { ...ALIGNER_CONFIG, minAvgProb: 0.3, minWordRatio: 0.3 },
       llmConfig,
       transcriptWritePath: '/tmp/transcript.txt',
       alignerOutputDir: '/tmp/out',
@@ -276,6 +310,85 @@ describe('alignChunk fallbacks', () => {
       { speaker: 'S2', text: 'efgh', start: 2.0, end: 3.5, avgProb: 0.7 },
     ]);
     expect(result.wordCount).toBe(2);
+  });
+
+  it('interpolates utterances that miss individual aligner timings', async () => {
+    const result = await alignChunk({
+      chunk: baseChunk,
+      utterances: [
+        { speaker: 'S1', text: 'abcd' },
+        { speaker: 'S2', text: 'missing words' },
+        { speaker: 'S3', text: 'efgh' },
+      ],
+      alignerConfig: { ...ALIGNER_CONFIG, minAvgProb: 0.3, minWordRatio: 0.3 },
+      llmConfig,
+      transcriptWritePath: '/tmp/transcript.txt',
+      alignerOutputDir: '/tmp/out',
+      writeTranscript: () => undefined,
+      runAligner: async () => ({
+        words: [
+          { text: 'abcd', start: 1, end: 2, prob: 0.8 },
+          { text: 'efgh', start: 6, end: 7, prob: 0.7 },
+        ],
+      }),
+    });
+
+    expect(result.alignFallback).toBe('none');
+    expect(result.utterances).toHaveLength(3);
+    expect(result.utterances[1]).toMatchObject({
+      speaker: 'S2',
+      text: 'missing words',
+      avgProb: null,
+    });
+    expect(result.utterances[1].start).toBe(2);
+    expect(result.utterances[1].end).toBe(6);
+    expect(result.utterances.map((utterance) => utterance.text)).toEqual([
+      'abcd',
+      'missing words',
+      'efgh',
+    ]);
+  });
+
+  it('interpolates long utterances with collapsed aligner timings', async () => {
+    const result = await alignChunk({
+      chunk: baseChunk,
+      utterances: [
+        { speaker: 'S1', text: '前一句正常' },
+        {
+          speaker: 'S1',
+          text: 'WorldStereo 2.0基于全局空间一致性记忆，实现稳定连贯的新视角合成。',
+        },
+        {
+          speaker: 'S1',
+          text: 'WorldMirror 2.0可将多视角预测结果整合为高精度资产。',
+        },
+      ],
+      alignerConfig: { ...ALIGNER_CONFIG, minAvgProb: 0.3, minWordRatio: 0.3 },
+      llmConfig,
+      transcriptWritePath: '/tmp/transcript.txt',
+      alignerOutputDir: '/tmp/out',
+      writeTranscript: () => undefined,
+      runAligner: async () => ({
+        words: [
+          { text: '前一句正常', start: 1, end: 2, prob: 0.8 },
+          { text: 'WorldStereo', start: 5, end: 5, prob: 0.7 },
+          { text: '基于全局空间一致性记忆', start: 5, end: 5, prob: 0.7 },
+          { text: '实现稳定连贯的新视角合成', start: 5, end: 5, prob: 0.7 },
+          { text: 'WorldMirror', start: 5, end: 5, prob: 0.7 },
+          { text: '可将多视角预测结果整合为高精度资产', start: 5, end: 5, prob: 0.7 },
+        ],
+      }),
+    });
+
+    expect(result.alignFallback).toBe('none');
+    expect(result.utterances).toHaveLength(3);
+    expect(result.collapsedTimingUtteranceCount).toBe(2);
+    expect(result.localInterpolatedUtteranceCount).toBe(2);
+    expect(result.utterances[0]).toMatchObject({ start: 1, end: 2 });
+    expect(result.utterances[1].end - result.utterances[1].start).toBeGreaterThan(
+      3,
+    );
+    expect(result.utterances[2].end).toBe(10);
   });
 });
 
@@ -418,6 +531,77 @@ describe('assembleSegments', () => {
         },
       ]),
     ).toEqual([{ start: 0, end: 1, text: 'hi' }]);
+  });
+});
+
+describe('scoreLlmAlignerQuality', () => {
+  it('uses LCS text coverage instead of greedy ordered coverage', () => {
+    const quality = scoreLlmAlignerQuality({
+      golden: {
+        goldenPath: '/tmp/golden.json',
+        segments: [{ start: 0, end: 7, text: 'ABCBDAB' }],
+        text: 'ABCBDAB',
+      },
+      hypothesisSegments: [{ start: 0, end: 6, text: 'BDCABA' }],
+      fallbackRatio: 0,
+    });
+
+    expect(quality.pairingMethod).toBe('lcs-anchor');
+    expect(quality.text.coverage).toBe(0.5714);
+  });
+
+  it('maps timing by text position so different segment counts still compare', () => {
+    const quality = scoreLlmAlignerQuality({
+      golden: {
+        goldenPath: '/tmp/golden.json',
+        segments: [
+          { start: 0, end: 1, text: 'aa' },
+          { start: 1, end: 2, text: 'bb' },
+          { start: 2, end: 3, text: 'cc' },
+          { start: 3, end: 4, text: 'dd' },
+        ],
+        text: 'aabbccdd',
+      },
+      hypothesisSegments: [
+        { start: 0, end: 2, text: 'aabb' },
+        { start: 2, end: 4, text: 'ccdd' },
+      ],
+      fallbackRatio: 0,
+    });
+
+    expect(quality.timing).toMatchObject({
+      pairCount: 2,
+      startMaeSeconds: 0,
+      startP95Seconds: 0,
+      endMaeSeconds: 0,
+      endP95Seconds: 0,
+    });
+    expect(quality.textPositionTiming).toMatchObject({
+      pairCount: 2,
+      startMaeSeconds: 0,
+      endMaeSeconds: 0,
+    });
+  });
+
+  it('uses LCS anchors so local text insertions do not shift later timing', () => {
+    const quality = scoreLlmAlignerQuality({
+      golden: {
+        goldenPath: '/tmp/golden.json',
+        segments: [
+          { start: 0, end: 1, text: 'aa' },
+          { start: 10, end: 11, text: 'bb' },
+        ],
+        text: 'aabb',
+      },
+      hypothesisSegments: [
+        { start: 0, end: 1, text: 'aaXX' },
+        { start: 10, end: 11, text: 'bb' },
+      ],
+      fallbackRatio: 0,
+    });
+
+    expect(quality.timing.endMaeSeconds).toBe(0);
+    expect(quality.textPositionTiming.endMaeSeconds).toBeGreaterThan(1);
   });
 });
 

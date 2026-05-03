@@ -11,6 +11,13 @@ vi.mock('./shared-ai-budget', () => ({
   hasAvailableAiBudget: mockHasAvailableAiBudget,
 }));
 
+vi.mock('./app-settings', () => ({
+  getAppSetting: vi.fn(() => null),
+  getAppSettingUpdatedAt: vi.fn(() => null),
+  getPositiveIntAppSetting: vi.fn((_key: string, fallback: number) => fallback),
+  setAppSetting: vi.fn(),
+}));
+
 import {
   __subtitleRetryTestUtils,
   shouldRetrySubtitleFetch,
@@ -204,6 +211,26 @@ describe('subtitle retry schedule', () => {
         transcribeFailedCount: 0,
       }),
     ).toBeNull();
+  });
+
+  it('keeps millisecond precision for llm-aligner subtitle segments', () => {
+    expect(
+      __subtitleRetryTestUtils.buildLlmAlignerSubtitleSegments([
+        {
+          start: 1.23456,
+          end: 2.34567,
+          text: '精准时间',
+          speaker: 'S1',
+        },
+      ]),
+    ).toEqual([
+      {
+        start: 1.235,
+        end: 2.346,
+        text: '精准时间',
+        speaker: 'S1',
+      },
+    ]);
   });
 
   it('cleans up temp subtitle directories asynchronously', async () => {
