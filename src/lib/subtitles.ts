@@ -117,6 +117,11 @@ interface SubtitleSourceFile {
 
 type SubtitleRetryClass = 'missing' | 'temporary-error' | 'permanent';
 
+interface LlmAlignerRejectionSummary {
+  chunkCount: number;
+  transcribeFailedCount: number;
+}
+
 interface BilibiliSubtitleFetchContext {
   aid?: number | null;
   cid?: number | null;
@@ -1869,13 +1874,9 @@ async function fetchSubtitleViaLlmAligner(
       aligner_avg_prob: summary.avgProb,
     });
 
-    if (
-      summary.chunkCount > 0 &&
-      summary.transcribeFailedCount === summary.chunkCount
-    ) {
-      throw new Error(
-        `llm-aligner failed to transcribe all chunks (${summary.transcribeFailedCount}/${summary.chunkCount})`,
-      );
+    const rejectionReason = getLlmAlignerRejectionReason(summary);
+    if (rejectionReason) {
+      throw new Error(rejectionReason);
     }
 
     const assembled = assembleLlmAlignerSegments(chunkResults, {
@@ -2314,6 +2315,14 @@ function buildSubtitleMethodOrder(
       }
       return true;
     });
+}
+
+function getLlmAlignerRejectionReason(
+  summary: LlmAlignerRejectionSummary,
+): string | null {
+  if (summary.chunkCount <= 0) return null;
+  if (summary.transcribeFailedCount <= 0) return null;
+  return `llm-aligner failed to transcribe ${summary.transcribeFailedCount}/${summary.chunkCount} chunks`;
 }
 
 // ---------------------------------------------------------------------------
@@ -2840,6 +2849,7 @@ export const __subtitleRetryTestUtils = {
   classifySubtitleFailure,
   cleanupTempDirBestEffort,
   getAutoApiFallbackReason,
+  getLlmAlignerRejectionReason,
   getSubtitleRetryDelayMs,
   getYtDlpAudioUrl,
   isApiFallbackPreferredMethod,

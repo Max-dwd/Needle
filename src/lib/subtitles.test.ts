@@ -190,6 +190,22 @@ describe('subtitle retry schedule', () => {
     ).toBe('https://www.bilibili.com/video/BV1PwoBBREpX?p=1');
   });
 
+  it('rejects llm-aligner output when any chunk transcription failed', () => {
+    expect(
+      __subtitleRetryTestUtils.getLlmAlignerRejectionReason({
+        chunkCount: 2,
+        transcribeFailedCount: 1,
+      }),
+    ).toBe('llm-aligner failed to transcribe 1/2 chunks');
+
+    expect(
+      __subtitleRetryTestUtils.getLlmAlignerRejectionReason({
+        chunkCount: 2,
+        transcribeFailedCount: 0,
+      }),
+    ).toBeNull();
+  });
+
   it('cleans up temp subtitle directories asynchronously', async () => {
     const pendingCleanup = new Promise<void>(() => {});
     const rmSpy = vi
