@@ -1,4 +1,11 @@
-import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
+import React, {
+  useState,
+  useEffect,
+  useRef,
+  useLayoutEffect,
+  useMemo,
+  useCallback,
+} from 'react';
 import { type SummaryChapter, findChapterIndexForSeconds } from '@/lib/summary-chapters';
 import type { VideoWithMeta } from '@/types';
 import MarkdownRenderer from '@/components/MarkdownRenderer';
@@ -35,11 +42,37 @@ export default function PlayerBottomBar({
   const [isDetailedMode, setIsDetailedMode] = useState(false);
   const trackRef = useRef<HTMLDivElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
+  const tooltipContainerRef = useRef<HTMLDivElement>(null);
+  const tooltipTimeRef = useRef<HTMLDivElement>(null);
+  const tooltipFrameRef = useRef<number | null>(null);
+  const lastPointerClientXRef = useRef(0);
   
   const [hoverActive, setHoverActive] = useState(false);
-  const [cursorSeconds, setCursorSeconds] = useState(0);
+  const [renderedCursorSeconds, setRenderedCursorSeconds] = useState(0);
   const [cursorChapterIndex, setCursorChapterIndex] = useState<number | -1>(-1);
-  const [tooltipLeft, setTooltipLeft] = useState(0);
+  const cursorChapterIndexRef = useRef<number | -1>(-1);
+
+  const chapterBodyNodes = useMemo(
+    () =>
+      chapters.map((chapter) =>
+        chapter.body ? (
+          <MarkdownRenderer
+            key={`${chapter.seconds}:${chapter.title}`}
+            markdown={chapter.body}
+            video={video}
+            onTimestampClick={onSeek}
+            tone="dark"
+            fontSizeVariant="compact"
+            hideTimestamps={true}
+          />
+        ) : null,
+      ),
+    [chapters, onSeek, video],
+  );
+
+  useEffect(() => {
+    cursorChapterIndexRef.current = cursorChapterIndex;
+  }, [cursorChapterIndex]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -62,29 +95,46 @@ export default function PlayerBottomBar({
     };
   }, []);
 
-  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!trackRef.current) return;
+  const applyTooltipPosition = useCallback(() => {
+    tooltipFrameRef.current = null;
+    if (!trackRef.current || !tooltipContainerRef.current) return;
     const rect = trackRef.current.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const ratio = Math.min(1, Math.max(0, x / rect.width));
-    const cSecs = ratio * duration;
-    setCursorSeconds(cSecs);
-
-    const cIndex = findChapterIndexForSeconds(chapters, cSecs);
-    if (cIndex !== cursorChapterIndex) {
-      setCursorChapterIndex(cIndex);
-      onCursorChapterChange?.(cIndex === -1 ? null : cIndex);
-    }
-
     let tWidth = 320;
     if (tooltipRef.current) {
       tWidth = tooltipRef.current.offsetWidth;
     }
-    const tooltipCenterViewport = e.clientX;
+    const tooltipCenterViewport = lastPointerClientXRef.current;
     const minCenter = tWidth / 2 + 8;
     const maxCenter = window.innerWidth - tWidth / 2 - 8;
     const clampedCenter = Math.max(minCenter, Math.min(tooltipCenterViewport, maxCenter));
-    setTooltipLeft(clampedCenter - rect.left);
+    tooltipContainerRef.current.style.left = `${clampedCenter - rect.left}px`;
+  }, []);
+
+  const scheduleTooltipPosition = useCallback(() => {
+    if (tooltipFrameRef.current !== null) return;
+    tooltipFrameRef.current = requestAnimationFrame(applyTooltipPosition);
+  }, [applyTooltipPosition]);
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!trackRef.current || duration <= 0) return;
+    const rect = trackRef.current.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const ratio = Math.min(1, Math.max(0, x / rect.width));
+    const cSecs = ratio * duration;
+    lastPointerClientXRef.current = e.clientX;
+
+    if (tooltipTimeRef.current) {
+      tooltipTimeRef.current.textContent = formatSecondsLabel(cSecs);
+    }
+    scheduleTooltipPosition();
+
+    const cIndex = findChapterIndexForSeconds(chapters, cSecs);
+    if (cIndex !== cursorChapterIndexRef.current) {
+      cursorChapterIndexRef.current = cIndex;
+      setRenderedCursorSeconds(cSecs);
+      setCursorChapterIndex(cIndex);
+      onCursorChapterChange?.(cIndex === -1 ? null : cIndex);
+    }
   };
 
   const handleMouseEnter = () => {
@@ -93,7 +143,9 @@ export default function PlayerBottomBar({
 
   const handleMouseLeave = () => {
     setHoverActive(false);
-    if (cursorChapterIndex !== -1) {
+    if (cursorChapterIndexRef.current !== -1) {
+      cursorChapterIndexRef.current = -1;
+      setRenderedCursorSeconds(0);
       setCursorChapterIndex(-1);
       onCursorChapterChange?.(null);
     }
@@ -108,18 +160,18 @@ export default function PlayerBottomBar({
   };
 
   useLayoutEffect(() => {
-    if (hoverActive && tooltipRef.current && trackRef.current) {
-      const rect = trackRef.current.getBoundingClientRect();
-      const tooltipCenterViewport = rect.left + tooltipLeft;
-      const tWidth = tooltipRef.current.offsetWidth;
-      const minCenter = tWidth / 2 + 8;
-      const maxCenter = window.innerWidth - tWidth / 2 - 8;
-      const clampedCenter = Math.max(minCenter, Math.min(tooltipCenterViewport, maxCenter));
-      if (clampedCenter !== tooltipCenterViewport) {
-        setTooltipLeft(clampedCenter - rect.left);
-      }
+    if (hoverActive) {
+      applyTooltipPosition();
     }
-  }, [isDetailedMode, hoverActive, tooltipLeft]);
+  }, [applyTooltipPosition, cursorChapterIndex, hoverActive, isDetailedMode]);
+
+  useEffect(() => {
+    return () => {
+      if (tooltipFrameRef.current !== null) {
+        cancelAnimationFrame(tooltipFrameRef.current);
+      }
+    };
+  }, []);
 
   const progressRatio =
     duration > 0 ? Math.min(1, Math.max(0, currentSeconds / duration)) : 0;
@@ -334,11 +386,12 @@ export default function PlayerBottomBar({
         {/* 4. Tooltip */}
         {hoverActive && (
           <div
+            ref={tooltipContainerRef}
             role="tooltip"
             style={{
               position: 'absolute',
               bottom: 'calc(50% + 12px)',
-              left: tooltipLeft,
+              left: 0,
               transform: 'translateX(-50%)',
               zIndex: 70,
             }}
@@ -362,13 +415,14 @@ export default function PlayerBottomBar({
               }}
             >
               <div
+                ref={tooltipTimeRef}
                 style={{
                   color: 'var(--text-muted)',
                   fontSize: 11,
                   marginBottom: cursorChapterIndex !== -1 && chapters[cursorChapterIndex] ? 2 : 0,
                 }}
               >
-                {formatSecondsLabel(cursorSeconds)}
+                {formatSecondsLabel(renderedCursorSeconds)}
               </div>
               
               {cursorChapterIndex !== -1 && chapters[cursorChapterIndex] && (
@@ -399,14 +453,7 @@ export default function PlayerBottomBar({
                         pointerEvents: 'auto',
                       }}
                     >
-                      <MarkdownRenderer
-                        markdown={chapters[cursorChapterIndex].body}
-                        video={video}
-                        onTimestampClick={onSeek}
-                        tone="dark"
-                        fontSizeVariant="compact"
-                        hideTimestamps={true}
-                      />
+                      {chapterBodyNodes[cursorChapterIndex]}
                     </div>
                   )}
                 </>

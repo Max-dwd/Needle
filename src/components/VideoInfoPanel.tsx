@@ -5,6 +5,7 @@ import React, {
   useCallback,
   useEffect,
   useImperativeHandle,
+  useMemo,
   useRef,
   useState,
 } from 'react';
@@ -45,6 +46,11 @@ interface VideoInfoPanelProps {
   onFollowModeChange?: (follow: boolean) => void;
   subtitleOverlay?: boolean;
   onSubtitleOverlayChange?: (enabled: boolean) => void;
+}
+
+interface SummaryScrollSection {
+  el: Element;
+  seconds: number;
 }
 
 function formatToken(n: number | string | undefined | null): string {
@@ -363,6 +369,7 @@ export default forwardRef<VideoInfoPanelRef, VideoInfoPanelProps>(
     const [isTabExpanded, setIsTabExpanded] = useState(false);
     const activeSegmentRef = useRef<HTMLButtonElement>(null);
     const scrollContainerRef = useRef<HTMLDivElement>(null);
+    const summarySectionIndexRef = useRef<SummaryScrollSection[]>([]);
 
     useEffect(() => {
       const checkMobile = () => {
@@ -931,13 +938,16 @@ export default forwardRef<VideoInfoPanelRef, VideoInfoPanelProps>(
       }
     };
 
-    const subtitleSegments = Array.isArray(subtitle?.segments)
-      ? subtitle.segments
-      : [];
-    const activeSegmentIndex = findActiveSegmentIndex(
-      subtitleSegments,
-      currentPlayerSeconds,
+    const subtitleSegments = useMemo(
+      () => (Array.isArray(subtitle?.segments) ? subtitle.segments : []),
+      [subtitle?.segments],
     );
+    const activeSegmentIndex = useMemo(() => {
+      if (activePanel !== 'subtitle' || subtitleSegments.length === 0) {
+        return -1;
+      }
+      return findActiveSegmentIndex(subtitleSegments, currentPlayerSeconds);
+    }, [activePanel, currentPlayerSeconds, subtitleSegments]);
 
     // 浮层字幕可用性：四态 —— 可用 / 加载中 / 不可用 / 粒度过粗
     type SubtitleOverlayAvailability =
@@ -997,11 +1007,15 @@ export default forwardRef<VideoInfoPanelRef, VideoInfoPanelProps>(
     }, []);
 
     useEffect(() => {
+      if (!followMode) {
+        prevPlayerSecondsRef.current = currentPlayerSeconds;
+        return;
+      }
       if (Math.abs(currentPlayerSeconds - prevPlayerSecondsRef.current) > 3) {
         isUserScrolledRef.current = false;
       }
       prevPlayerSecondsRef.current = currentPlayerSeconds;
-    }, [currentPlayerSeconds]);
+    }, [currentPlayerSeconds, followMode]);
 
     useEffect(() => {
       if (followMode) {
@@ -1028,21 +1042,51 @@ export default forwardRef<VideoInfoPanelRef, VideoInfoPanelProps>(
     }, [activeSegmentIndex, activePanel, followMode]);
 
     const lastScrolledSummarySecondsRef = useRef<number | null>(null);
+
+    useEffect(() => {
+      if (activePanel !== 'summary' || !scrollContainerRef.current) {
+        summarySectionIndexRef.current = [];
+        return;
+      }
+
+      const container = scrollContainerRef.current;
+      summarySectionIndexRef.current = Array.from(
+        container.querySelectorAll(
+          '[data-chapter-seconds], [data-summary-seconds]',
+        ),
+      )
+        .map((el) => ({
+          el,
+          seconds: parseInt(
+            el.getAttribute('data-chapter-seconds') ||
+              el.getAttribute('data-summary-seconds') ||
+              '0',
+          ),
+        }))
+        .filter((section) => Number.isFinite(section.seconds))
+        .sort((a, b) => a.seconds - b.seconds);
+    }, [activePanel, effectiveMarkdown, streamingMarkdown]);
+
     // Auto-scroll summary chapter
     useEffect(() => {
       if (!followMode || activePanel !== 'summary' || !scrollContainerRef.current) {
         lastScrolledSummarySecondsRef.current = null;
         return;
       }
-      const container = scrollContainerRef.current;
-      const sections = Array.from(container.querySelectorAll('[data-chapter-seconds], [data-summary-seconds]'))
-        .map(el => ({
-          el,
-          seconds: parseInt(el.getAttribute('data-chapter-seconds') || el.getAttribute('data-summary-seconds') || '0')
-        }))
-        .sort((a, b) => b.seconds - a.seconds);
-
-      const activeSection = sections.find(s => s.seconds <= currentPlayerSeconds);
+      const sections = summarySectionIndexRef.current;
+      let low = 0;
+      let high = sections.length - 1;
+      let activeSection: SummaryScrollSection | null = null;
+      while (low <= high) {
+        const mid = Math.floor((low + high) / 2);
+        const section = sections[mid];
+        if (section.seconds <= currentPlayerSeconds) {
+          activeSection = section;
+          low = mid + 1;
+        } else {
+          high = mid - 1;
+        }
+      }
       if (activeSection) {
         if (lastScrolledSummarySecondsRef.current !== activeSection.seconds) {
           isUserScrolledRef.current = false;
@@ -1264,14 +1308,16 @@ export default forwardRef<VideoInfoPanelRef, VideoInfoPanelProps>(
           ) : (
             <div
               style={{
-                display: 'flex',
+                display: 'grid',
+                gridTemplateColumns: `repeat(${panelButtons.length}, minmax(0, 1fr))`,
                 gap: 2,
                 padding: '4px',
                 background: 'var(--bg-hover)',
                 borderRadius: 12,
                 height: 44,
                 alignItems: 'center',
-                flexShrink: 0,
+                width: '100%',
+                minWidth: 0,
               }}
             >
               {panelButtons.map((panel) => {
@@ -1286,8 +1332,8 @@ export default forwardRef<VideoInfoPanelRef, VideoInfoPanelProps>(
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      gap: active ? 6 : 0,
-                      padding: active ? '0 12px' : '0 10px',
+                      gap: active ? 4 : 0,
+                      padding: '0 6px',
                       borderRadius: 9,
                       background: active ? 'var(--bg-secondary)' : 'transparent',
                       border: 'none',
@@ -1298,12 +1344,17 @@ export default forwardRef<VideoInfoPanelRef, VideoInfoPanelProps>(
                       whiteSpace: 'nowrap',
                       fontSize: 13,
                       fontWeight: 700,
-                      flexShrink: 0,
+                      minWidth: 0,
+                      overflow: 'hidden',
                     }}
                     title={panel.label}
                   >
-                    <span style={{ fontSize: 16 }}>{panel.icon}</span>
-                    {active && <span>{panel.label}</span>}
+                    <span style={{ fontSize: 16, flexShrink: 0 }}>{panel.icon}</span>
+                    {active && (
+                      <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {panel.label}
+                      </span>
+                    )}
                   </button>
                 );
               })}
@@ -1312,7 +1363,7 @@ export default forwardRef<VideoInfoPanelRef, VideoInfoPanelProps>(
 
           {/* Action Buttons Backplate */}
           <div style={{
-            display: 'flex',
+            display: isMobile ? 'flex' : 'none',
             alignItems: 'center',
             gap: 2,
             background: 'var(--bg-hover)',

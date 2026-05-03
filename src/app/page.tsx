@@ -27,6 +27,51 @@ interface HomeIntentShortcutSettings {
   enabled: boolean;
 }
 
+const videoIdentityKey = (video: VideoWithMeta) =>
+  `${video.platform}:${video.video_id}`;
+
+const areVideoRowsEqual = (a: VideoWithMeta, b: VideoWithMeta) => {
+  const aRecord = a as unknown as Record<string, unknown>;
+  const bRecord = b as unknown as Record<string, unknown>;
+  const keys = new Set([...Object.keys(aRecord), ...Object.keys(bRecord)]);
+  for (const key of keys) {
+    if (aRecord[key] !== bRecord[key]) return false;
+  }
+  return true;
+};
+
+const mergeVideoRowsPreservingIdentity = (
+  current: VideoWithMeta[],
+  next: VideoWithMeta[],
+) => {
+  if (current.length === 0) return next;
+
+  const currentByKey = new Map(
+    current.map((video) => [videoIdentityKey(video), video]),
+  );
+  let changed = current.length !== next.length;
+  const merged = next.map((nextVideo, index) => {
+    const currentVideo = currentByKey.get(videoIdentityKey(nextVideo));
+    if (!currentVideo) {
+      changed = true;
+      return nextVideo;
+    }
+
+    if (current[index] !== currentVideo) {
+      changed = true;
+    }
+
+    if (areVideoRowsEqual(currentVideo, nextVideo)) {
+      return currentVideo;
+    }
+
+    changed = true;
+    return nextVideo;
+  });
+
+  return changed ? merged : current;
+};
+
 // Memoized wrapper: prevents all sibling cards from re-rendering when
 // mobileActiveVideo changes (only the card that gains/loses isActive re-renders)
 const VideoCardWrapper = memo(function VideoCardWrapper({
@@ -100,6 +145,7 @@ function FeedPageContent() {
     useState<SummaryQueueState | null>(null);
   const [pipelineStatus, setPipelineStatus] =
     useState<AutoPipelineStatus | null>(null);
+  const [sseHealthy, setSseHealthy] = useState(false);
   const [summaryProgress, setSummaryProgress] = useState<{
     videoId: string;
     stage: 'preparing_prompt' | 'calling_api' | 'streaming' | 'writing_file';
@@ -378,7 +424,11 @@ function FeedPageContent() {
       });
       const data = await res.json();
       const nextVideos = data.videos || [];
-      setVideos(nextVideos);
+      setVideos((current) => {
+        const merged = mergeVideoRowsPreservingIdentity(current, nextVideos);
+        loadedVideoCountRef.current = merged.length;
+        return merged;
+      });
       loadedVideoCountRef.current = nextVideos.length;
       setTotal(data.total || 0);
       setHasMore(nextVideos.length >= requestedLimit);
@@ -399,9 +449,13 @@ function FeedPageContent() {
   useEffect(() => {
     let es: EventSource | null = null;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    setSseHealthy(false);
 
     const connect = () => {
       es = new EventSource('/api/sse');
+      es.onopen = () => {
+        setSseHealthy(true);
+      };
 
       es.addEventListener('crawler-status', (event) => {
         try {
@@ -610,6 +664,7 @@ function FeedPageContent() {
       });
 
       es.onerror = () => {
+        setSseHealthy(false);
         es?.close();
         reconnectTimer = setTimeout(connect, 3000);
       };
@@ -939,10 +994,17 @@ function FeedPageContent() {
       void refreshLoadedVideos();
     };
 
-    const timer = window.setInterval(
-      refreshIfVisible,
-      hasBackgroundActivity ? 2500 : 8000,
-    );
+    const loadedCount = loadedVideoCountRef.current;
+    const intervalMs = sseHealthy
+      ? 15000
+      : hasBackgroundActivity
+        ? loadedCount > 120
+          ? 10000
+          : 5000
+        : loadedCount > 120
+          ? 12000
+          : 8000;
+    const timer = window.setInterval(refreshIfVisible, intervalMs);
     window.addEventListener('focus', refreshIfVisible);
     document.addEventListener('visibilitychange', refreshIfVisible);
 
@@ -957,6 +1019,7 @@ function FeedPageContent() {
     loadingMore,
     refreshing,
     refreshLoadedVideos,
+    sseHealthy,
   ]);
 
   const handleHeaderClick = useCallback((e: React.MouseEvent) => {
