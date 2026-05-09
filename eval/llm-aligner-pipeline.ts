@@ -375,6 +375,10 @@ function normalizeLlmConfig(
         ? true
         : Boolean(input.expectSpeakerLabels),
     maxSegmentSeconds: clampInteger(input?.maxSegmentSeconds, 3, 3, 60),
+    verbatimCoveragePrompt:
+      input?.verbatimCoveragePrompt === undefined
+        ? false
+        : Boolean(input.verbatimCoveragePrompt),
   };
 }
 

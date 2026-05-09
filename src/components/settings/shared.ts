@@ -261,6 +261,13 @@ export interface SubtitleLlmAlignerAlignerConfig {
 export interface SubtitleLlmAlignerLlmConfig {
   expectSpeakerLabels: boolean;
   maxSegmentSeconds: number;
+  verbatimCoveragePrompt?: boolean;
+}
+
+export interface SubtitleLlmAlignerQualityConfig {
+  minMatchedCharRatio: number;
+  maxInterpolatedChunkRatio: number;
+  maxLocalInterpolatedUtteranceRatio: number;
 }
 
 export interface SubtitleLlmAlignerConfig {
@@ -268,6 +275,7 @@ export interface SubtitleLlmAlignerConfig {
   chunkSeconds: number;
   aligner: SubtitleLlmAlignerAlignerConfig;
   llm: SubtitleLlmAlignerLlmConfig;
+  quality: SubtitleLlmAlignerQualityConfig;
   updatedAt: string | null;
 }
 

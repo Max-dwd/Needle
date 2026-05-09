@@ -39,6 +39,11 @@ describe('subtitle-llm-aligner-settings', () => {
         maxSegmentSeconds: 3,
         verbatimCoveragePrompt: false,
       },
+      quality: {
+        minMatchedCharRatio: 0.9,
+        maxInterpolatedChunkRatio: 0,
+        maxLocalInterpolatedUtteranceRatio: 0.25,
+      },
       updatedAt: null,
     });
   });
@@ -50,6 +55,11 @@ describe('subtitle-llm-aligner-settings', () => {
         chunkSeconds: 10,
         aligner: { modelId: '  custom/id  ', minAvgProb: 2, minWordRatio: -1 },
         llm: { expectSpeakerLabels: false, maxSegmentSeconds: 120 },
+        quality: {
+          minMatchedCharRatio: -1,
+          maxInterpolatedChunkRatio: 2,
+          maxLocalInterpolatedUtteranceRatio: 'bad',
+        },
       }),
     );
 
@@ -65,6 +75,11 @@ describe('subtitle-llm-aligner-settings', () => {
         expectSpeakerLabels: false,
         maxSegmentSeconds: 60,
         verbatimCoveragePrompt: false,
+      },
+      quality: {
+        minMatchedCharRatio: 0,
+        maxInterpolatedChunkRatio: 1,
+        maxLocalInterpolatedUtteranceRatio: 0.25,
       },
       updatedAt: null,
     });
@@ -83,6 +98,11 @@ describe('subtitle-llm-aligner-settings', () => {
         expectSpeakerLabels: true,
         maxSegmentSeconds: 8,
         verbatimCoveragePrompt: false,
+      },
+      quality: {
+        minMatchedCharRatio: 0.95,
+        maxInterpolatedChunkRatio: 0,
+        maxLocalInterpolatedUtteranceRatio: 0.2,
       },
     });
 
@@ -105,6 +125,11 @@ describe('subtitle-llm-aligner-settings', () => {
         maxSegmentSeconds: 8,
         verbatimCoveragePrompt: false,
       },
+      quality: {
+        minMatchedCharRatio: 0.95,
+        maxInterpolatedChunkRatio: 0,
+        maxLocalInterpolatedUtteranceRatio: 0.2,
+      },
     });
 
     mockGetAppSetting.mockReturnValue(serialized);
@@ -120,6 +145,11 @@ describe('subtitle-llm-aligner-settings', () => {
         expectSpeakerLabels: true,
         maxSegmentSeconds: 8,
         verbatimCoveragePrompt: false,
+      },
+      quality: {
+        minMatchedCharRatio: 0.95,
+        maxInterpolatedChunkRatio: 0,
+        maxLocalInterpolatedUtteranceRatio: 0.2,
       },
       updatedAt: null,
     });

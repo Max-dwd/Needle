@@ -58,6 +58,7 @@ Docker 部署时请注意：
 - `compose.yaml` 暴露了 `19825:19825`；请保持该端口可用，因为宿主机扩展会连接 `localhost:19825`。
 - `./data` 会 bind mount 到 `/app/data`，因此 SQLite、字幕、摘要、日志和备份都会持久化到宿主机目录。
 - 若存在 `.env.local`，compose 会将其加载进容器。核心数据路径和 daemon 绑定地址由 compose 固定；`.env.local` 更适合放 `BILIBILI_SESSDATA`、`LOG_LEVEL` 或工具路径覆盖。
+- 本地 MLX runtime 不安装在 Debian 容器里。`llm-aligner` 需要把 Qwen3-ForcedAligner 放在宿主 macOS 上作为 sidecar 跑，容器通过 `http://host.docker.internal:8766` 调用。
 - **不需要**为了启动容器而在宿主机先运行 `npm run browser:prepare`。只有当你想从源码重建本地 browser runtime / 扩展产物时，才需要手动执行它。
 
 从当前仓库安装或刷新宿主机侧 Chrome 扩展：
@@ -78,6 +79,31 @@ NEEDLE_HTTP_PORT=3001 docker compose up -d --build  # 如果 3000 已被占用
 
 > [!NOTE]
 > `YOUTUBE_COOKIES_BROWSER=chrome` 指向的是容器内的浏览器配置目录，而不是宿主机 Chrome 的 profile。Docker 部署下更推荐使用 OPML 导入、浏览器引导导入流程，或直接提供 `BILIBILI_SESSDATA` 这类显式认证信息。
+
+### Docker + 宿主机 forced-aligner sidecar
+
+让 Docker 只负责 Next.js、SQLite、队列和 UI；Qwen3-ForcedAligner、MLX、Metal 留在 Apple Silicon macOS 宿主机：
+
+```bash
+# 在宿主机当前 Needle 仓库中执行
+python3.13 -m venv .venv
+.venv/bin/python -m pip install --upgrade pip
+.venv/bin/python -m pip install mlx-audio mlx-forced-aligner
+chmod +x scripts/mlx_forced_aligner_wrapper.py scripts/forced_aligner_sidecar.py
+
+FORCED_ALIGNER_SIDECAR_PORT=8766 \
+  .venv/bin/python scripts/forced_aligner_sidecar.py
+```
+
+另开一个终端启动容器：
+
+```bash
+FORCED_ALIGNER_RUNTIME=remote \
+FORCED_ALIGNER_REMOTE_URL=http://host.docker.internal:8766 \
+docker compose up -d --build
+```
+
+`compose.yaml` 已经默认把这两个 forced-aligner 变量指向远程 sidecar。只有当你改了 sidecar 端口，或不是用 Docker 跑主应用时，才需要覆盖它们。
 
 ---
 
@@ -145,6 +171,8 @@ FFMPEG_BIN=ffmpeg
 FFPROBE_BIN=ffprobe
 MLX_WHISPER_BIN=mlx_whisper
 WHISPER_MODEL_ID=mlx-community/whisper-base-mlx-q4
+FORCED_ALIGNER_RUNTIME=local
+FORCED_ALIGNER_REMOTE_URL=http://host.docker.internal:8766
 MLX_FORCED_ALIGNER_BIN=./scripts/mlx_forced_aligner_wrapper.py
 FORCED_ALIGNER_MODEL_ID=mlx-community/Qwen3-ForcedAligner-0.6B-8bit
 
@@ -203,7 +231,8 @@ python3.13 -m venv .venv
 
 1. 如果 `.env.local` 里还没有，设置 `MLX_FORCED_ALIGNER_BIN=./scripts/mlx_forced_aligner_wrapper.py`。
 2. 保留或覆盖 `FORCED_ALIGNER_MODEL_ID`；默认值是 `mlx-community/Qwen3-ForcedAligner-0.6B-8bit`。
-3. 打开设置 → 字幕，启用 **LLM 转写 + 本地对齐**，并点击 forced aligner 环境检测。Needle 会调用 `/api/settings/forced-aligner-status`。
+3. 主应用直接跑在 macOS 上时保留 `FORCED_ALIGNER_RUNTIME=local`；主应用跑在 Docker 里、aligner 跑在宿主机时，改用 `FORCED_ALIGNER_RUNTIME=remote` 和 `FORCED_ALIGNER_REMOTE_URL=http://host.docker.internal:8766`。
+4. 打开设置 → 字幕，启用 **LLM 转写 + 本地对齐**，并点击 forced aligner 环境检测。Needle 会调用 `/api/settings/forced-aligner-status`。
 
 如果某个 chunk 的 aligner 失败，Needle 会保留 LLM 文本并用插值时间戳降级；如果某个 chunk 转写失败，该 chunk 会标记为 `[转写失败]`，其它 chunk 仍可继续完成。
 

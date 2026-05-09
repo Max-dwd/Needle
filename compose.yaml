@@ -17,6 +17,8 @@ services:
       SUMMARY_MD_ROOT: /app/data/summary-md
       FOLO_BROWSER_DAEMON_PORT: "19825"
       FOLO_BROWSER_DAEMON_BIND_HOST: 0.0.0.0
+      FORCED_ALIGNER_RUNTIME: ${FORCED_ALIGNER_RUNTIME:-remote}
+      FORCED_ALIGNER_REMOTE_URL: ${FORCED_ALIGNER_REMOTE_URL:-http://host.docker.internal:8766}
     env_file:
       - path: .env.local
         required: false

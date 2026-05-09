@@ -32,7 +32,10 @@ import {
 } from './subtitle-backoff';
 import { getSubtitleBrowserFetchConfig } from './subtitle-browser-fetch-settings';
 import { getSubtitleWhisperAiConfig } from './subtitle-whisper-ai-settings';
-import { getSubtitleLlmAlignerConfig } from './subtitle-llm-aligner-settings';
+import {
+  getSubtitleLlmAlignerConfig,
+  type SubtitleLlmAlignerQualityConfig,
+} from './subtitle-llm-aligner-settings';
 import { getTranscriber } from './subtitle-providers';
 import type {
   MultimodalTranscriber,
@@ -121,6 +124,10 @@ type SubtitleRetryClass = 'missing' | 'temporary-error' | 'permanent';
 interface LlmAlignerRejectionSummary {
   chunkCount: number;
   transcribeFailedCount: number;
+  interpolatedCount: number;
+  totalUtteranceCount: number;
+  localInterpolatedUtteranceCount: number;
+  avgMatchedCharRatio: number | null;
 }
 
 interface BilibiliSubtitleFetchContext {
@@ -1893,6 +1900,7 @@ async function fetchSubtitleViaLlmAligner(
       chunk_count: summary.chunkCount,
       interpolated_chunk_count: summary.interpolatedCount,
       transcribe_failed_chunk_count: summary.transcribeFailedCount,
+      total_utterance_count: summary.totalUtteranceCount,
       aligner_total_words: summary.totalWordCount,
       aligner_avg_prob: summary.avgProb,
       missing_timing_utterance_count: summary.missingTimingUtteranceCount,
@@ -1902,7 +1910,10 @@ async function fetchSubtitleViaLlmAligner(
       avg_matched_char_ratio: summary.avgMatchedCharRatio,
     });
 
-    const rejectionReason = getLlmAlignerRejectionReason(summary);
+    const rejectionReason = getLlmAlignerRejectionReason(
+      summary,
+      llmAlignerConfig.quality,
+    );
     if (rejectionReason) {
       throw new Error(rejectionReason);
     }
@@ -1943,6 +1954,7 @@ async function fetchSubtitleViaLlmAligner(
         chunk_seconds: chunkSeconds,
         max_segment_seconds: llmAlignerConfig.llm.maxSegmentSeconds,
         aligner_model: llmAlignerConfig.aligner.modelId,
+        total_utterance_count: summary.totalUtteranceCount,
         aligner_total_words: summary.totalWordCount,
         ...(summary.avgProb !== null
           ? { aligner_avg_prob: Number(summary.avgProb.toFixed(4)) }
@@ -2353,10 +2365,39 @@ function buildSubtitleMethodOrder(
 
 function getLlmAlignerRejectionReason(
   summary: LlmAlignerRejectionSummary,
+  quality?: SubtitleLlmAlignerQualityConfig,
 ): string | null {
   if (summary.chunkCount <= 0) return null;
-  if (summary.transcribeFailedCount <= 0) return null;
-  return `llm-aligner failed to transcribe ${summary.transcribeFailedCount}/${summary.chunkCount} chunks`;
+  if (summary.transcribeFailedCount > 0) {
+    return `llm-aligner failed to transcribe ${summary.transcribeFailedCount}/${summary.chunkCount} chunks`;
+  }
+
+  if (!quality) return null;
+
+  const interpolatedChunkRatio =
+    summary.interpolatedCount / Math.max(1, summary.chunkCount);
+  if (interpolatedChunkRatio > quality.maxInterpolatedChunkRatio) {
+    return `llm-aligner interpolated ${summary.interpolatedCount}/${summary.chunkCount} chunks`;
+  }
+
+  if (
+    summary.avgMatchedCharRatio !== null &&
+    summary.avgMatchedCharRatio < quality.minMatchedCharRatio
+  ) {
+    return `llm-aligner matched char ratio ${summary.avgMatchedCharRatio.toFixed(4)} below ${quality.minMatchedCharRatio}`;
+  }
+
+  const localInterpolatedRatio =
+    summary.localInterpolatedUtteranceCount /
+    Math.max(1, summary.totalUtteranceCount);
+  if (
+    summary.totalUtteranceCount > 0 &&
+    localInterpolatedRatio > quality.maxLocalInterpolatedUtteranceRatio
+  ) {
+    return `llm-aligner locally interpolated ${summary.localInterpolatedUtteranceCount}/${summary.totalUtteranceCount} utterances`;
+  }
+
+  return null;
 }
 
 // ---------------------------------------------------------------------------

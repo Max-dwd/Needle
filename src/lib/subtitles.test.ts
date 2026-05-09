@@ -202,6 +202,10 @@ describe('subtitle retry schedule', () => {
       __subtitleRetryTestUtils.getLlmAlignerRejectionReason({
         chunkCount: 2,
         transcribeFailedCount: 1,
+        interpolatedCount: 0,
+        totalUtteranceCount: 10,
+        localInterpolatedUtteranceCount: 0,
+        avgMatchedCharRatio: 1,
       }),
     ).toBe('llm-aligner failed to transcribe 1/2 chunks');
 
@@ -209,8 +213,62 @@ describe('subtitle retry schedule', () => {
       __subtitleRetryTestUtils.getLlmAlignerRejectionReason({
         chunkCount: 2,
         transcribeFailedCount: 0,
+        interpolatedCount: 0,
+        totalUtteranceCount: 10,
+        localInterpolatedUtteranceCount: 0,
+        avgMatchedCharRatio: 1,
       }),
     ).toBeNull();
+  });
+
+  it('rejects llm-aligner output when alignment quality gates fail', () => {
+    const quality = {
+      minMatchedCharRatio: 0.9,
+      maxInterpolatedChunkRatio: 0,
+      maxLocalInterpolatedUtteranceRatio: 0.25,
+    };
+
+    expect(
+      __subtitleRetryTestUtils.getLlmAlignerRejectionReason(
+        {
+          chunkCount: 4,
+          transcribeFailedCount: 0,
+          interpolatedCount: 1,
+          totalUtteranceCount: 40,
+          localInterpolatedUtteranceCount: 0,
+          avgMatchedCharRatio: 1,
+        },
+        quality,
+      ),
+    ).toBe('llm-aligner interpolated 1/4 chunks');
+
+    expect(
+      __subtitleRetryTestUtils.getLlmAlignerRejectionReason(
+        {
+          chunkCount: 4,
+          transcribeFailedCount: 0,
+          interpolatedCount: 0,
+          totalUtteranceCount: 40,
+          localInterpolatedUtteranceCount: 0,
+          avgMatchedCharRatio: 0.82,
+        },
+        quality,
+      ),
+    ).toBe('llm-aligner matched char ratio 0.8200 below 0.9');
+
+    expect(
+      __subtitleRetryTestUtils.getLlmAlignerRejectionReason(
+        {
+          chunkCount: 4,
+          transcribeFailedCount: 0,
+          interpolatedCount: 0,
+          totalUtteranceCount: 40,
+          localInterpolatedUtteranceCount: 12,
+          avgMatchedCharRatio: 1,
+        },
+        quality,
+      ),
+    ).toBe('llm-aligner locally interpolated 12/40 utterances');
   });
 
   it('keeps millisecond precision for llm-aligner subtitle segments', () => {

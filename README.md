@@ -58,6 +58,7 @@ Important notes for Docker:
 - `compose.yaml` publishes `19825:19825`; keep that port available because the host extension connects to `localhost:19825`.
 - `./data` is bind-mounted to `/app/data`, so SQLite, subtitles, summaries, logs, and backups persist on the host.
 - `.env.local` is loaded into the container when present. The compose file pins the container data paths and daemon bind host; use `.env.local` mainly for optional values such as `BILIBILI_SESSDATA`, `LOG_LEVEL`, or tool path overrides.
+- Local MLX runtimes are not installed in the Debian container. For `llm-aligner`, run Qwen3-ForcedAligner as a macOS sidecar on the host and let the container call `http://host.docker.internal:8766`.
 - You do **not** need to run `npm run browser:prepare` on the host just to start the container. Run it only when you want to rebuild the local browser runtime / extension bundle from source.
 
 Install or refresh the host-side Chrome extension from this repo:
@@ -78,6 +79,31 @@ NEEDLE_HTTP_PORT=3001 docker compose up -d --build  # if port 3000 is already in
 
 > [!NOTE]
 > `YOUTUBE_COOKIES_BROWSER=chrome` points to a browser profile inside the container, not your host Chrome profile. For Docker deployments, prefer OPML import, the browser-based import flow, or explicit auth values such as `BILIBILI_SESSDATA`.
+
+### Docker + host forced-aligner sidecar
+
+Keep Docker responsible for Next.js, SQLite, queues, and the UI. Keep Qwen3-ForcedAligner, MLX, and Metal on the Apple Silicon macOS host:
+
+```bash
+# On the host, from the Needle repo
+python3.13 -m venv .venv
+.venv/bin/python -m pip install --upgrade pip
+.venv/bin/python -m pip install mlx-audio mlx-forced-aligner
+chmod +x scripts/mlx_forced_aligner_wrapper.py scripts/forced_aligner_sidecar.py
+
+FORCED_ALIGNER_SIDECAR_PORT=8766 \
+  .venv/bin/python scripts/forced_aligner_sidecar.py
+```
+
+In another terminal, start the container:
+
+```bash
+FORCED_ALIGNER_RUNTIME=remote \
+FORCED_ALIGNER_REMOTE_URL=http://host.docker.internal:8766 \
+docker compose up -d --build
+```
+
+`compose.yaml` already defaults those two forced-aligner variables to the remote sidecar values. Override them only if you use a different sidecar port or run a non-Docker local app process.
 
 ---
 
@@ -145,6 +171,8 @@ FFMPEG_BIN=ffmpeg
 FFPROBE_BIN=ffprobe
 MLX_WHISPER_BIN=mlx_whisper
 WHISPER_MODEL_ID=mlx-community/whisper-base-mlx-q4
+FORCED_ALIGNER_RUNTIME=local
+FORCED_ALIGNER_REMOTE_URL=http://host.docker.internal:8766
 MLX_FORCED_ALIGNER_BIN=./scripts/mlx_forced_aligner_wrapper.py
 FORCED_ALIGNER_MODEL_ID=mlx-community/Qwen3-ForcedAligner-0.6B-8bit
 
@@ -203,7 +231,8 @@ Then:
 
 1. Set `MLX_FORCED_ALIGNER_BIN=./scripts/mlx_forced_aligner_wrapper.py` in `.env.local` if it is not already there.
 2. Keep or override `FORCED_ALIGNER_MODEL_ID`; the default is `mlx-community/Qwen3-ForcedAligner-0.6B-8bit`.
-3. Open Settings → Subtitles, enable **LLM transcription + local alignment**, and click the forced aligner environment check. Needle calls `/api/settings/forced-aligner-status`.
+3. Keep `FORCED_ALIGNER_RUNTIME=local` when the Next.js app runs directly on macOS. Use `FORCED_ALIGNER_RUNTIME=remote` and `FORCED_ALIGNER_REMOTE_URL=http://host.docker.internal:8766` when the app runs in Docker and the aligner sidecar runs on the host.
+4. Open Settings → Subtitles, enable **LLM transcription + local alignment**, and click the forced aligner environment check. Needle calls `/api/settings/forced-aligner-status`.
 
 If the aligner fails for a chunk, Needle keeps the LLM text with interpolated timestamps; if transcription fails for a chunk, that chunk is marked with `[转写失败]` and the rest of the video can still complete.
 

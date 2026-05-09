@@ -24,11 +24,18 @@ export interface SubtitleLlmAlignerLlmConfig {
   verbatimCoveragePrompt?: boolean;
 }
 
+export interface SubtitleLlmAlignerQualityConfig {
+  minMatchedCharRatio: number;
+  maxInterpolatedChunkRatio: number;
+  maxLocalInterpolatedUtteranceRatio: number;
+}
+
 export interface SubtitleLlmAlignerConfig {
   enabled: boolean;
   chunkSeconds: number;
   aligner: SubtitleLlmAlignerAlignerConfig;
   llm: SubtitleLlmAlignerLlmConfig;
+  quality: SubtitleLlmAlignerQualityConfig;
   updatedAt: string | null;
 }
 
@@ -37,6 +44,7 @@ interface StoredSubtitleLlmAlignerConfig {
   chunkSeconds?: unknown;
   aligner?: unknown;
   llm?: unknown;
+  quality?: unknown;
 }
 
 const DEFAULT_ALIGNER_CONFIG: SubtitleLlmAlignerAlignerConfig = {
@@ -49,6 +57,12 @@ const DEFAULT_LLM_CONFIG: SubtitleLlmAlignerLlmConfig = {
   expectSpeakerLabels: true,
   maxSegmentSeconds: 3,
   verbatimCoveragePrompt: false,
+};
+
+const DEFAULT_QUALITY_CONFIG: SubtitleLlmAlignerQualityConfig = {
+  minMatchedCharRatio: 0.9,
+  maxInterpolatedChunkRatio: 0,
+  maxLocalInterpolatedUtteranceRatio: 0.25,
 };
 
 function normalizeText(value: unknown, fallback: string): string {
@@ -115,6 +129,27 @@ function normalizeLlmConfig(raw: unknown): SubtitleLlmAlignerLlmConfig {
   };
 }
 
+function normalizeQualityConfig(raw: unknown): SubtitleLlmAlignerQualityConfig {
+  const value =
+    raw && typeof raw === 'object'
+      ? (raw as Partial<SubtitleLlmAlignerQualityConfig>)
+      : {};
+  return {
+    minMatchedCharRatio: normalizeRatio(
+      value.minMatchedCharRatio,
+      DEFAULT_QUALITY_CONFIG.minMatchedCharRatio,
+    ),
+    maxInterpolatedChunkRatio: normalizeRatio(
+      value.maxInterpolatedChunkRatio,
+      DEFAULT_QUALITY_CONFIG.maxInterpolatedChunkRatio,
+    ),
+    maxLocalInterpolatedUtteranceRatio: normalizeRatio(
+      value.maxLocalInterpolatedUtteranceRatio,
+      DEFAULT_QUALITY_CONFIG.maxLocalInterpolatedUtteranceRatio,
+    ),
+  };
+}
+
 function normalizeConfig(
   raw: unknown,
 ): Omit<SubtitleLlmAlignerConfig, 'updatedAt'> {
@@ -134,6 +169,7 @@ function normalizeConfig(
     ),
     aligner: normalizeAlignerConfig(value.aligner),
     llm: normalizeLlmConfig(value.llm),
+    quality: normalizeQualityConfig(value.quality),
   };
 }
 
@@ -165,6 +201,7 @@ export function setSubtitleLlmAlignerConfig(
       chunkSeconds: normalized.chunkSeconds,
       aligner: normalized.aligner,
       llm: normalized.llm,
+      quality: normalized.quality,
     }),
   );
   return getSubtitleLlmAlignerConfig();

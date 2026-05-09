@@ -1110,6 +1110,7 @@ export interface LlmAlignerChunkSummary {
   chunkCount: number;
   interpolatedCount: number;
   transcribeFailedCount: number;
+  totalUtteranceCount: number;
   totalWordCount: number;
   missingTimingUtteranceCount: number;
   collapsedTimingUtteranceCount: number;
@@ -1143,6 +1144,10 @@ export function summarizeChunkResults(
     (sum, chunk) => sum + chunk.wordCount,
     0,
   );
+  const totalUtteranceCount = chunks.reduce(
+    (sum, chunk) => sum + chunk.utterances.length,
+    0,
+  );
   const missingTimingUtteranceCount = chunks.reduce(
     (sum, chunk) => sum + (chunk.missingTimingUtteranceCount || 0),
     0,
@@ -1170,6 +1175,7 @@ export function summarizeChunkResults(
     chunkCount: chunks.length,
     interpolatedCount: interpolated.length,
     transcribeFailedCount: transcribeFailed.length,
+    totalUtteranceCount,
     totalWordCount,
     missingTimingUtteranceCount,
     collapsedTimingUtteranceCount,

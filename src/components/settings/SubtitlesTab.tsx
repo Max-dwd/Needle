@@ -70,7 +70,7 @@ const DEFAULT_WHISPER_CONFIG: SubtitleWhisperAiConfig = {
 
 const DEFAULT_LLM_ALIGNER_CONFIG: SubtitleLlmAlignerConfig = {
   enabled: false,
-  chunkSeconds: 900,
+  chunkSeconds: 300,
   aligner: {
     modelId: 'mlx-community/Qwen3-ForcedAligner-0.6B-8bit',
     minAvgProb: 0.3,
@@ -78,7 +78,13 @@ const DEFAULT_LLM_ALIGNER_CONFIG: SubtitleLlmAlignerConfig = {
   },
   llm: {
     expectSpeakerLabels: true,
-    maxSegmentSeconds: 12,
+    maxSegmentSeconds: 3,
+    verbatimCoveragePrompt: false,
+  },
+  quality: {
+    minMatchedCharRatio: 0.9,
+    maxInterpolatedChunkRatio: 0,
+    maxLocalInterpolatedUtteranceRatio: 0.25,
   },
   updatedAt: null,
 };
@@ -542,8 +548,12 @@ function SubtitlesTabForm({
       const res = await fetch('/api/settings/forced-aligner-status');
       const data = await res.json();
       if (data.available) {
+        const target =
+          data.runtime === 'remote'
+            ? data.remoteUrl || 'remote sidecar'
+            : data.binPath || 'mlx_forced_aligner';
         showToast(
-          `MLX Forced Aligner 可用 (${data.binPath || 'mlx_forced_aligner'}${
+          `MLX Forced Aligner 可用 (${target}${
             data.version ? ` · v${data.version}` : ''
           })`,
           'success',
@@ -903,7 +913,7 @@ function SubtitlesTabForm({
             <div className="setting-info">
               <span className="setting-label">检测 forced aligner 可用性</span>
               <span className="setting-description">
-                验证 {`MLX_FORCED_ALIGNER_BIN`} 指定的可执行文件是否存在。
+                验证本地 {`MLX_FORCED_ALIGNER_BIN`} 或远程 sidecar 是否可用。
               </span>
             </div>
             <button
@@ -929,7 +939,7 @@ function SubtitlesTabForm({
               value={llmAligner.chunkSeconds}
               onChange={(event) =>
                 updateLlmAligner({
-                  chunkSeconds: Number(event.target.value) || 900,
+                  chunkSeconds: Number(event.target.value) || 300,
                 })
               }
               disabled={pipelineSaving || !llmAligner.enabled}
@@ -960,7 +970,7 @@ function SubtitlesTabForm({
                 updateLlmAligner({
                   llm: {
                     ...llmAligner.llm,
-                    maxSegmentSeconds: Number(event.target.value) || 12,
+                    maxSegmentSeconds: Number(event.target.value) || 3,
                   },
                 })
               }
