@@ -43,7 +43,7 @@ interface BilibiliPlaybackResponse {
 interface YouTubePlaybackResponse {
   proxyUrl?: string;
   expiresAt?: number;
-  source?: 'mp4';
+  source?: 'native';
   limitations?: string[];
   error?: string;
   details?: string;

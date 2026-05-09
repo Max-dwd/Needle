@@ -27,7 +27,7 @@ interface BilibiliPlaybackResponse {
 interface YouTubePlaybackResponse {
   proxyUrl?: string;
   expiresAt?: number;
-  source?: 'mp4';
+  source?: 'native';
   limitations?: string[];
   error?: string;
   details?: string;
@@ -130,9 +130,9 @@ export default function EmbeddedPlayer({
     onStateChangeRef.current = onStateChange;
   }, [onStateChange]);
 
+  const shouldUseYouTubeNativeShell = isYt && !youtubePlaybackError;
   const useNativeYouTube =
     isYt && Boolean(youtubePlayback?.proxyUrl) && !youtubePlaybackError;
-  const shouldUseYouTubeNativeShell = isYt && !youtubePlaybackError;
   const usesNativeVideo =
     !isYt || useNativeYouTube || shouldUseYouTubeNativeShell;
   const nativeProxyUrl = isYt
