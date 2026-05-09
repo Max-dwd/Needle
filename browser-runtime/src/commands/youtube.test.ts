@@ -58,6 +58,32 @@ describe('youtube runtime duration extraction', () => {
     expect(result?.duration).toBe('8:01');
   });
 
+  it('detects YouTube member-gated watch page copy split across runs', () => {
+    const result = __youtubeCommandTestUtils.detectYoutubeMemberOnlyGate({
+      contents: [
+        {
+          runs: [
+            { text: 'Join this channel to get access to ' },
+            { text: 'members-only content like this video, ' },
+            { text: 'and other exclusive perks.' },
+          ],
+        },
+      ],
+    });
+
+    expect(result).toBe(true);
+  });
+
+  it('does not treat a generic YouTube join perks prompt as gated video access', () => {
+    const result = __youtubeCommandTestUtils.detectYoutubeMemberOnlyGate({
+      button: {
+        text: 'Join this channel to get access to perks and badges.',
+      },
+    });
+
+    expect(result).toBe(false);
+  });
+
   it('parses legacy text caption XML', () => {
     const result = __youtubeCommandTestUtils.parseYoutubeCaptionXml(
       '<transcript><text start="1.25" dur="2.5">Hello &amp; world</text><text start="4.00" dur="1.0">Next line</text></transcript>',

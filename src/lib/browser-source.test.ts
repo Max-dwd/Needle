@@ -219,6 +219,31 @@ describe('browser source commands', () => {
     });
   });
 
+  it('normalizes YouTube members-only video-meta access status', async () => {
+    mockJsonOnce({
+      video_id: 'member12345',
+      title: 'Members Video',
+      thumbnail_url: 'https://img.example/member.jpg',
+      published_at: '2026-03-28T00:00:00.000Z',
+      duration: '2:05',
+      access_status: 'members_only',
+    });
+
+    const { fetchBrowserYoutubeVideoMeta } = await import(
+      './browser-youtube-source'
+    );
+    await expect(fetchBrowserYoutubeVideoMeta('member12345')).resolves.toEqual({
+      video_id: 'member12345',
+      title: 'Members Video',
+      thumbnail_url: 'https://img.example/member.jpg',
+      published_at: '2026-03-28T00:00:00.000Z',
+      duration: '2:05',
+      channel_name: '',
+      access_status: 'members_only',
+      is_members_only: 1,
+    });
+  });
+
   it('passes a watch URL to youtube video-meta when given a bare video id', async () => {
     mockJsonOnce({
       video_id: 'abc123def45',
