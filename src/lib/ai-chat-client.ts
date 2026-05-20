@@ -8,7 +8,7 @@ import {
   extractSseEventData,
   extractStreamText,
   parseSseBlocks,
-  resolveAiApiUrl,
+  resolveAiApiUrlForModel,
   type SubtitleSegment,
   type ChatCompletionPromptInput,
 } from './ai-summary-client';
@@ -220,7 +220,7 @@ export function createChatStream(
           throw new Error('未配置 AI 模型名称，请先到设置页填写后再使用问答功能');
         }
 
-        const url = resolveAiApiUrl(model.endpoint);
+        const url = resolveAiApiUrlForModel(model);
         lease = await acquireSharedAiBudget({
           priority: 'manual-summary',
           estimatedTokens: estimateTextTokens(

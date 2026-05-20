@@ -7,6 +7,7 @@ import type {
   SubtitleApiFallbackConfig,
   SubtitleApiFallbackRule,
   SubtitleBrowserFetchConfig,
+  SubtitleLlmAlignerConfig,
   SubtitleWhisperAiConfig,
   SubtitlePipelineSettingsResponse,
 } from './shared';
@@ -65,6 +66,27 @@ const DEFAULT_WHISPER_CONFIG: SubtitleWhisperAiConfig = {
   },
   updatedAt: null,
 };
+
+const DEFAULT_LLM_ALIGNER_CONFIG: SubtitleLlmAlignerConfig = {
+  enabled: false,
+  chunkSeconds: 900,
+  aligner: {
+    modelId: 'mlx-community/Qwen3-ForcedAligner-0.6B-8bit',
+    minAvgProb: 0.3,
+    minWordRatio: 0.3,
+  },
+  llm: {
+    expectSpeakerLabels: true,
+  },
+  updatedAt: null,
+};
+
+const LLM_ALIGNER_CHUNK_SECONDS_OPTIONS = [
+  { value: 5 * 60, label: '5 分钟' },
+  { value: 10 * 60, label: '10 分钟' },
+  { value: 15 * 60, label: '15 分钟' },
+  { value: 20 * 60, label: '20 分钟' },
+];
 
 function formatWhisperChunkDuration(seconds: number): string {
   const safe = Math.max(30, Math.round(Number(seconds) || 180));
@@ -188,6 +210,7 @@ export default function SubtitlesTab({ showToast }: SubtitlesTabProps) {
         pipelineConfig.apiFallback.updatedAt || 'fallback',
         pipelineConfig.browserFetch.updatedAt || 'browser',
         pipelineConfig.whisperAi.updatedAt || 'whisper',
+        pipelineConfig.llmAligner?.updatedAt || 'llm-aligner',
         pipelineConfig.subtitleInterval,
         pipelineConfig.backoff.youtube.multiplier,
         pipelineConfig.backoff.bilibili.multiplier,
@@ -255,7 +278,10 @@ function SubtitlesTabForm({
   const browserFetch =
     pipelineConfig.browserFetch || DEFAULT_BROWSER_FETCH_CONFIG;
   const whisperAi = pipelineConfig.whisperAi || DEFAULT_WHISPER_CONFIG;
+  const llmAligner =
+    pipelineConfig.llmAligner || DEFAULT_LLM_ALIGNER_CONFIG;
   const [checkingWhisper, setCheckingWhisper] = useState(false);
+  const [checkingAligner, setCheckingAligner] = useState(false);
   const backoffFlows = useMemo(
     () =>
       Object.fromEntries(
@@ -290,6 +316,7 @@ function SubtitlesTabForm({
     apiFallback?: Partial<SubtitleApiFallbackConfig>;
     browserFetch?: Partial<SubtitleBrowserFetchConfig>;
     whisperAi?: Partial<SubtitleWhisperAiConfig>;
+    llmAligner?: Partial<SubtitleLlmAlignerConfig>;
     subtitleInterval?: number;
   }) => {
     onPipelineConfigChange({
@@ -298,11 +325,16 @@ function SubtitlesTabForm({
       apiFallback: { ...apiFallback, ...(next.apiFallback || {}) },
       browserFetch: { ...browserFetch, ...(next.browserFetch || {}) },
       whisperAi: { ...whisperAi, ...(next.whisperAi || {}) },
+      llmAligner: { ...llmAligner, ...(next.llmAligner || {}) },
     });
   };
 
   const updateWhisperAi = (next: Partial<SubtitleWhisperAiConfig>) => {
     updatePipeline({ whisperAi: next });
+  };
+
+  const updateLlmAligner = (next: Partial<SubtitleLlmAlignerConfig>) => {
+    updatePipeline({ llmAligner: next });
   };
 
   const updateApiFallback = (next: Partial<SubtitleApiFallbackConfig>) => {
@@ -345,6 +377,12 @@ function SubtitlesTabForm({
             batch: whisperAi.batch,
             hallucination: whisperAi.hallucination,
           },
+          llmAligner: {
+            enabled: llmAligner.enabled,
+            chunkSeconds: llmAligner.chunkSeconds,
+            aligner: llmAligner.aligner,
+            llm: llmAligner.llm,
+          },
           apiFallback: {
             enabled: apiFallback.enabled,
             scope: apiFallback.scope,
@@ -380,6 +418,7 @@ function SubtitlesTabForm({
           subtitleInterval: 10,
           browserFetch: DEFAULT_BROWSER_FETCH_CONFIG,
           whisperAi: DEFAULT_WHISPER_CONFIG,
+          llmAligner: DEFAULT_LLM_ALIGNER_CONFIG,
           apiFallback: DEFAULT_API_FALLBACK_CONFIG,
         }),
       });
@@ -481,6 +520,31 @@ function SubtitlesTabForm({
       config.defaults.subtitleSegmentPromptTemplate || '',
     );
     showToast(t.settings.subtitles.toastRestoreSegmentPrompt);
+  };
+
+  const checkAlignerStatus = async () => {
+    setCheckingAligner(true);
+    try {
+      const res = await fetch('/api/settings/forced-aligner-status');
+      const data = await res.json();
+      if (data.available) {
+        showToast(
+          `MLX Forced Aligner 可用 (${data.binPath || 'mlx_forced_aligner'}${
+            data.version ? ` · v${data.version}` : ''
+          })`,
+          'success',
+        );
+      } else {
+        showToast(
+          `MLX Forced Aligner 不可用: ${data.error || '未找到可执行文件'}`,
+          'error',
+        );
+      }
+    } catch {
+      showToast('MLX Forced Aligner 检测失败', 'error');
+    } finally {
+      setCheckingAligner(false);
+    }
   };
 
   const checkWhisperStatus = async () => {
@@ -756,6 +820,176 @@ function SubtitlesTabForm({
             </div>
           </div>
 
+        </div>
+      </div>
+
+      <div className="settings-group">
+        <h2 className="settings-group-title">LLM 转写 + 本地对齐</h2>
+        <div className="settings-card-group">
+          <div className="setting-row">
+            <div className="setting-info">
+              <span className="setting-label">启用 LLM 转写 + 本地对齐</span>
+              <span className="setting-description">
+                多模态 AI 负责完整转写和说话人分段，MLX forced aligner 负责词级对齐。仅 Apple Silicon。
+              </span>
+            </div>
+            <label className="switch">
+              <input
+                type="checkbox"
+                checked={llmAligner.enabled}
+                onChange={(event) =>
+                  updateLlmAligner({ enabled: event.target.checked })
+                }
+                disabled={pipelineSaving}
+              />
+              <span className="slider" />
+            </label>
+          </div>
+
+          <div className="setting-row">
+            <div className="setting-info">
+              <span className="setting-label">检测 forced aligner 可用性</span>
+              <span className="setting-description">
+                验证 {`MLX_FORCED_ALIGNER_BIN`} 指定的可执行文件是否存在。
+              </span>
+            </div>
+            <button
+              className="premium-button"
+              type="button"
+              onClick={checkAlignerStatus}
+              disabled={checkingAligner || pipelineSaving}
+            >
+              {checkingAligner ? '检测中…' : '检测安装'}
+            </button>
+          </div>
+
+          <div className="setting-row">
+            <div className="setting-info">
+              <span className="setting-label">分段时长</span>
+              <span className="setting-description">
+                每一段 LLM 单独转写和对齐，过长会放大 token 成本。
+              </span>
+            </div>
+            <select
+              className="premium-select"
+              value={llmAligner.chunkSeconds}
+              onChange={(event) =>
+                updateLlmAligner({
+                  chunkSeconds: Number(event.target.value) || 900,
+                })
+              }
+              disabled={pipelineSaving || !llmAligner.enabled}
+            >
+              {LLM_ALIGNER_CHUNK_SECONDS_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="setting-row">
+            <div className="setting-info">
+              <span className="setting-label">显示说话人标签</span>
+              <span className="setting-description">
+                关闭后所有段落 speaker 统一为 S1，不做说话人区分。
+              </span>
+            </div>
+            <label className="switch">
+              <input
+                type="checkbox"
+                checked={llmAligner.llm.expectSpeakerLabels}
+                onChange={(event) =>
+                  updateLlmAligner({
+                    llm: {
+                      ...llmAligner.llm,
+                      expectSpeakerLabels: event.target.checked,
+                    },
+                  })
+                }
+                disabled={pipelineSaving || !llmAligner.enabled}
+              />
+              <span className="slider" />
+            </label>
+          </div>
+
+          <div className="setting-row">
+            <div className="setting-info">
+              <span className="setting-label">Forced Aligner 模型</span>
+              <span className="setting-description">
+                HuggingFace 模型 ID，默认 mlx-community/Qwen3-ForcedAligner-0.6B-8bit。
+              </span>
+            </div>
+            <input
+              type="text"
+              className="premium-input"
+              value={llmAligner.aligner.modelId}
+              onChange={(event) =>
+                updateLlmAligner({
+                  aligner: {
+                    ...llmAligner.aligner,
+                    modelId: event.target.value,
+                  },
+                })
+              }
+              disabled={pipelineSaving || !llmAligner.enabled}
+              style={{ minWidth: 320 }}
+            />
+          </div>
+
+          <div className="setting-row">
+            <div className="setting-info">
+              <span className="setting-label">最低平均置信度</span>
+              <span className="setting-description">
+                对齐结果平均置信度低于此阈值，当前 chunk 将退回均匀插值（0-1）。
+              </span>
+            </div>
+            <input
+              type="number"
+              className="premium-input"
+              min={0}
+              max={1}
+              step={0.05}
+              value={llmAligner.aligner.minAvgProb}
+              onChange={(event) =>
+                updateLlmAligner({
+                  aligner: {
+                    ...llmAligner.aligner,
+                    minAvgProb: Number(event.target.value),
+                  },
+                })
+              }
+              disabled={pipelineSaving || !llmAligner.enabled}
+              style={{ width: 120 }}
+            />
+          </div>
+
+          <div className="setting-row">
+            <div className="setting-info">
+              <span className="setting-label">最低匹配字符比</span>
+              <span className="setting-description">
+                对齐返回的字符数 / 输入字符数低于此阈值，退回均匀插值（0-1）。
+              </span>
+            </div>
+            <input
+              type="number"
+              className="premium-input"
+              min={0}
+              max={1}
+              step={0.05}
+              value={llmAligner.aligner.minWordRatio}
+              onChange={(event) =>
+                updateLlmAligner({
+                  aligner: {
+                    ...llmAligner.aligner,
+                    minWordRatio: Number(event.target.value),
+                  },
+                })
+              }
+              disabled={pipelineSaving || !llmAligner.enabled}
+              style={{ width: 120 }}
+            />
+          </div>
         </div>
       </div>
 

@@ -12,6 +12,7 @@ interface PipelineSourceDefinition {
   id: string;
   label: string;
   description: string;
+  defaultEnabled?: boolean;
 }
 
 interface PipelinePlatformDefinition {
@@ -56,7 +57,11 @@ export type SubtitlePipelinePlatform = 'youtube' | 'bilibili';
 
 export type CrawlPipelineSourceId = 'browser';
 
-export type SubtitlePipelineSourceId = 'browser' | 'whisper-ai' | 'gemini';
+export type SubtitlePipelineSourceId =
+  | 'browser'
+  | 'whisper-ai'
+  | 'llm-aligner'
+  | 'gemini';
 
 const CRAWL_PIPELINE_DEFINITIONS: PipelinePlatformDefinition[] = [
   {
@@ -103,6 +108,13 @@ const SUBTITLE_PIPELINE_DEFINITIONS: PipelinePlatformDefinition[] = [
         description: '本地 Whisper 提供时间戳，多模态 AI 听音频校对文本。',
       },
       {
+        id: 'llm-aligner',
+        label: 'LLM 转写 + 本地对齐',
+        description:
+          '多模态 AI 出完整文本和说话人，MLX forced aligner 出词级时间戳。',
+        defaultEnabled: false,
+      },
+      {
         id: 'gemini',
         label: 'AI 多模态 API',
         description: 'AI 提取 fallback，适合无字幕或字幕失效场景。',
@@ -124,6 +136,13 @@ const SUBTITLE_PIPELINE_DEFINITIONS: PipelinePlatformDefinition[] = [
         id: 'whisper-ai',
         label: 'Whisper + AI 校对',
         description: '本地 Whisper 提供时间戳，多模态 AI 听音频校对文本。',
+      },
+      {
+        id: 'llm-aligner',
+        label: 'LLM 转写 + 本地对齐',
+        description:
+          '多模态 AI 出完整文本和说话人，MLX forced aligner 出词级时间戳。',
+        defaultEnabled: false,
       },
       {
         id: 'gemini',
@@ -199,10 +218,15 @@ function normalizePlatformConfig(
     sources: orderedIds
       .map((id) => sourceMap.get(id))
       .filter((source): source is PipelineSourceDefinition => Boolean(source))
-      .map((source) => ({
-        ...source,
-        enabled: storedEnabledMap.get(source.id) ?? true,
-      })),
+      .map((source) => {
+        const { defaultEnabled, ...rest } = source;
+        return {
+          ...rest,
+          enabled:
+            storedEnabledMap.get(source.id) ??
+            (defaultEnabled === undefined ? true : defaultEnabled),
+        };
+      }),
   };
 }
 
