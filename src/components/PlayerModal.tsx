@@ -15,9 +15,10 @@ import {
   parseYouTubePlayerMessage,
   resolveYouTubeEmbedOrigin,
 } from '@/lib/youtube-player';
-import type { VideoWithMeta } from '@/types';
+import type { SubtitleData, VideoWithMeta } from '@/types';
 import VideoInfoPanel, { type VideoInfoPanelRef } from '@/components/VideoInfoPanel';
 import AudioModeOverlay from '@/components/AudioModeOverlay';
+import SubtitleOverlay from '@/components/player/SubtitleOverlay';
 import { useMediaSession } from '@/hooks/useMediaSession';
 import { extractSummaryChapters, findChapterIndexForSeconds } from '@/lib/summary-chapters';
 import PlayerBottomBar from '@/components/player/PlayerBottomBar';
@@ -152,6 +153,13 @@ export default function PlayerModal({
     if (typeof window === 'undefined') return false;
     return localStorage.getItem('needle-player-follow-mode') === 'true';
   });
+
+  // Subtitle Overlay (caption over video)
+  const [subtitleOverlay, setSubtitleOverlay] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return localStorage.getItem('needle-player-subtitle-overlay') === 'true';
+  });
+  const [subtitle, setSubtitle] = useState<SubtitleData | null>(null);
 
   const [activeChapterIndex, setActiveChapterIndex] = useState<number>(-1);
   const [cursorChapterIndex, setCursorChapterIndex] = useState<number | null>(null);
@@ -726,6 +734,15 @@ export default function PlayerModal({
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
+      localStorage.setItem(
+        'needle-player-subtitle-overlay',
+        String(subtitleOverlay),
+      );
+    }
+  }, [subtitleOverlay]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
       localStorage.setItem('needle-player-mute', String(isMuted));
     }
     if (usesNativeVideo) {
@@ -784,6 +801,10 @@ export default function PlayerModal({
       }
       if (action.type === 'toggle-mute') {
         setIsMuted((v) => !v);
+        return;
+      }
+      if (action.type === 'toggle-subtitle-overlay') {
+        setSubtitleOverlay((v) => !v);
         return;
       }
     };
@@ -1272,8 +1293,11 @@ export default function PlayerModal({
               bilibiliAid={isYt ? null : (bilibiliPlayback?.aid ?? null)}
               bilibiliCid={isYt ? null : (bilibiliPlayback?.cid ?? null)}
               onSummaryChange={setSummaryMarkdown}
+              onSubtitleChange={setSubtitle}
               followMode={followMode}
               onFollowModeChange={setFollowMode}
+              subtitleOverlay={subtitleOverlay}
+              onSubtitleOverlayChange={setSubtitleOverlay}
             />
           </div>
 
@@ -1307,6 +1331,19 @@ export default function PlayerModal({
                   onClose={onClose}
                 />
               )}
+              <SubtitleOverlay
+                segments={
+                  subtitle?.status === 'fetched' &&
+                  subtitle?.segmentStyle !== 'coarse'
+                    ? Array.isArray(subtitle?.segments)
+                      ? subtitle.segments
+                      : []
+                    : []
+                }
+                currentTime={playerStartSeconds}
+                enabled={subtitleOverlay}
+                bottomOffset={isAudioMode ? 120 : 64}
+              />
               <div
                 style={{
                   position: 'absolute',

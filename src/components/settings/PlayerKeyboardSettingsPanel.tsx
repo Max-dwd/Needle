@@ -167,6 +167,7 @@ export default function PlayerKeyboardSettingsPanel({
     'seek-forward': t.settings.appearance.actionSeekForward,
     'toggle-summary-follow': '随播追随 (Follow Mode)',
     'toggle-mute': '静音切换 (Mute)',
+    'toggle-subtitle-overlay': '字幕浮层 (Subtitle Overlay)',
   };
 
   return (

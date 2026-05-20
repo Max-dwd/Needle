@@ -115,6 +115,18 @@ describe('resolvePlayerKeyboardAction', () => {
         { isTypingContext: false, settings: shortcutSettings },
       ),
     ).toEqual({ type: 'seek-step', seconds: 10 });
+    expect(
+      resolvePlayerKeyboardAction(
+        { key: 'c' },
+        { isTypingContext: false, settings: shortcutSettings },
+      ),
+    ).toEqual({ type: 'toggle-subtitle-overlay' });
+    expect(
+      resolvePlayerKeyboardAction(
+        { key: 'C' },
+        { isTypingContext: false, settings: shortcutSettings },
+      ),
+    ).toEqual({ type: 'toggle-subtitle-overlay' });
   });
 
   it('does not dispatch bindings when disabled', () => {
