@@ -1716,6 +1716,7 @@ export default forwardRef<VideoInfoPanelRef, VideoInfoPanelProps>(
                               {formatSecondsLabel(segment.start)}
                             </span>
                             <span className="subtitle-segment-text">
+                              {segment.speaker ? `[${segment.speaker}] ` : ''}
                               {segment.text}
                             </span>
                           </button>

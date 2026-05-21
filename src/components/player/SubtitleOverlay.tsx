@@ -35,6 +35,7 @@ export default function SubtitleOverlay({
   if (!segment) return null;
   const text = segment.text?.trim();
   if (!text) return null;
+  const caption = segment.speaker ? `[${segment.speaker}] ${text}` : text;
 
   // 当前段已过期则不显示（seg.end 允许略超，保留 0.5s 宽容）
   if (typeof segment.end === 'number' && currentTime > segment.end + 0.5) {
@@ -67,7 +68,7 @@ export default function SubtitleOverlay({
         userSelect: 'none',
       }}
     >
-      {text}
+      {caption}
     </div>
   );
 }

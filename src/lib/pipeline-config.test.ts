@@ -79,7 +79,7 @@ describe('pipeline config normalization', () => {
     });
   });
 
-  it('inserts llm-aligner with enabled=false when missing from stored config', () => {
+  it('inserts llm-aligner with enabled=true when missing from stored config', () => {
     mockGetAppSetting.mockImplementation((key: string) => {
       if (key !== SUBTITLE_PIPELINE_CONFIG_KEY) return null;
       return JSON.stringify({
@@ -116,7 +116,7 @@ describe('pipeline config normalization', () => {
     ]);
     expect(
       youtube?.sources.find((s) => s.id === 'llm-aligner')?.enabled,
-    ).toBe(false);
+    ).toBe(true);
     expect(
       youtube?.sources.find((s) => s.id === 'gemini')?.enabled,
     ).toBe(false);
@@ -129,7 +129,7 @@ describe('pipeline config normalization', () => {
     ]);
     expect(
       bilibili?.sources.find((s) => s.id === 'llm-aligner')?.enabled,
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it('respects stored llm-aligner enabled=true after migration', () => {
@@ -207,7 +207,7 @@ describe('pipeline config normalization', () => {
               label: 'LLM 转写 + 本地对齐',
               description:
                 '多模态 AI 出完整文本和说话人，MLX forced aligner 出词级时间戳。',
-              enabled: false,
+              enabled: true,
             },
             {
               id: 'gemini',
@@ -241,7 +241,7 @@ describe('pipeline config normalization', () => {
               label: 'LLM 转写 + 本地对齐',
               description:
                 '多模态 AI 出完整文本和说话人，MLX forced aligner 出词级时间戳。',
-              enabled: false,
+              enabled: true,
             },
             {
               id: 'gemini',

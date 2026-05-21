@@ -47,6 +47,7 @@ import { sliceAudioByRange } from './audio-slicer';
 import {
   assembleSegments as assembleLlmAlignerSegments,
   alignChunk as runLlmAlignerChunkAlignment,
+  buildTranscribeFailedChunk,
   summarizeChunkResults as summarizeLlmAlignerChunks,
   transcribeChunk as runLlmAlignerChunkTranscribe,
   type AlignedChunkResult,
@@ -1795,6 +1796,17 @@ async function fetchSubtitleViaLlmAligner(
       }
 
       const durationSec = Math.max(0.1, range.endSec - range.offsetSec);
+      if (transcribeFailed) {
+        chunkResults.push(
+          buildTranscribeFailedChunk({
+            chunkIndex: range.index,
+            chunkOffsetSec: range.offsetSec,
+            durationSec,
+          }),
+        );
+        continue;
+      }
+
       if (utterances.length === 0) {
         chunkResults.push({
           offsetSec: range.offsetSec,
@@ -2253,9 +2265,17 @@ function buildSubtitleMethodOrder(
   allowBrowser: boolean,
 ): SubtitleMethod[] {
   if (requestedMethod) return [requestedMethod];
-  return getSubtitlePipelineSourceOrder(video.platform).filter(
-    (method) => allowBrowser || method !== BROWSER_METHOD_ID,
-  );
+  return getSubtitlePipelineSourceOrder(video.platform)
+    .filter((method) => allowBrowser || method !== BROWSER_METHOD_ID)
+    .filter((method) => {
+      if (method === 'whisper-ai') {
+        return getSubtitleWhisperAiConfig().enabled;
+      }
+      if (method === 'llm-aligner') {
+        return getSubtitleLlmAlignerConfig().enabled;
+      }
+      return true;
+    });
 }
 
 // ---------------------------------------------------------------------------

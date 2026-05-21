@@ -13,6 +13,7 @@ import {
   alignChunk,
   assembleSegments,
   buildTranscriptText,
+  buildTranscribeFailedChunk,
   interpolateUtterances,
   mapAlignedWordsToUtterances,
   parseUtterancesJson,
@@ -225,6 +226,32 @@ describe('alignChunk fallbacks', () => {
 });
 
 describe('assembleSegments', () => {
+  it('builds an interpolated placeholder for failed transcription chunks', () => {
+    expect(
+      buildTranscribeFailedChunk({
+        chunkIndex: 2,
+        chunkOffsetSec: 120,
+        durationSec: 30,
+      }),
+    ).toEqual({
+      offsetSec: 120,
+      durationSec: 30,
+      utterances: [
+        {
+          speaker: 'S1',
+          text: '[转写失败]',
+          start: 0,
+          end: 30,
+          avgProb: null,
+        },
+      ],
+      alignFallback: 'interpolated',
+      transcribeFailed: true,
+      avgProb: null,
+      wordCount: 0,
+    });
+  });
+
   it('adds chunk offsets and preserves speakers', () => {
     const chunks: AlignedChunkResult[] = [
       {

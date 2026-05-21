@@ -18,7 +18,7 @@ Needle fetches channel metadata and video lists, downloads subtitles, generates 
 
 - **Intent × Topics** channel organization — each Intent has independent auto-subtitle / auto-summary toggles and per-intent model overrides
 - **Event-driven pipeline** — new video → subtitle → summary, all automatic
-- **Subtitle pipeline** — Needle Browser → Whisper-anchored AI subtitles → Gemini audio transcription fallback, with staged retry backoff
+- **Subtitle pipeline** — Needle Browser → Whisper-anchored AI subtitles → optional LLM transcription + local forced aligner → Gemini audio transcription fallback, with staged retry backoff
 - **AI summaries** — OpenAI-compatible (OpenAI, Ollama, Gemini, any endpoint); shared RPM/TPM/RPD budget across all AI calls
 - **AI Chat panel** — select a subtitle time range and chat with the content; outputs Obsidian-style markdown notes or roast share cards (PNG export)
 - **Audio mode + Media Session** — full lock-screen controls on mobile, silent-MP3 heartbeat keeps iOS audio session alive
@@ -94,6 +94,7 @@ NEEDLE_HTTP_PORT=3001 docker compose up -d --build  # if port 3000 is already in
 | `yt-dlp` | YouTube cookie import, Gemini subtitle audio extraction |
 | `ffmpeg` / `ffprobe` | Gemini and Whisper subtitle audio slicing |
 | `mlx-whisper` | Whisper-anchored subtitle source on Apple Silicon |
+| `mlx_forced_aligner` | Experimental LLM transcription + local forced alignment subtitle source on Apple Silicon |
 
 ```bash
 # macOS
@@ -106,6 +107,19 @@ sudo add-apt-repository ppa:tomtomtom/yt-dlp && sudo apt install -y yt-dlp
 ```
 
 `mlx-whisper` is the local CLI Needle uses for Whisper-anchored subtitles. It currently targets Apple Silicon Macs, and the first run downloads the selected Whisper model from Hugging Face automatically.
+
+The forced aligner source is experimental and disabled by default. Needle includes `scripts/mlx_forced_aligner_wrapper.py`, a small wrapper around `mlx_audio.stt.generate` that exposes the stable CLI shape the app expects:
+
+```bash
+mlx_forced_aligner \
+  --audio chunk.wav \
+  --text transcript.txt \
+  --model mlx-community/Qwen3-ForcedAligner-0.6B-8bit \
+  --output-format json \
+  --output aligned.json
+```
+
+The first real run downloads the selected aligner model from Hugging Face automatically, so expect the first request to take longer.
 
 ---
 
@@ -131,6 +145,8 @@ FFMPEG_BIN=ffmpeg
 FFPROBE_BIN=ffprobe
 MLX_WHISPER_BIN=mlx_whisper
 WHISPER_MODEL_ID=mlx-community/whisper-base-mlx-q4
+MLX_FORCED_ALIGNER_BIN=./scripts/mlx_forced_aligner_wrapper.py
+FORCED_ALIGNER_MODEL_ID=mlx-community/Qwen3-ForcedAligner-0.6B-8bit
 
 # Optional: authenticated access
 YOUTUBE_COOKIES_BROWSER=chrome   # browser whose cookie store to use
@@ -171,6 +187,26 @@ If the binary is not on your `PATH`, set `MLX_WHISPER_BIN` to the full executabl
 
 After installation, open Settings → Subtitles and click **Check Environment**. Needle will call `/api/settings/whisper-status` and confirm whether `mlx_whisper` is available.
 
+### Optional: configure LLM transcription + forced aligner subtitles
+
+Needle also includes an experimental `llm-aligner` subtitle source. A multimodal model transcribes each audio chunk into speaker-labeled text, then a local MLX forced aligner maps that text back to the chunk audio to produce timestamps. This is intended for multi-speaker interviews or podcasts where speaker turns and proper nouns matter more than the lower-cost Whisper-anchored path.
+
+This source is **disabled by default** because it is still experimental. Install the local runtime into the repo venv:
+
+```bash
+python3.13 -m venv .venv
+.venv/bin/python -m pip install --upgrade pip
+.venv/bin/python -m pip install mlx-audio mlx-forced-aligner
+```
+
+Then:
+
+1. Set `MLX_FORCED_ALIGNER_BIN=./scripts/mlx_forced_aligner_wrapper.py` in `.env.local` if it is not already there.
+2. Keep or override `FORCED_ALIGNER_MODEL_ID`; the default is `mlx-community/Qwen3-ForcedAligner-0.6B-8bit`.
+3. Open Settings → Subtitles, enable **LLM transcription + local alignment**, and click the forced aligner environment check. Needle calls `/api/settings/forced-aligner-status`.
+
+If the aligner fails for a chunk, Needle keeps the LLM text with interpolated timestamps; if transcription fails for a chunk, that chunk is marked with `[转写失败]` and the rest of the video can still complete.
+
 ### Import subscriptions
 
 | Source | How |
@@ -206,8 +242,9 @@ Crawl source order is configurable in **Settings → Crawling**.
 
 1. Needle Browser downloads native subtitles
 2. Falls back to Whisper-anchored AI subtitles: local `mlx_whisper` produces timestamp anchors, then a multimodal LLM corrects the transcript; if that fails, Needle keeps the raw Whisper text as a last-resort fallback
-3. Falls back to Gemini audio transcription if Whisper-anchored subtitles are unavailable
-4. Retry schedule on failure: `10 min → 30 min → 2 h → 6 h → 24 h` (staged by error type)
+3. Optionally falls back to `llm-aligner`: a multimodal model transcribes speaker-labeled text, then local MLX forced alignment produces timestamps. This source is inserted in the pipeline but disabled by default.
+4. Falls back to Gemini audio transcription if the local/experimental sources are unavailable
+5. Retry schedule on failure: `10 min → 30 min → 2 h → 6 h → 24 h` (staged by error type)
 
 VTT, SRT, and JSON3 formats are normalized to a unified `SubtitleSegment[]` structure.
 

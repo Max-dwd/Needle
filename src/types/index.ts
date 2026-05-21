@@ -141,7 +141,12 @@ export interface SubtitleData {
   sourceMethod?: string;
   segmentStyle?: 'coarse' | 'fine';
   metadata?: Record<string, string | number>;
-  segments?: Array<{ start: number; end: number; text: string }>;
+  segments?: Array<{
+    start: number;
+    end: number;
+    text: string;
+    speaker?: string;
+  }>;
 }
 
 export interface CrawlerScopeStatus {

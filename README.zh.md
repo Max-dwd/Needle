@@ -18,7 +18,7 @@ Needle 抓取频道元数据与视频列表、下载字幕、通过任意 OpenAI
 
 - **意图 × 主题** 双维度频道组织 — 每个意图独立配置 auto-subtitle / auto-summary 开关和模型覆盖
 - **事件驱动流水线** — 新视频 → 字幕 → 摘要，全自动完成
-- **字幕流水线** — Needle Browser → Whisper 锚定的 AI 字幕 → Gemini 音频转录 fallback，分级退避重试
+- **字幕流水线** — Needle Browser → Whisper 锚定的 AI 字幕 → 可选 LLM 转写 + 本地 forced aligner → Gemini 音频转录 fallback，分级退避重试
 - **AI 摘要** — 兼容 OpenAI 协议（OpenAI、Ollama、Gemini、任意端点）；共享 RPM/TPM/RPD 预算
 - **AI 问答面板** — 圈定字幕时间范围后自由问答；输出 Obsidian 风格 markdown 笔记或吐槽分享卡（PNG 导出）
 - **音频模式 + 媒体会话** — 移动端全锁屏控制，静音 MP3 心跳维持 iOS 音频会话
@@ -94,6 +94,7 @@ NEEDLE_HTTP_PORT=3001 docker compose up -d --build  # 如果 3000 已被占用
 | `yt-dlp` | YouTube cookie 导入、Gemini 字幕音频提取 |
 | `ffmpeg` / `ffprobe` | Gemini 和 Whisper 字幕的音频切片 |
 | `mlx-whisper` | Apple Silicon 上的 Whisper 锚定字幕源 |
+| `mlx_forced_aligner` | Apple Silicon 上实验性的 LLM 转写 + 本地强制对齐字幕源 |
 
 ```bash
 # macOS
@@ -106,6 +107,19 @@ sudo add-apt-repository ppa:tomtomtom/yt-dlp && sudo apt install -y yt-dlp
 ```
 
 `mlx-whisper` 是 Needle 调用本地 Whisper 锚定字幕源时使用的 CLI。当前只面向 Apple Silicon Mac，首次运行会自动从 Hugging Face 下载所选 Whisper 模型。
+
+forced aligner 字幕源仍是实验性功能，默认关闭。Needle 已内置 `scripts/mlx_forced_aligner_wrapper.py`，这是一个包在 `mlx_audio.stt.generate` 外面的小 wrapper，对应用暴露稳定的 CLI 形态：
+
+```bash
+mlx_forced_aligner \
+  --audio chunk.wav \
+  --text transcript.txt \
+  --model mlx-community/Qwen3-ForcedAligner-0.6B-8bit \
+  --output-format json \
+  --output aligned.json
+```
+
+第一次真实运行会自动从 Hugging Face 下载所选 aligner 模型，所以首次请求会比较慢。
 
 ---
 
@@ -131,6 +145,8 @@ FFMPEG_BIN=ffmpeg
 FFPROBE_BIN=ffprobe
 MLX_WHISPER_BIN=mlx_whisper
 WHISPER_MODEL_ID=mlx-community/whisper-base-mlx-q4
+MLX_FORCED_ALIGNER_BIN=./scripts/mlx_forced_aligner_wrapper.py
+FORCED_ALIGNER_MODEL_ID=mlx-community/Qwen3-ForcedAligner-0.6B-8bit
 
 # 可选：受保护内容需要登录态
 YOUTUBE_COOKIES_BROWSER=chrome
@@ -171,6 +187,26 @@ python3 -m pip install mlx-whisper
 
 安装完成后，进入设置 → 字幕，点击**检测环境**。Needle 会调用 `/api/settings/whisper-status` 来确认 `mlx_whisper` 是否可用。
 
+### 可选：配置 LLM 转写 + forced aligner 字幕
+
+Needle 还内置了实验性的 `llm-aligner` 字幕源。多模态模型先把每个音频 chunk 转写成带说话人标签的文本，再由本地 MLX forced aligner 把文本对齐回 chunk 音频，生成时间戳。它更适合多人访谈、播客、辩论这类重视说话人轮次和专有名词的内容；默认仍推荐先用成本更低、更稳的 Whisper 锚定路径。
+
+该 source **默认关闭**，因为它仍是实验性功能。先把本地运行时安装到仓库 venv：
+
+```bash
+python3.13 -m venv .venv
+.venv/bin/python -m pip install --upgrade pip
+.venv/bin/python -m pip install mlx-audio mlx-forced-aligner
+```
+
+然后：
+
+1. 如果 `.env.local` 里还没有，设置 `MLX_FORCED_ALIGNER_BIN=./scripts/mlx_forced_aligner_wrapper.py`。
+2. 保留或覆盖 `FORCED_ALIGNER_MODEL_ID`；默认值是 `mlx-community/Qwen3-ForcedAligner-0.6B-8bit`。
+3. 打开设置 → 字幕，启用 **LLM 转写 + 本地对齐**，并点击 forced aligner 环境检测。Needle 会调用 `/api/settings/forced-aligner-status`。
+
+如果某个 chunk 的 aligner 失败，Needle 会保留 LLM 文本并用插值时间戳降级；如果某个 chunk 转写失败，该 chunk 会标记为 `[转写失败]`，其它 chunk 仍可继续完成。
+
 ### 首次导入订阅
 
 | 来源 | 方式 |
@@ -206,8 +242,9 @@ python3 -m pip install mlx-whisper
 
 1. Needle Browser 下载原生字幕
 2. Fallback：Whisper 锚定的 AI 字幕（本地 `mlx_whisper` 先产出时间戳锚点，再由多模态 LLM 校对文本；如果这一步失败，则保留原始 Whisper 文本作为最后兜底）
-3. 如果 Whisper 锚定字幕不可用，再回退到 Gemini 音频转录
-4. 失败重试间隔：`10 分钟 → 30 分钟 → 2 小时 → 6 小时 → 24 小时`（按错误类型分级）
+3. 可选 fallback 到 `llm-aligner`：多模态模型转写带说话人标签的文本，再由本地 MLX forced aligner 产出时间戳。该 source 已插入流水线，但默认关闭。
+4. 如果本地/实验性来源不可用，再回退到 Gemini 音频转录
+5. 失败重试间隔：`10 分钟 → 30 分钟 → 2 小时 → 6 小时 → 24 小时`（按错误类型分级）
 
 VTT、SRT、JSON3 格式统一归一化为 `SubtitleSegment[]`。
 

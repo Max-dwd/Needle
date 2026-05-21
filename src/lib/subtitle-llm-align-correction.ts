@@ -393,6 +393,34 @@ export function interpolateUtterances(
   });
 }
 
+export function buildTranscribeFailedChunk(input: {
+  chunkIndex: number;
+  chunkOffsetSec: number;
+  durationSec: number;
+  speaker?: string;
+  text?: string;
+}): AlignedChunkResult {
+  const speaker = input.speaker?.trim() || 'S1';
+  const text = input.text?.trim() || '[转写失败]';
+  return {
+    offsetSec: input.chunkOffsetSec,
+    durationSec: Math.max(0.1, input.durationSec),
+    utterances: [
+      {
+        speaker,
+        text,
+        start: 0,
+        end: Math.max(0.1, input.durationSec),
+        avgProb: null,
+      },
+    ],
+    alignFallback: 'interpolated',
+    transcribeFailed: true,
+    avgProb: null,
+    wordCount: 0,
+  };
+}
+
 export interface AlignChunkOptions {
   chunk: TranscribeChunkInput & { durationSec: number };
   utterances: TranscribedUtterance[];
