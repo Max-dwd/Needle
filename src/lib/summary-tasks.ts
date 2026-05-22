@@ -1,15 +1,41 @@
 import fs from 'fs';
 import path from 'path';
 import { getDb, type SummaryTask, type Video } from './db';
+import { getPositiveIntAppSetting } from './app-settings';
 import type { SummaryTaskStats } from '@/types';
 
 const DATA_ROOT = process.env.DATA_ROOT || path.resolve(process.cwd(), 'data');
 const SUMMARY_ROOT =
   process.env.SUMMARY_ROOT || path.join(DATA_ROOT, 'summaries');
 const STALE_SUMMARY_PROCESSING_MS = 10 * 60 * 1000;
+const SUMMARY_RETRY_MAX_ATTEMPTS_KEY = 'summary_retry_max_attempts';
+const SUMMARY_RETRY_BASE_SECONDS_KEY = 'summary_retry_base_seconds';
+const DEFAULT_SUMMARY_RETRY_MAX_ATTEMPTS = 5;
+const DEFAULT_SUMMARY_RETRY_BASE_SECONDS = 2 * 60;
+const MAX_SUMMARY_RETRY_DELAY_MS = 6 * 60 * 60 * 1000;
 
 function getStaleSummaryProcessingCutoff(now = Date.now()): string {
   return new Date(now - STALE_SUMMARY_PROCESSING_MS).toISOString();
+}
+
+function getSummaryRetryMaxAttempts(): number {
+  return getPositiveIntAppSetting(
+    SUMMARY_RETRY_MAX_ATTEMPTS_KEY,
+    DEFAULT_SUMMARY_RETRY_MAX_ATTEMPTS,
+  );
+}
+
+function getSummaryRetryDelayMs(retryCount: number): number {
+  const baseSeconds = getPositiveIntAppSetting(
+    SUMMARY_RETRY_BASE_SECONDS_KEY,
+    DEFAULT_SUMMARY_RETRY_BASE_SECONDS,
+  );
+  const multiplier = 2 ** Math.max(0, retryCount - 1);
+  return Math.min(baseSeconds * multiplier * 1000, MAX_SUMMARY_RETRY_DELAY_MS);
+}
+
+function getSummaryRetryAfter(retryCount: number, now = Date.now()): string {
+  return new Date(now + getSummaryRetryDelayMs(retryCount)).toISOString();
 }
 
 export function createSummaryTask(
@@ -56,7 +82,8 @@ export function claimSummaryTaskProcessing(
           method = ?,
           started_at = ?,
           completed_at = NULL,
-          error = NULL
+          error = NULL,
+          retry_after = NULL
       WHERE video_id = ?
         AND platform = ?
         AND (
@@ -94,12 +121,61 @@ export function requeueStaleSummaryTasks(): number {
           method = NULL,
           started_at = NULL,
           completed_at = NULL,
-          error = NULL
+          error = NULL,
+          retry_after = NULL
       WHERE status = 'processing'
         AND (started_at IS NULL OR started_at < ?)
     `,
     )
     .run(staleCutoff);
+
+  return result.changes;
+}
+
+export function requeueRetryableFailedSummaryTasks(
+  limit = 25,
+  now = new Date(),
+): number {
+  const db = getDb();
+  const maxAttempts = getSummaryRetryMaxAttempts();
+  const rows = db
+    .prepare(
+      `
+      SELECT id
+      FROM summary_tasks
+      WHERE status = 'failed'
+        AND COALESCE(retry_count, 0) <= ?
+        AND (retry_after IS NULL OR retry_after <= ?)
+      ORDER BY COALESCE(retry_after, completed_at, created_at) ASC
+      LIMIT ?
+    `,
+    )
+    .all(
+      maxAttempts,
+      now.toISOString(),
+      Math.max(1, Math.floor(limit)),
+    ) as Array<{
+    id: number;
+  }>;
+
+  if (rows.length === 0) return 0;
+
+  const ids = rows.map((row) => row.id);
+  const placeholders = ids.map(() => '?').join(', ');
+  const result = db
+    .prepare(
+      `
+      UPDATE summary_tasks
+      SET status = 'pending',
+          method = NULL,
+          started_at = NULL,
+          completed_at = NULL,
+          error = NULL,
+          retry_after = NULL
+      WHERE id IN (${placeholders})
+    `,
+    )
+    .run(...ids);
 
   return result.changes;
 }
@@ -192,7 +268,12 @@ export function updateTaskStatus(
     db.prepare(
       `
       UPDATE summary_tasks
-      SET status = ?, method = ?, started_at = ?, completed_at = NULL, error = NULL
+      SET status = ?,
+          method = ?,
+          started_at = ?,
+          completed_at = NULL,
+          error = NULL,
+          retry_after = NULL
       WHERE video_id = ? AND platform = ?
     `,
     ).run(status, opts?.method || null, now, videoId, platform);
@@ -200,7 +281,12 @@ export function updateTaskStatus(
     db.prepare(
       `
       UPDATE summary_tasks
-      SET status = ?, method = COALESCE(?, method), completed_at = ?, error = NULL
+      SET status = ?,
+          method = COALESCE(?, method),
+          completed_at = ?,
+          error = NULL,
+          retry_count = 0,
+          retry_after = NULL
       WHERE video_id = ? AND platform = ?
     `,
     ).run(status, opts?.method || null, now, videoId, platform);
@@ -213,18 +299,32 @@ export function updateTaskStatus(
     `,
     ).run(status, opts?.error || null, now, videoId, platform);
   } else if (status === 'failed') {
+    const current = db
+      .prepare(
+        'SELECT retry_count FROM summary_tasks WHERE video_id = ? AND platform = ?',
+      )
+      .get(videoId, platform) as Pick<SummaryTask, 'retry_count'> | undefined;
+    const retryCount = (current?.retry_count || 0) + 1;
     db.prepare(
       `
       UPDATE summary_tasks
-      SET status = ?, error = ?, completed_at = ?
+      SET status = ?, error = ?, completed_at = ?, retry_count = ?, retry_after = ?
       WHERE video_id = ? AND platform = ?
     `,
-    ).run(status, opts?.error || null, now, videoId, platform);
+    ).run(
+      status,
+      opts?.error || null,
+      now,
+      retryCount,
+      getSummaryRetryAfter(retryCount),
+      videoId,
+      platform,
+    );
   } else {
     db.prepare(
       `
       UPDATE summary_tasks
-      SET status = ?, error = NULL, started_at = NULL, completed_at = NULL, method = NULL
+      SET status = ?, error = NULL, started_at = NULL, completed_at = NULL, method = NULL, retry_after = NULL
       WHERE video_id = ? AND platform = ?
     `,
     ).run(status, videoId, platform);

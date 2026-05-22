@@ -746,7 +746,7 @@ describe('auto-pipeline', () => {
       });
 
       expect(mockCreateSummaryTask).not.toHaveBeenCalled();
-      expect(getDbCallCount).toBe(0);
+      expect(getDbCallCount).toBe(1);
       expect(mockRun).not.toHaveBeenCalled();
     });
 
@@ -814,14 +814,18 @@ describe('auto-pipeline', () => {
   });
 
   describe('ensureAutoPipeline', () => {
-    it('registers listeners without any startup database scan', () => {
+    it('registers listeners and starts with a retry sweep', () => {
       const prepare = vi.fn();
+      prepare.mockReturnValue({
+        all: vi.fn().mockReturnValue([]),
+        get: vi.fn().mockReturnValue({ c: 0 }),
+      });
       mockGetDb.mockReturnValue({ prepare });
 
       ensureAutoPipeline();
 
       expect(mockAppEventsOn).toHaveBeenCalledTimes(2);
-      expect(prepare).not.toHaveBeenCalled();
+      expect(prepare).toHaveBeenCalled();
       expect(mockPoolEnqueue).not.toHaveBeenCalled();
       expect(mockStartQueueProcessing).not.toHaveBeenCalled();
     });

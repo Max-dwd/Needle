@@ -222,6 +222,17 @@ export interface ChatRequest {
   modelId?: string;
 }
 
+export interface ChatArtifactData {
+  id: number;
+  video_id: number;
+  mode: ChatMode;
+  prompt: string;
+  rangeStart: number;
+  rangeEnd: number;
+  content: string;
+  createdAt: string;
+}
+
 export interface VideoComment {
   author?: string;
   thumbnail?: string;
@@ -313,6 +324,8 @@ export interface SummaryTaskData {
   status: SummaryTaskStatus;
   method: 'api' | 'external' | 'mcp' | null;
   error: string | null;
+  retry_count?: number;
+  retry_after?: string | null;
   title: string | null;
   created_at: string;
 }

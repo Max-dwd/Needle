@@ -1,6 +1,7 @@
 import { getDb, type SummaryTask } from './db';
 import {
   claimSummaryTaskProcessing,
+  requeueRetryableFailedSummaryTasks,
   requeueStaleSummaryTasks,
   updateTaskStatus,
 } from './summary-tasks';
@@ -305,6 +306,13 @@ async function runQueueLoop(): Promise<void> {
       log.warn('summary', 'requeue_stale', {
         source: 'queue',
         count: reclaimed,
+      });
+    }
+    const retryable = requeueRetryableFailedSummaryTasks();
+    if (retryable > 0) {
+      log.warn('summary', 'requeue_failed_retry', {
+        source: 'queue',
+        count: retryable,
       });
     }
     const tasks = db

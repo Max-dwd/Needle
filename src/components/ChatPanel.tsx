@@ -23,6 +23,7 @@ interface ChatPanelProps {
   onTimestampClick: (seconds: number) => void;
   currentPlayerSeconds: number;
   playerDuration?: number;
+  onArtifactSaved?: () => void;
 }
 
 export default function ChatPanel({
@@ -31,6 +32,7 @@ export default function ChatPanel({
   onTimestampClick,
   currentPlayerSeconds,
   playerDuration = 0,
+  onArtifactSaved,
 }: ChatPanelProps) {
   const durationInSeconds = useMemo(() => {
     // 1. Priority: Subtitles (most accurate for range selection)
@@ -114,6 +116,7 @@ export default function ChatPanel({
 
       const decoder = new TextDecoder();
       let full = '';
+      let completed = false;
 
       while (true) {
           const { done, value } = await reader.read();
@@ -135,12 +138,34 @@ export default function ChatPanel({
                       throw new Error(data.error);
                   }
                   if (data.done) {
+                      completed = true;
                       break;
                   }
               } catch {
                   // Skip
               }
           }
+      }
+
+      if (completed && full.trim()) {
+        try {
+          const saveRes = await fetch(`/api/videos/${video.id}/chat/artifacts`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              mode,
+              prompt: userPrompt,
+              rangeStart,
+              rangeEnd,
+              content: full,
+            }),
+          });
+          if (saveRes.ok) {
+            onArtifactSaved?.();
+          }
+        } catch (saveError) {
+          console.error('Failed to save chat artifact', saveError);
+        }
       }
     } catch (error) {
         if (!(error instanceof Error && error.name === 'AbortError')) {
