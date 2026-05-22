@@ -51,7 +51,7 @@ describe('ai-summary-client provider compatibility', () => {
       ),
     ).toEqual({
       model: 'minimax-m2.5',
-      max_tokens: 4096,
+      max_tokens: 12288,
       stream: true,
       system: 'system prompt',
       messages: [{ role: 'user', content: 'user prompt' }],
@@ -77,6 +77,7 @@ describe('ai-summary-client provider compatibility', () => {
         model,
       ),
     ).toMatchObject({
+      max_tokens: 12288,
       messages: [{ role: 'user', content: 'hello world' }],
     });
   });
@@ -128,7 +129,7 @@ describe('ai-summary-client provider compatibility', () => {
       ),
     ).toEqual({
       model: 'claude-sonnet',
-      max_tokens: 4096,
+      max_tokens: 12288,
       system: 'system prompt',
       messages: [{ role: 'user', content: 'user prompt' }],
     });

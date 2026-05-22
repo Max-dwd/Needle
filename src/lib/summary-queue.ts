@@ -31,6 +31,7 @@ interface SummaryJob {
   platform: 'youtube' | 'bilibili';
   taskId: number;
   intentName: string | null;
+  title: string | null;
 }
 
 export interface SummaryQueueState {
@@ -195,6 +196,28 @@ async function runSummaryJob(job: SummaryJob): Promise<JobResult> {
   tracking.activeTaskIds.add(job.taskId);
 
   try {
+    const claimed = claimSummaryTaskProcessing(
+      job.videoId,
+      job.platform,
+      'api',
+    );
+    if (!claimed) {
+      log.warn(
+        'summary',
+        'skip',
+        {
+          source: 'pool',
+          platform: job.platform,
+          target: job.videoId,
+          reason: 'already-processing',
+        },
+      );
+      return { success: true, durationMs: Date.now() - startTime };
+    }
+
+    queueState.currentVideoId = job.videoId;
+    queueState.currentTitle = job.title;
+
     log.info(
       'summary',
       'start',
@@ -208,7 +231,7 @@ async function runSummaryJob(job: SummaryJob): Promise<JobResult> {
     appEvents.emit('summary:start', {
       videoId: job.videoId,
       platform: job.platform,
-      taskId: job.taskId,
+      taskId: claimed.id,
     });
 
     if (!hasSubtitleData(job.videoId, job.platform)) {
@@ -229,7 +252,7 @@ async function runSummaryJob(job: SummaryJob): Promise<JobResult> {
       appEvents.emit('summary:error', {
         videoId: job.videoId,
         error: 'no subtitle',
-        taskId: job.taskId,
+        taskId: claimed.id,
       });
       return { success: true, durationMs: Date.now() - startTime }; // Not a pool failure
     }
@@ -282,6 +305,10 @@ async function runSummaryJob(job: SummaryJob): Promise<JobResult> {
     return { success: false, durationMs: Date.now() - startTime, error: message };
   } finally {
     tracking.activeTaskIds.delete(job.taskId);
+    if (queueState.currentVideoId === job.videoId) {
+      queueState.currentVideoId = null;
+      queueState.currentTitle = null;
+    }
   }
 }
 
@@ -345,36 +372,13 @@ async function runQueueLoop(): Promise<void> {
         break;
       }
 
-      queueState.currentVideoId = task.video_id;
-      queueState.currentTitle = task.title;
-
-      // Claim the task (to prevent duplicate processing by other calls)
-      const claimed = claimSummaryTaskProcessing(
-        task.video_id,
-        task.platform,
-        'api',
-      );
-      if (!claimed) {
-        log.warn(
-          'summary',
-          'skip',
-          {
-            source: 'queue',
-            platform: task.platform,
-            target: task.video_id,
-            reason: 'already-processing',
-          },
-        );
-        queueState.processed += 1;
-        continue;
-      }
-
       // Dispatch to pool for processing (pool handles concurrency)
       const job: SummaryJob = {
         videoId: task.video_id,
         platform: task.platform as 'youtube' | 'bilibili',
-        taskId: claimed.id,
+        taskId: task.id,
         intentName: task.intentName,
+        title: task.title,
       };
 
       // Dispatch to pool with priority 1 (auto)

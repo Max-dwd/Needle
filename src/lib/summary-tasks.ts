@@ -14,6 +14,36 @@ const DEFAULT_SUMMARY_RETRY_MAX_ATTEMPTS = 5;
 const DEFAULT_SUMMARY_RETRY_BASE_SECONDS = 2 * 60;
 const MAX_SUMMARY_RETRY_DELAY_MS = 6 * 60 * 60 * 1000;
 
+let summaryTaskRetryColumnsEnsured = false;
+
+function getSummaryTasksDb() {
+  const db = getDb();
+  if (summaryTaskRetryColumnsEnsured) {
+    return db;
+  }
+
+  const columns = (
+    db.prepare('PRAGMA table_info(summary_tasks)').all() as Array<{
+      name: string;
+    }>
+  ).map((column) => column.name);
+
+  if (!columns.includes('retry_count')) {
+    db.exec(
+      'ALTER TABLE summary_tasks ADD COLUMN retry_count INTEGER NOT NULL DEFAULT 0',
+    );
+  }
+  if (!columns.includes('retry_after')) {
+    db.exec('ALTER TABLE summary_tasks ADD COLUMN retry_after DATETIME');
+  }
+  db.exec(
+    'CREATE INDEX IF NOT EXISTS idx_summary_tasks_retry ON summary_tasks(status, retry_after)',
+  );
+
+  summaryTaskRetryColumnsEnsured = true;
+  return db;
+}
+
 function getStaleSummaryProcessingCutoff(now = Date.now()): string {
   return new Date(now - STALE_SUMMARY_PROCESSING_MS).toISOString();
 }
@@ -42,7 +72,7 @@ export function createSummaryTask(
   videoId: string,
   platform: Video['platform'],
 ): SummaryTask | null {
-  const db = getDb();
+  const db = getSummaryTasksDb();
 
   // Insert or ignore (idempotent)
   db.prepare(
@@ -62,7 +92,7 @@ export function claimSummaryTaskProcessing(
   platform: Video['platform'],
   method: SummaryTask['method'] = 'api',
 ): SummaryTask | null {
-  const db = getDb();
+  const db = getSummaryTasksDb();
   const now = new Date().toISOString();
   const staleCutoff = getStaleSummaryProcessingCutoff();
 
@@ -110,7 +140,7 @@ export function claimSummaryTaskProcessing(
 }
 
 export function requeueStaleSummaryTasks(): number {
-  const db = getDb();
+  const db = getSummaryTasksDb();
   const staleCutoff = getStaleSummaryProcessingCutoff();
 
   const result = db
@@ -136,7 +166,7 @@ export function requeueRetryableFailedSummaryTasks(
   limit = 25,
   now = new Date(),
 ): number {
-  const db = getDb();
+  const db = getSummaryTasksDb();
   const maxAttempts = getSummaryRetryMaxAttempts();
   const rows = db
     .prepare(
@@ -184,7 +214,7 @@ export function getSummaryTask(
   videoId: string,
   platform: Video['platform'],
 ): SummaryTask | null {
-  const db = getDb();
+  const db = getSummaryTasksDb();
   return db
     .prepare('SELECT * FROM summary_tasks WHERE video_id = ? AND platform = ?')
     .get(videoId, platform) as SummaryTask | null;
@@ -193,7 +223,7 @@ export function getSummaryTask(
 export function getSummaryTaskByVideoDbId(
   videoDbId: number,
 ): SummaryTask | null {
-  const db = getDb();
+  const db = getSummaryTasksDb();
   const video = db
     .prepare('SELECT video_id, platform FROM videos WHERE id = ?')
     .get(videoDbId) as Pick<Video, 'video_id' | 'platform'> | undefined;
@@ -202,7 +232,7 @@ export function getSummaryTaskByVideoDbId(
 }
 
 export function getSummaryTaskStats(): SummaryTaskStats {
-  const db = getDb();
+  const db = getSummaryTasksDb();
   const rows = db
     .prepare(
       `
@@ -230,7 +260,7 @@ export function listSummaryTasks(opts?: {
   limit?: number;
   offset?: number;
 }): SummaryTask[] {
-  const db = getDb();
+  const db = getSummaryTasksDb();
   const conditions: string[] = [];
   const params: unknown[] = [];
 
@@ -261,7 +291,7 @@ export function updateTaskStatus(
   status: SummaryTask['status'],
   opts?: { method?: SummaryTask['method']; error?: string },
 ): void {
-  const db = getDb();
+  const db = getSummaryTasksDb();
   const now = new Date().toISOString();
 
   if (status === 'processing') {
@@ -336,7 +366,7 @@ export function resetFailedTask(videoId: string, platform: string): void {
 }
 
 export function syncExternalCompletions(): number {
-  const db = getDb();
+  const db = getSummaryTasksDb();
   const pendingTasks = db
     .prepare(
       `

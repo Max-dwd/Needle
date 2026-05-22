@@ -145,7 +145,8 @@ interface ResolvedSummaryGenerationContext {
   modelSource: 'default' | 'auto-default' | 'intent' | 'override' | 'fallback';
 }
 
-const SUBTITLE_CHAR_LIMIT = 60000;
+const SUBTITLE_CHAR_LIMIT = 180000;
+const DEFAULT_SUMMARY_MAX_OUTPUT_TOKENS = 12288;
 const STREAM_PROGRESS_INTERVAL_CHARS = 1200;
 const SUMMARY_REQUEST_TIMEOUT_MS = 5 * 60 * 1000;
 
@@ -843,6 +844,7 @@ export function createChatCompletionRequest(
 
   return {
     model: model.model,
+    max_tokens: DEFAULT_SUMMARY_MAX_OUTPUT_TOKENS,
     temperature: 0.3,
     ...(stream
       ? {
@@ -884,7 +886,7 @@ export function createAiApiRequest(
 
     return {
       model: model.model,
-      max_tokens: 4096,
+      max_tokens: DEFAULT_SUMMARY_MAX_OUTPUT_TOKENS,
       ...(stream ? { stream: true } : {}),
       ...(system ? { system } : {}),
       messages: [
