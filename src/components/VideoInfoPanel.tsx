@@ -353,12 +353,8 @@ export default forwardRef<VideoInfoPanelRef, VideoInfoPanelProps>(
       useState<string>('');
     const selectedSubtitleModelRef = useRef('');
     const [viewingHistory, setViewingHistory] = useState(false);
-    const [researchModalState, setResearchModalState] = useState<{
-      mode: 'add' | 'edit';
-      existingFavorite?: { id: number; intent_type_id: number; note: string };
-    } | null>(null);
     const [activePanel, setActivePanel] = useState<
-      'subtitle' | 'summary' | 'comments' | 'chat' | 'download'
+      'subtitle' | 'summary' | 'comments' | 'chat' | 'download' | 'research'
     >('summary');
     const [isMobile, setIsMobile] = useState(false);
     const [isTabExpanded, setIsTabExpanded] = useState(false);
@@ -1041,6 +1037,7 @@ export default forwardRef<VideoInfoPanelRef, VideoInfoPanelProps>(
       { key: 'summary' as const, label: '总结', icon: '📝' },
       { key: 'subtitle' as const, label: '字幕', icon: '💬' },
       { key: 'chat' as const, label: '问答', icon: '✦' },
+      { key: 'research' as const, label: video.research?.is_favorited ? '已收藏' : '收藏', icon: '🔬' },
       { key: 'download' as const, label: '下载', icon: '⬇' },
       { key: 'comments' as const, label: '其他', icon: '💭' },
     ];
@@ -1145,205 +1142,223 @@ export default forwardRef<VideoInfoPanelRef, VideoInfoPanelProps>(
           marginBottom: 12,
           minHeight: 44,
         }}>
-          <div
-            style={{
-              position: 'relative',
-              display: 'flex',
-              flex: isMobile && isTabExpanded ? 1 : 'none',
-              gap: 4,
-              padding: '4px',
-              background: 'var(--bg-hover)',
-              borderRadius: 12,
-              height: 44,
-              width: isMobile ? (isTabExpanded ? '100%' : 'fit-content') : 'auto',
-              justifyContent: isMobile && !isTabExpanded ? 'flex-start' : 'stretch',
-              transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-              cursor: isMobile && !isTabExpanded ? 'pointer' : 'default',
-              alignItems: 'center',
-              zIndex: 5,
-            }}
-            onClick={() => {
-              if (isMobile && !isTabExpanded) setIsTabExpanded(true);
-            }}
-          >
-            {panelButtons.map((panel) => {
-              const active = activePanel === panel.key;
-              if (isMobile && !isTabExpanded && !active) return null;
-
-              return (
-                <button
-                  key={panel.key}
-                  type="button"
-                  onClick={(e) => {
-                    if (isMobile) {
-                      e.stopPropagation();
-                      if (!isTabExpanded) {
-                        setIsTabExpanded(true);
-                      } else {
-                        setActivePanel(panel.key);
-                        setIsTabExpanded(false);
-                      }
-                    } else {
-                      setActivePanel(panel.key);
-                    }
-                  }}
-                  style={{
-                    flex: isMobile && !isTabExpanded ? 'none' : 1,
-                    height: '100%',
-                    display: 'flex',
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: 6,
-                    padding: isMobile && !isTabExpanded ? '0 12px' : '0 16px',
-                    borderRadius: 9,
-                    background: active ? 'var(--bg-secondary)' : 'transparent',
-                    border: 'none',
-                    color: active ? 'var(--text-primary)' : 'var(--text-muted)',
-                    boxShadow: active ? 'var(--shadow-sm)' : 'none',
-                    transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-                    cursor: 'pointer',
-                    whiteSpace: 'nowrap'
-                  }}
-                >
-                  <span className="modal-tab-icon" style={{ fontSize: 18 }}>{panel.icon}</span>
-                  <span style={{ fontSize: 11, fontWeight: active ? 700 : 500 }}>{panel.label}</span>
-                  {isMobile && !isTabExpanded && active && (
-                    <span style={{ fontSize: 10, opacity: 0.5, marginLeft: 2 }}>▾</span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onFollowModeChange?.(!followMode);
-            }}
-            style={{
-              display: 'flex',
-              flexDirection: 'row',
-              alignItems: 'center',
-              justifyContent: 'center',
-              padding: '0 12px',
-              height: 44,
-              borderRadius: 12,
-              background: followMode ? 'var(--accent-purple)' : 'var(--bg-hover)',
-              border: `1px solid ${followMode ? 'var(--accent-purple)' : 'transparent'}`,
-              color: followMode ? '#fff' : 'var(--text-muted)',
-              cursor: 'pointer',
-              flexShrink: 0,
-              transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-              marginLeft: 8,
-              zIndex: 5,
-            }}
-            title={followMode ? '关闭跟随模式' : '开启跟随模式'}
-          >
-            <span style={{ fontSize: 13, fontWeight: 700, marginRight: isMobile && !isTabExpanded ? 0 : 2 }}>📍</span>
-            {(!isMobile || isTabExpanded) && <span style={{ fontSize: 11, fontWeight: 700 }}>跟随</span>}
-          </button>
-
-          {(() => {
-            const canToggle = subtitleOverlayAvailability === 'available';
-            const isOn = subtitleOverlay && canToggle;
-            const isDisabled = !canToggle;
-            return (
+          {isMobile ? (
+            <div style={{ position: 'relative', zIndex: 10 }}>
               <button
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
-                  if (!canToggle) return;
-                  onSubtitleOverlayChange?.(!subtitleOverlay);
+                  setIsTabExpanded(!isTabExpanded);
                 }}
                 style={{
                   display: 'flex',
-                  flexDirection: 'row',
                   alignItems: 'center',
-                  justifyContent: 'center',
-                  padding: '0 12px',
+                  gap: 8,
+                  padding: '0 16px',
+                  background: 'var(--bg-hover)',
+                  borderRadius: 14,
+                  border: '1px solid var(--border)',
+                  color: 'var(--text-primary)',
+                  fontSize: 14,
+                  fontWeight: 700,
                   height: 44,
-                  borderRadius: 12,
-                  background: isOn ? 'var(--accent-purple)' : 'var(--bg-hover)',
-                  border: `1px solid ${isOn ? 'var(--accent-purple)' : 'transparent'}`,
-                  color: isOn
-                    ? '#fff'
-                    : isDisabled
-                      ? 'var(--text-muted)'
-                      : 'var(--text-muted)',
-                  opacity: isDisabled ? 0.5 : 1,
-                  cursor: isDisabled ? 'not-allowed' : 'pointer',
-                  flexShrink: 0,
-                  transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                  marginLeft: 8,
-                  zIndex: 5,
+                  cursor: 'pointer',
+                  boxShadow: 'var(--shadow-sm)',
+                  transition: 'all 0.2s ease',
                 }}
-                title={subtitleOverlayTitle}
-                aria-disabled={isDisabled}
               >
-                <span
-                  style={{
-                    fontSize: 13,
-                    fontWeight: 700,
-                    marginRight: isMobile && !isTabExpanded ? 0 : 2,
-                  }}
-                >
-                  📺
-                </span>
-                {(!isMobile || isTabExpanded) && (
-                  <span style={{ fontSize: 11, fontWeight: 700 }}>字幕</span>
-                )}
+                <span>{panelButtons.find(b => b.key === activePanel)?.icon}</span>
+                <span>{panelButtons.find(b => b.key === activePanel)?.label}</span>
+                <span style={{ fontSize: 10, opacity: 0.5, marginLeft: 2, transform: isTabExpanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>▼</span>
               </button>
-            );
-          })()}
 
-          {(!isMobile || isTabExpanded) && (
-            <button
-              type="button"
-              onClick={async (e) => {
-                e.stopPropagation();
-                if (video.research?.is_favorited) {
-                  try {
-                    const res = await fetch('/api/research/favorites?video_id=' + video.id);
-                    const data = await res.json();
-                    const fav = data.items?.[0];
-                    if (fav) {
-                      setResearchModalState({
-                        mode: 'edit',
-                        existingFavorite: {
-                          id: fav.id,
-                          intent_type_id: fav.intent_type_id,
-                          note: fav.note || '',
-                        },
-                      });
-                      return;
-                    }
-                  } catch (e) {
-                    console.error('Failed to fetch favorite', e);
-                  }
-                }
-                setResearchModalState({ mode: 'add' });
-              }}
+              {isTabExpanded && (
+                <>
+                  <div 
+                    style={{ position: 'fixed', inset: 0, zIndex: -1 }} 
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setIsTabExpanded(false);
+                    }} 
+                  />
+                  <div
+                    style={{
+                      position: 'absolute',
+                      top: 'calc(100% + 8px)',
+                      left: 0,
+                      minWidth: 160,
+                      background: 'var(--bg-elevated)',
+                      border: '1px solid var(--border)',
+                      borderRadius: 18,
+                      padding: '8px',
+                      boxShadow: '0 10px 30px rgba(0,0,0,0.4)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 4,
+                      zIndex: 20,
+                      animation: 'dropdownIn 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                    }}
+                  >
+                    <style>{`
+                      @keyframes dropdownIn {
+                        from { opacity: 0; transform: translateY(-10px) scale(0.95); }
+                        to { opacity: 1; transform: translateY(0) scale(1); }
+                      }
+                    `}</style>
+                    {panelButtons.map((panel) => {
+                      const active = activePanel === panel.key;
+                      return (
+                        <button
+                          key={panel.key}
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setActivePanel(panel.key);
+                            setIsTabExpanded(false);
+                          }}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 12,
+                            padding: '12px 16px',
+                            borderRadius: 12,
+                            background: active ? 'var(--bg-secondary)' : 'transparent',
+                            border: 'none',
+                            color: active ? 'var(--text-primary)' : 'var(--text-muted)',
+                            textAlign: 'left',
+                            fontSize: 15,
+                            fontWeight: active ? 700 : 500,
+                            cursor: 'pointer',
+                            transition: 'all 0.15s ease',
+                          }}
+                        >
+                          <span style={{ fontSize: 18 }}>{panel.icon}</span>
+                          <span>{panel.label}</span>
+                          {active && <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--accent-purple)' }}>●</span>}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+            </div>
+          ) : (
+            <div
               style={{
                 display: 'flex',
-                flexDirection: 'row',
+                gap: 4,
+                padding: '4px',
+                background: 'var(--bg-hover)',
+                borderRadius: 12,
+                height: 44,
                 alignItems: 'center',
-                justifyContent: 'center',
-                padding: '0 12px',
-                height: '100%',
-                borderRadius: 9,
-                background: video.research?.is_favorited ? 'var(--accent-purple)' : 'transparent',
-                border: `1px solid ${video.research?.is_favorited ? 'var(--accent-purple)' : 'transparent'}`,
-                color: video.research?.is_favorited ? '#fff' : 'var(--text-muted)',
-                cursor: 'pointer',
-                flexShrink: 0
               }}
-              title="研究收藏"
             >
-              <span style={{ fontSize: 14 }}>🔬</span>
-            </button>
+              {panelButtons.map((panel) => {
+                const active = activePanel === panel.key;
+                return (
+                  <button
+                    key={panel.key}
+                    type="button"
+                    onClick={() => setActivePanel(panel.key)}
+                    style={{
+                      height: '100%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 6,
+                      padding: '0 16px',
+                      borderRadius: 9,
+                      background: active ? 'var(--bg-secondary)' : 'transparent',
+                      border: 'none',
+                      color: active ? 'var(--text-primary)' : 'var(--text-muted)',
+                      boxShadow: active ? 'var(--shadow-sm)' : 'none',
+                      transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                      cursor: 'pointer',
+                      whiteSpace: 'nowrap',
+                      fontSize: 13,
+                      fontWeight: 700,
+                    }}
+                  >
+                    <span>{panel.icon}</span>
+                    <span>{panel.label}</span>
+                  </button>
+                );
+              })}
+            </div>
           )}
+
+          {/* Action Buttons Backplate */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 2,
+            background: 'var(--bg-hover)',
+            borderRadius: 14,
+            padding: '2px',
+            marginLeft: 'auto',
+            marginRight: isMobile ? 52 : 0, // Space for Play Mode button on mobile
+            zIndex: 5,
+          }}>
+            {isMobile && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onFollowModeChange?.(!followMode);
+                }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: 38,
+                  height: 38,
+                  borderRadius: 12,
+                  background: followMode ? 'var(--accent-purple)' : 'transparent',
+                  border: 'none',
+                  color: followMode ? '#fff' : 'var(--text-muted)',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                }}
+                title={followMode ? '关闭跟随模式' : '开启跟随模式'}
+              >
+                <span style={{ fontSize: 13, fontWeight: 700 }}>📍</span>
+              </button>
+            )}
+
+            {isMobile && (() => {
+              const canToggle = subtitleOverlayAvailability === 'available';
+              const isOn = subtitleOverlay && canToggle;
+              const isDisabled = !canToggle;
+              return (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (!canToggle) return;
+                    onSubtitleOverlayChange?.(!subtitleOverlay);
+                  }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    width: 38,
+                    height: 38,
+                    borderRadius: 12,
+                    background: isOn ? 'var(--accent-purple)' : 'transparent',
+                    border: 'none',
+                    color: isOn ? '#fff' : 'var(--text-muted)',
+                    opacity: isDisabled ? 0.5 : 1,
+                    cursor: isDisabled ? 'not-allowed' : 'pointer',
+                    transition: 'all 0.2s ease',
+                  }}
+                  title={subtitleOverlayTitle}
+                >
+                  <span style={{ fontSize: 13, fontWeight: 700 }}>📺</span>
+                </button>
+              );
+            })()}
+          </div>
 
           {isMobile && (
             <button
@@ -2290,21 +2305,218 @@ export default forwardRef<VideoInfoPanelRef, VideoInfoPanelProps>(
                 onArtifactSaved={loadDownloadArtifacts}
               />
             )}
+
+            {activePanel === 'research' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+                <div style={{ color: colors.textStrong, fontSize: 18, fontWeight: 800, marginBottom: 4 }}>
+                  研究收藏
+                </div>
+                <ResearchPanel 
+                  video={video} 
+                  colors={colors}
+                  onSuccess={() => {
+                    window.dispatchEvent(new CustomEvent('video-mutated', { detail: video.id }));
+                  }}
+                />
+              </div>
+            )}
           </div>
         </div>
-
-        {researchModalState && (
-          <ResearchFavoriteModal
-            video={video}
-            mode={researchModalState.mode}
-            existingFavorite={researchModalState.existingFavorite}
-            onClose={() => setResearchModalState(null)}
-            onSuccess={() => {
-              setResearchModalState(null);
-              window.dispatchEvent(new CustomEvent('video-mutated', { detail: video.id }));
-            }}
-          />
-        )}
       </>
     );
   });
+
+  function ResearchPanel({ 
+    video, 
+    colors,
+    onSuccess 
+  }: { 
+    video: VideoWithMeta; 
+    colors: any;
+    onSuccess: () => void 
+  }) {
+    const [intentTypes, setIntentTypes] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [submitting, setSubmitting] = useState(false);
+    const [favorite, setFavorite] = useState<any>(null);
+    
+    const [selectedIntentTypeId, setSelectedIntentTypeId] = useState<number | null>(null);
+    const [note, setNote] = useState('');
+    const [error, setError] = useState<string | null>(null);
+
+    useEffect(() => {
+      async function fetchData() {
+        try {
+          setLoading(true);
+          const [intentRes, favRes] = await Promise.all([
+            fetch('/api/research/intent-types'),
+            fetch(`/api/research/favorites?video_id=${video.id}`)
+          ]);
+          
+          if (intentRes.ok) {
+            const intentData = await intentRes.json();
+            setIntentTypes(intentData);
+            
+            const favData = await favRes.json();
+            const fav = favData.items?.[0];
+            if (fav) {
+              setFavorite(fav);
+              setSelectedIntentTypeId(fav.intent_type_id);
+              setNote(fav.note || '');
+            } else if (intentData.length > 0) {
+              setSelectedIntentTypeId(intentData[0].id);
+            }
+          }
+        } catch (err) {
+          setError('加载数据失败');
+        } finally {
+          setLoading(false);
+        }
+      }
+      fetchData();
+    }, [video.id]);
+
+    const handleSubmit = async () => {
+      if (!selectedIntentTypeId) return setError('请选择研究意图');
+      setSubmitting(true);
+      setError(null);
+      try {
+        const res = await fetch('/api/research/favorites', {
+          method: favorite ? 'PATCH' : 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: favorite?.id,
+            video_id: video.id,
+            intent_type_id: selectedIntentTypeId,
+            note: note.trim(),
+          }),
+        });
+        if (!res.ok) throw new Error();
+        onSuccess();
+        // Refresh local favorite state
+        const favRes = await fetch(`/api/research/favorites?video_id=${video.id}`);
+        const favData = await favRes.json();
+        setFavorite(favData.items?.[0]);
+      } catch (err) {
+        setError('提交失败');
+      } finally {
+        setSubmitting(false);
+      }
+    };
+
+    const handleRemove = async () => {
+      if (!favorite) return;
+      if (!confirm('确定移除收藏吗？')) return;
+      setSubmitting(true);
+      try {
+        await fetch(`/api/research/favorites/${favorite.id}`, { method: 'DELETE' });
+        setFavorite(null);
+        setSelectedIntentTypeId(intentTypes[0]?.id || null);
+        setNote('');
+        onSuccess();
+      } catch (err) {
+        setError('移除失败');
+      } finally {
+        setSubmitting(false);
+      }
+    };
+
+    if (loading) return <div style={{ padding: 20, textAlign: 'center', color: colors.textMuted }}>加载中...</div>;
+
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <label style={{ fontSize: 13, fontWeight: 600, color: colors.textSoft }}>
+            研究意图
+          </label>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            {intentTypes.map((intent) => (
+              <button
+                key={intent.id}
+                type="button"
+                onClick={() => setSelectedIntentTypeId(intent.id)}
+                style={{
+                  padding: '8px 12px',
+                  borderRadius: 10,
+                  border: `1px solid ${selectedIntentTypeId === intent.id ? 'var(--accent-purple)' : colors.borderStrong}`,
+                  background: selectedIntentTypeId === intent.id ? 'rgba(139, 92, 246, 0.1)' : 'transparent',
+                  color: selectedIntentTypeId === intent.id ? 'var(--accent-purple)' : colors.textMuted,
+                  fontSize: 13,
+                  fontWeight: selectedIntentTypeId === intent.id ? 700 : 500,
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                }}
+              >
+                {intent.name}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <label style={{ fontSize: 13, fontWeight: 600, color: colors.textSoft }}>
+            研究备注
+          </label>
+          <textarea
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder="记录此视频的研究价值..."
+            style={{
+              width: '100%',
+              minHeight: 120,
+              padding: 12,
+              borderRadius: 12,
+              background: 'rgba(255, 255, 255, 0.03)',
+              border: `1px solid ${colors.borderStrong}`,
+              color: colors.textStrong,
+              fontSize: 14,
+              resize: 'vertical',
+              fontFamily: 'inherit',
+              lineHeight: 1.6,
+            }}
+          />
+        </div>
+
+        {error && <div style={{ color: colors.danger, fontSize: 12 }}>{error}</div>}
+
+        <div style={{ display: 'flex', gap: 12, marginTop: 4 }}>
+          {favorite && (
+            <button
+              onClick={handleRemove}
+              disabled={submitting}
+              style={{
+                flex: 1,
+                padding: '10px',
+                borderRadius: 10,
+                border: '1px solid rgba(239, 68, 68, 0.3)',
+                background: 'rgba(239, 68, 68, 0.1)',
+                color: '#ef4444',
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              移除收藏
+            </button>
+          )}
+          <button
+            onClick={handleSubmit}
+            disabled={submitting}
+            style={{
+              flex: 2,
+              padding: '10px',
+              borderRadius: 10,
+              border: 'none',
+              background: 'var(--accent-purple)',
+              color: '#fff',
+              fontSize: 13,
+              fontWeight: 700,
+              cursor: submitting ? 'progress' : 'pointer',
+            }}
+          >
+            {submitting ? '提交中...' : favorite ? '更新收藏' : '加入收藏'}
+          </button>
+        </div>
+      </div>
+    );
+  }
