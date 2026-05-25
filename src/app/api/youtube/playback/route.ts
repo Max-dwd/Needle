@@ -19,8 +19,10 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       proxyUrl: `/api/youtube/media?${params.toString()}`,
       expiresAt: stream.expiresAt,
-      source: 'mp4',
-      limitations: ['最高使用 720p progressive MP4，解析失败时回退 iframe'],
+      source: 'native',
+      limitations: [
+        '优先使用最高 720p 原生可播放 MP4/HLS；保留原生 media element 以支持锁屏播放',
+      ],
     });
   } catch (error) {
     const message =

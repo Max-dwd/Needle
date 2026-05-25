@@ -5,15 +5,33 @@ FROM node:20-bookworm-slim AS base
 WORKDIR /app
 
 ENV NEXT_TELEMETRY_DISABLED=1
+ARG TARGETARCH
 
 RUN apt-get update \
   && apt-get install -y --no-install-recommends \
     ca-certificates \
     ffmpeg \
-    yt-dlp \
+    curl \
+    unzip \
+    python3 \
+  && curl -fsSL https://deno.land/install.sh -o /tmp/install-deno.sh \
+  && DENO_INSTALL=/usr/local sh /tmp/install-deno.sh -y \
+  && deno --version \
+  && case "${TARGETARCH}" in \
+    amd64) YT_DLP_ASSET="yt-dlp_linux" ;; \
+    arm64) YT_DLP_ASSET="yt-dlp_linux_aarch64" ;; \
+    *) YT_DLP_ASSET="yt-dlp" ;; \
+  esac \
+  && curl -L "https://github.com/yt-dlp/yt-dlp/releases/latest/download/${YT_DLP_ASSET}" -o /usr/local/bin/yt-dlp \
+  && chmod 0755 /usr/local/bin/yt-dlp \
+  && /usr/local/bin/yt-dlp --version \
+  && rm -f /tmp/install-deno.sh \
   && rm -rf /var/lib/apt/lists/*
 
 FROM base AS build
+
+ENV NEEDLE_DOCKER_BUILD=1 \
+  NODE_OPTIONS=--max-old-space-size=1024
 
 COPY package.json package-lock.json ./
 RUN npm ci

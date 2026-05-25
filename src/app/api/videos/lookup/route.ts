@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
              v.subtitle_error, v.subtitle_last_attempt_at, v.subtitle_cooldown_until, v.created_at,
              COALESCE(c.name, v.channel_name) as channel_name, c.avatar_url,
              c.channel_id as channel_channel_id, COALESCE(c.intent, '未分类') as intent, c.topics,
-             st.status as summary_status
+             st.status as summary_status, st.error as summary_error
       FROM videos v
       LEFT JOIN channels c ON c.id = v.channel_id
       LEFT JOIN summary_tasks st ON v.video_id = st.video_id AND v.platform = st.platform

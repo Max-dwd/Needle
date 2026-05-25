@@ -154,7 +154,7 @@ export async function GET(req: NextRequest) {
            v.subtitle_status, v.subtitle_path, v.subtitle_language, v.subtitle_format,
            v.subtitle_error, v.subtitle_last_attempt_at, v.subtitle_cooldown_until, v.created_at,
            c.name as channel_name, c.avatar_url, c.channel_id as channel_channel_id, c.intent, c.topics,
-           st.status as summary_status
+           st.status as summary_status, st.error as summary_error
            ${includeResearch ? `,
            CASE WHEN rf.id IS NULL THEN 0 ELSE 1 END as research_is_favorited,
            rf.id as research_favorite_id,

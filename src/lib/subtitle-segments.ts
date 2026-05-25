@@ -15,8 +15,20 @@ export function findActiveSegmentIndex(
   currentSeconds: number,
 ): number {
   if (!segments.length) return -1;
-  return segments.reduce(
-    (bestIdx, seg, idx) => (seg.start <= currentSeconds ? idx : bestIdx),
-    0,
-  );
+
+  let low = 0;
+  let high = segments.length - 1;
+  let bestIndex = 0;
+
+  while (low <= high) {
+    const mid = Math.floor((low + high) / 2);
+    if (segments[mid].start <= currentSeconds) {
+      bestIndex = mid;
+      low = mid + 1;
+    } else {
+      high = mid - 1;
+    }
+  }
+
+  return bestIndex;
 }

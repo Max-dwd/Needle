@@ -43,7 +43,7 @@ interface BilibiliPlaybackResponse {
 interface YouTubePlaybackResponse {
   proxyUrl?: string;
   expiresAt?: number;
-  source?: 'mp4';
+  source?: 'native';
   limitations?: string[];
   error?: string;
   details?: string;
@@ -61,6 +61,7 @@ const DEFAULT_KEYBOARD_SETTINGS: PlayerKeyboardModeSettings = {
 
 const YOUTUBE_IFRAME_RATES = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
 const RATE_ONE_EPSILON = 0.01;
+const PLAYBACK_CLOCK_COMMIT_MS = 500;
 
 function getExternalUrl(video: VideoWithMeta): string {
   if (video.platform === 'youtube')
@@ -198,6 +199,11 @@ export default function PlayerModal({
 
   const lastDesiredRateRef = useRef<number>(1);
   const modalContentRef = useRef<HTMLDivElement>(null);
+  const playerStartSecondsRef = useRef(
+    Math.max(0, Math.floor(initialStartSeconds)),
+  );
+  const playerStartCommitTimerRef = useRef<number | null>(null);
+  const lastPlayerStartCommitAtRef = useRef(0);
 
   const youtubeIframeRef = useRef<HTMLIFrameElement>(null);
   const youtubeNativeVideoRef = useRef<HTMLVideoElement>(null);
@@ -230,6 +236,54 @@ export default function PlayerModal({
       setActiveChapterIndex(cIndex);
     }
   }, [chapters, playerStartSeconds, activeChapterIndex]);
+
+  const flushPlayerStartSeconds = useCallback(() => {
+    playerStartCommitTimerRef.current = null;
+    lastPlayerStartCommitAtRef.current = Date.now();
+    setPlayerStartSeconds((current) => {
+      const nextSeconds = playerStartSecondsRef.current;
+      return Math.abs(current - nextSeconds) < 0.05 ? current : nextSeconds;
+    });
+  }, []);
+
+  const commitPlayerStartSeconds = useCallback(
+    (seconds: number, options?: { immediate?: boolean }) => {
+      const nextSeconds = Math.max(0, seconds);
+      playerStartSecondsRef.current = nextSeconds;
+
+      if (options?.immediate) {
+        if (playerStartCommitTimerRef.current !== null) {
+          window.clearTimeout(playerStartCommitTimerRef.current);
+          playerStartCommitTimerRef.current = null;
+        }
+        flushPlayerStartSeconds();
+        return;
+      }
+
+      const now = Date.now();
+      const elapsed = now - lastPlayerStartCommitAtRef.current;
+      if (elapsed >= PLAYBACK_CLOCK_COMMIT_MS) {
+        flushPlayerStartSeconds();
+        return;
+      }
+
+      if (playerStartCommitTimerRef.current === null) {
+        playerStartCommitTimerRef.current = window.setTimeout(
+          flushPlayerStartSeconds,
+          PLAYBACK_CLOCK_COMMIT_MS - elapsed,
+        );
+      }
+    },
+    [flushPlayerStartSeconds],
+  );
+
+  useEffect(() => {
+    return () => {
+      if (playerStartCommitTimerRef.current !== null) {
+        window.clearTimeout(playerStartCommitTimerRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (!followMode) return;
@@ -688,7 +742,7 @@ export default function PlayerModal({
       const currentSeconds =
         videoElement && Number.isFinite(videoElement.currentTime)
           ? videoElement.currentTime
-          : playerStartSeconds;
+          : playerStartSecondsRef.current;
       const nextSeconds = currentSeconds + secondsDelta;
       if (nextSeconds < 0) return;
 
@@ -706,7 +760,7 @@ export default function PlayerModal({
         return;
       }
 
-      setPlayerStartSeconds(nextSeconds);
+      commitPlayerStartSeconds(nextSeconds, { immediate: true });
       if (usesNativeVideo) {
         pendingNativeSeekRef.current = nextSeconds;
         flushPendingNativeSeek(nextSeconds);
@@ -720,8 +774,8 @@ export default function PlayerModal({
       flushPendingNativeSeek,
       flushPendingYouTubeSeek,
       getNativeVideoElement,
+      commitPlayerStartSeconds,
       playerDuration,
-      playerStartSeconds,
       usesNativeVideo,
     ],
   );
@@ -830,7 +884,7 @@ export default function PlayerModal({
 
   useEffect(() => {
     const nextStartSeconds = Math.max(0, Math.floor(initialStartSeconds));
-    setPlayerStartSeconds(nextStartSeconds);
+    commitPlayerStartSeconds(nextStartSeconds, { immediate: true });
     setPlayerDuration(0);
     setNativePlaybackRate(1);
     setNativeIsPlaying(false);
@@ -854,7 +908,7 @@ export default function PlayerModal({
       setBilibiliPlayback(null);
       setBilibiliPlaybackError(null);
     }
-  }, [initialStartSeconds, video]);
+  }, [commitPlayerStartSeconds, initialStartSeconds, video]);
 
   useEffect(() => {
     if (isYt) {
@@ -912,11 +966,14 @@ export default function PlayerModal({
         }
       },
       onSeekBackward: () => {
-        const nextTime = Math.max(0, playerStartSeconds - 10);
+        const nextTime = Math.max(0, playerStartSecondsRef.current - 10);
         handleTimestampClick(nextTime);
       },
       onSeekForward: () => {
-        const nextTime = Math.min(playerDuration, playerStartSeconds + 10);
+        const nextTime = Math.min(
+          playerDuration,
+          playerStartSecondsRef.current + 10,
+        );
         handleTimestampClick(nextTime);
       },
       onSeekTo: (details) => {
@@ -930,7 +987,7 @@ export default function PlayerModal({
 
   const handleTimestampClick = (seconds: number) => {
     const nextSeconds = Math.max(0, Math.floor(seconds));
-    setPlayerStartSeconds(nextSeconds);
+    commitPlayerStartSeconds(nextSeconds, { immediate: true });
 
     if (usesNativeVideo) {
       pendingNativeSeekRef.current = nextSeconds;
@@ -982,7 +1039,7 @@ export default function PlayerModal({
         setYoutubePlayerState(telemetry.playerState);
       }
       if (telemetry.currentTime !== undefined) {
-        setPlayerStartSeconds(telemetry.currentTime);
+        commitPlayerStartSeconds(telemetry.currentTime);
       }
       if (telemetry.duration !== undefined && telemetry.duration > 0) {
         setPlayerDuration(telemetry.duration);
@@ -993,7 +1050,7 @@ export default function PlayerModal({
     return () => {
       window.removeEventListener('message', handleMessage);
     };
-  }, [isYt, useNativeYouTube]);
+  }, [commitPlayerStartSeconds, isYt, useNativeYouTube]);
 
   useEffect(() => {
     if (!isYt || useNativeYouTube || !youtubePlayerLoaded) return;
@@ -1058,10 +1115,10 @@ export default function PlayerModal({
 
   const handleYouTubeNativeError = useCallback(() => {
     const resumeSeconds =
-      youtubeNativeVideoRef.current?.currentTime ?? playerStartSeconds;
-    setPlayerStartSeconds(resumeSeconds);
+      youtubeNativeVideoRef.current?.currentTime ?? playerStartSecondsRef.current;
+    commitPlayerStartSeconds(resumeSeconds, { immediate: true });
     void loadYouTubePlayback(undefined, resumeSeconds);
-  }, [loadYouTubePlayback, playerStartSeconds]);
+  }, [commitPlayerStartSeconds, loadYouTubePlayback]);
 
   const renderNativeVideo = (
     platform: 'youtube' | 'bilibili',
@@ -1102,7 +1159,7 @@ export default function PlayerModal({
         }
       }}
       onTimeUpdate={(event) => {
-        setPlayerStartSeconds(event.currentTarget.currentTime);
+        commitPlayerStartSeconds(event.currentTarget.currentTime);
       }}
       style={{
         width: '100%',

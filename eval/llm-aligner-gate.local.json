@@ -1,0 +1,46 @@
+{
+  "outputRoot": "/private/tmp/needle-llm-aligner-gate-runs",
+  "concurrency": 1,
+  "chunkConcurrency": 1,
+  "defaults": {
+    "platform": "eval",
+    "modelId": "default",
+    "chunkSeconds": 300,
+    "keepAudioChunks": false,
+    "llm": {
+      "expectSpeakerLabels": true,
+      "maxSegmentSeconds": 3
+    },
+    "aligner": {
+      "modelId": "mlx-community/Qwen3-ForcedAligner-0.6B-8bit",
+      "minAvgProb": 0.3,
+      "minWordRatio": 0.3
+    }
+  },
+  "experiments": [
+    {
+      "id": "short-bilibili-ai-news",
+      "platform": "bilibili",
+      "videoId": "BV1HpdBB7ETU",
+      "title": "claude opus4.7发布；deepseek核心成员跳槽字节 【AI早报 2026-04-17】",
+      "audioPath": "data/eval-audio/BV1HpdBB7ETU.mp3",
+      "goldenJsonPath": "eval/data/cases/short-bilibili-ai-news/golden.json"
+    },
+    {
+      "id": "medium-youtube-google-next",
+      "platform": "youtube",
+      "videoId": "ouSb6UoJqyc",
+      "title": "Google Next '26全盘点 | AI企业落地 | 1800亿美元投资 | Agent企业蓝图五层架构 | 第八代TPU | 可信上下文 | 跨云湖仓 | 安全防御 | 工作区智能",
+      "audioPath": "data/eval-audio/ouSb6UoJqyc.mp3",
+      "goldenJsonPath": "eval/data/cases/medium-youtube-google-next/golden.json"
+    },
+    {
+      "id": "long-hard-youtube-saas-ai",
+      "platform": "youtube",
+      "videoId": "wVHIhiT1Ow0",
+      "title": "AI彻底消灭了软件？程序员真的要失业了吗？SaaS为何崩溃？科技互联网真要崩盘灭亡了？",
+      "audioPath": "data/eval-audio/wVHIhiT1Ow0.mp3",
+      "goldenJsonPath": "eval/data/cases/long-hard-youtube-saas-ai/golden.json"
+    }
+  ]
+}

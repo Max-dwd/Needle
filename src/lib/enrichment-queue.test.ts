@@ -172,6 +172,73 @@ describe('VAL-L1-001: enrichVideo fills fields and emits event', () => {
     );
   });
 
+  it('clears stale Bilibili members-only access status when detail says public', async () => {
+    const videoId = 43;
+    const bvid = 'BVPublic';
+    const videoWithChannel = {
+      id: videoId,
+      video_id: bvid,
+      platform: 'bilibili' as const,
+      channel_id: 1,
+      channel_id__platform: '12345',
+      channel_name: 'Public Channel',
+      title: 'Public Video',
+      thumbnail_url: 'https://example.com/old.jpg',
+      published_at: '2026-03-25T10:00:00.000Z',
+      duration: '10:30',
+      members_only_checked_at: null,
+      access_status: 'members_only',
+      created_at: new Date().toISOString(),
+    };
+
+    let updateSql = '';
+    let updateArgs: unknown[] = [];
+    mockGetDb.mockReturnValue({
+      prepare: vi.fn().mockImplementation((sql: string) => {
+        if (sql.includes('FROM videos v')) {
+          return {
+            get: vi.fn().mockReturnValue(videoWithChannel),
+            run: vi.fn(),
+            all: vi.fn().mockReturnValue([]),
+          };
+        }
+        return {
+          get: vi.fn(),
+          run: vi.fn().mockImplementation((...args: unknown[]) => {
+            updateSql = sql;
+            updateArgs = args;
+          }),
+          all: vi.fn().mockReturnValue([]),
+        };
+      }),
+    });
+
+    mockFetchBilibiliVideoDetail.mockResolvedValue({
+      thumbnail_url: 'https://example.com/new.jpg',
+      published_at: '2026-03-25T10:00:00.000Z',
+      duration: '10:30',
+      is_members_only: 0,
+    });
+
+    const enrichPromise = enrichVideo(videoId);
+    await new Promise(resolve => setTimeout(resolve, 10));
+    await enrichPromise;
+
+    expect(updateSql).toContain('access_status = ?');
+    expect(updateArgs).toContain(null);
+    expect(mockAppEventsEmit).toHaveBeenCalledWith(
+      'video:enriched',
+      expect.objectContaining({
+        videoDbId: videoId,
+        videoId: bvid,
+        fields: expect.objectContaining({
+          is_members_only: 0,
+          access_status: null,
+        }),
+      }),
+    );
+  });
+
   it('emits video:enriched event with channel context', async () => {
     const videoId = 99;
     const bvid = 'BV999';

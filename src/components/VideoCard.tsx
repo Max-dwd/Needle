@@ -39,6 +39,60 @@ function getExternalUrl(video: VideoWithMeta): string {
   return `https://www.bilibili.com/video/${video.video_id}`;
 }
 
+function getVideoFailureDetails(video: VideoWithMeta): Array<{
+  label: string;
+  reason: string;
+}> {
+  const details: Array<{ label: string; reason: string }> = [];
+  const subtitleStatus = video.subtitle_status;
+
+  if (subtitleStatus === 'error') {
+    details.push({
+      label: '字幕失败',
+      reason: video.subtitle_error || '字幕抓取失败',
+    });
+  } else if (subtitleStatus === 'cooldown' || video.subtitle_cooldown_until) {
+    details.push({
+      label: '字幕冷却中',
+      reason: video.subtitle_error || '字幕抓取失败，等待冷却后重试',
+    });
+  } else if (subtitleStatus === 'missing' || subtitleStatus === 'empty') {
+    details.push({
+      label: '字幕不可用',
+      reason:
+        video.subtitle_error ||
+        (subtitleStatus === 'empty' ? '字幕内容为空' : '未找到可用字幕'),
+    });
+  }
+
+  if (video.summary_status === 'failed') {
+    details.push({
+      label: '总结失败',
+      reason: video.summary_error || 'AI 总结生成失败',
+    });
+  }
+
+  return details;
+}
+
+function FailureHoverDetails({
+  details,
+}: {
+  details: Array<{ label: string; reason: string }>;
+}) {
+  return (
+    <div className="video-failure-hover" role="tooltip">
+      <div className="video-failure-hover-title">失败原因</div>
+      {details.map((detail) => (
+        <div className="video-failure-hover-item" key={detail.label}>
+          <div className="video-failure-hover-label">{detail.label}</div>
+          <div className="video-failure-hover-reason">{detail.reason}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 const VideoCard = memo(function VideoCard({
   video,
   externalOpen,
@@ -62,6 +116,8 @@ const VideoCard = memo(function VideoCard({
         ? { label: '⚠ 不可用', title: video.availability_reason || '已确认不可用' }
         : null;
   const subtitleBadge = getSubtitleBadgeLabel(video);
+  const failureDetails = getVideoFailureDetails(video);
+  const hasFailureDetails = failureDetails.length > 0;
   const [showSummary, setShowSummary] = useState(false);
   const [summaryData, setSummaryData] = useState<BilibiliSummaryData | null>(
     null,
@@ -397,14 +453,17 @@ const VideoCard = memo(function VideoCard({
 
     if (showSummary) return;
 
+    const openDelay = hasFailureDetails ? 0 : 400;
     openSummaryTimeoutRef.current = setTimeout(() => {
       if (!hoverRegionRef.current.card && !hoverRegionRef.current.popup) {
         return;
       }
       setShowSummary(true);
       setPopupStyle({ opacity: 0 });
-      void fetchLocalSummary();
-    }, 400);
+      if (!hasFailureDetails) {
+        void fetchLocalSummary();
+      }
+    }, openDelay);
   };
 
   const handleCardMouseLeave = () => {
@@ -549,6 +608,7 @@ const VideoCard = memo(function VideoCard({
   );
 
   const shouldRenderSummaryPopup =
+    hasFailureDetails ||
     localSummaryMarkdown ||
     (isYt
       ? localSummaryLoading
@@ -784,7 +844,9 @@ const VideoCard = memo(function VideoCard({
             onMouseEnter={handlePopupMouseEnter}
             onMouseLeave={handlePopupMouseLeave}
           >
-            {localSummaryMarkdown ? (
+            {hasFailureDetails ? (
+              <FailureHoverDetails details={failureDetails} />
+            ) : localSummaryMarkdown ? (
               <SummaryHoverPreview
                 markdown={localSummaryMarkdown}
                 video={video}
@@ -1028,6 +1090,7 @@ const VideoCard = memo(function VideoCard({
     prev.video.title === next.video.title &&
     prev.video.channel_name === next.video.channel_name &&
     prev.video.summary_status === next.video.summary_status &&
+    prev.video.summary_error === next.video.summary_error &&
     prev.video.subtitle_status === next.video.subtitle_status &&
     prev.video.subtitle_error === next.video.subtitle_error &&
     prev.video.is_read === next.video.is_read &&

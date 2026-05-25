@@ -2,6 +2,12 @@ import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
   serverExternalPackages: ['better-sqlite3'],
+  experimental:
+    process.env.NEEDLE_DOCKER_BUILD === '1'
+      ? {
+          cpus: 1,
+        }
+      : undefined,
   turbopack: {
     root: process.cwd(),
   },

@@ -11,6 +11,13 @@ vi.mock('./shared-ai-budget', () => ({
   hasAvailableAiBudget: mockHasAvailableAiBudget,
 }));
 
+vi.mock('./app-settings', () => ({
+  getAppSetting: vi.fn(() => null),
+  getAppSettingUpdatedAt: vi.fn(() => null),
+  getPositiveIntAppSetting: vi.fn((_key: string, fallback: number) => fallback),
+  setAppSetting: vi.fn(),
+}));
+
 import {
   __subtitleRetryTestUtils,
   shouldRetrySubtitleFetch,
@@ -58,6 +65,7 @@ describe('subtitle retry schedule', () => {
           source: 'global',
           maxWaitSeconds: 300,
           modelId: null,
+          fallbackModelId: null,
           ruleId: null,
         },
       ),
@@ -75,6 +83,7 @@ describe('subtitle retry schedule', () => {
           source: 'global',
           maxWaitSeconds: 300,
           modelId: null,
+          fallbackModelId: null,
           ruleId: null,
         },
       ),
@@ -172,6 +181,7 @@ describe('subtitle retry schedule', () => {
           source: 'global',
           maxWaitSeconds: 0,
           modelId: null,
+          fallbackModelId: null,
           ruleId: null,
         },
         'after-browser',
@@ -185,6 +195,100 @@ describe('subtitle retry schedule', () => {
         createVideo({ platform: 'bilibili', video_id: 'BV1PwoBBREpX' }),
       ),
     ).toBe('https://www.bilibili.com/video/BV1PwoBBREpX?p=1');
+  });
+
+  it('rejects llm-aligner output when any chunk transcription failed', () => {
+    expect(
+      __subtitleRetryTestUtils.getLlmAlignerRejectionReason({
+        chunkCount: 2,
+        transcribeFailedCount: 1,
+        interpolatedCount: 0,
+        totalUtteranceCount: 10,
+        localInterpolatedUtteranceCount: 0,
+        avgMatchedCharRatio: 1,
+      }),
+    ).toBe('llm-aligner failed to transcribe 1/2 chunks');
+
+    expect(
+      __subtitleRetryTestUtils.getLlmAlignerRejectionReason({
+        chunkCount: 2,
+        transcribeFailedCount: 0,
+        interpolatedCount: 0,
+        totalUtteranceCount: 10,
+        localInterpolatedUtteranceCount: 0,
+        avgMatchedCharRatio: 1,
+      }),
+    ).toBeNull();
+  });
+
+  it('rejects llm-aligner output when alignment quality gates fail', () => {
+    const quality = {
+      minMatchedCharRatio: 0.9,
+      maxInterpolatedChunkRatio: 0,
+      maxLocalInterpolatedUtteranceRatio: 0.25,
+    };
+
+    expect(
+      __subtitleRetryTestUtils.getLlmAlignerRejectionReason(
+        {
+          chunkCount: 4,
+          transcribeFailedCount: 0,
+          interpolatedCount: 1,
+          totalUtteranceCount: 40,
+          localInterpolatedUtteranceCount: 0,
+          avgMatchedCharRatio: 1,
+        },
+        quality,
+      ),
+    ).toBe('llm-aligner interpolated 1/4 chunks');
+
+    expect(
+      __subtitleRetryTestUtils.getLlmAlignerRejectionReason(
+        {
+          chunkCount: 4,
+          transcribeFailedCount: 0,
+          interpolatedCount: 0,
+          totalUtteranceCount: 40,
+          localInterpolatedUtteranceCount: 0,
+          avgMatchedCharRatio: 0.82,
+        },
+        quality,
+      ),
+    ).toBe('llm-aligner matched char ratio 0.8200 below 0.9');
+
+    expect(
+      __subtitleRetryTestUtils.getLlmAlignerRejectionReason(
+        {
+          chunkCount: 4,
+          transcribeFailedCount: 0,
+          interpolatedCount: 0,
+          totalUtteranceCount: 40,
+          localInterpolatedUtteranceCount: 12,
+          avgMatchedCharRatio: 1,
+        },
+        quality,
+      ),
+    ).toBe('llm-aligner locally interpolated 12/40 utterances');
+  });
+
+  it('keeps millisecond precision for llm-aligner subtitle segments', () => {
+    expect(
+      __subtitleRetryTestUtils.buildLlmAlignerSubtitleSegments([
+        {
+          start: 1.23456,
+          end: 2.34567,
+          text: '精准时间',
+          speaker: 'S1',
+        },
+      ]),
+    ).toEqual([
+      {
+        start: 1.235,
+        end: 2.346,
+        text: '精准时间',
+        speaker: 'S1',
+      },
+    ]);
   });
 
   it('cleans up temp subtitle directories asynchronously', async () => {

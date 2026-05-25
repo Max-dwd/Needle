@@ -1,0 +1,77 @@
+{
+  "datasetId": "llm-aligner-golden-v1",
+  "datasetVersion": 1,
+  "generatedAt": "2026-05-03T16:40:17.139Z",
+  "source": {
+    "kind": "needle-local-subtitles",
+    "dataRoot": "data",
+    "databasePath": "data/folo.db"
+  },
+  "cases": [
+    {
+      "id": "short-bilibili-ai-news",
+      "tier": "short",
+      "difficulty": "normal",
+      "platform": "bilibili",
+      "videoId": "BV1HpdBB7ETU",
+      "url": "https://www.bilibili.com/video/BV1HpdBB7ETU",
+      "title": "claude opus4.7发布；deepseek核心成员跳槽字节 【AI早报 2026-04-17】",
+      "duration": "05:38",
+      "durationSeconds": 338,
+      "segmentCount": 144,
+      "textCharCount": 2061,
+      "sourceSubtitlePath": "data/subtitles/bilibili/BV1HpdBB7ETU.json",
+      "goldenJsonPath": "eval/data/cases/short-bilibili-ai-news/golden.json",
+      "goldenTextPath": "eval/data/cases/short-bilibili-ai-news/golden.txt"
+    },
+    {
+      "id": "medium-youtube-google-next",
+      "tier": "medium",
+      "difficulty": "normal",
+      "platform": "youtube",
+      "videoId": "ouSb6UoJqyc",
+      "url": "https://www.youtube.com/watch?v=ouSb6UoJqyc",
+      "title": "Google Next '26全盘点 | AI企业落地 | 1800亿美元投资 | Agent企业蓝图五层架构 | 第八代TPU | 可信上下文 | 跨云湖仓 | 安全防御 | 工作区智能",
+      "duration": "24:38",
+      "durationSeconds": 1478,
+      "segmentCount": 537,
+      "textCharCount": 9875,
+      "sourceSubtitlePath": "data/subtitles/youtube/ouSb6UoJqyc.json",
+      "goldenJsonPath": "eval/data/cases/medium-youtube-google-next/golden.json",
+      "goldenTextPath": "eval/data/cases/medium-youtube-google-next/golden.txt"
+    },
+    {
+      "id": "long-youtube-world-model",
+      "tier": "long",
+      "difficulty": "normal",
+      "platform": "youtube",
+      "videoId": "SYuSZIIYOfI",
+      "url": "https://www.youtube.com/watch?v=SYuSZIIYOfI",
+      "title": "全面解析“世界模型”：定义、路线、实践与AGI的更近一步",
+      "duration": "49:35",
+      "durationSeconds": 2975,
+      "segmentCount": 1324,
+      "textCharCount": 17535,
+      "sourceSubtitlePath": "data/subtitles/youtube/SYuSZIIYOfI.json",
+      "goldenJsonPath": "eval/data/cases/long-youtube-world-model/golden.json",
+      "goldenTextPath": "eval/data/cases/long-youtube-world-model/golden.txt"
+    },
+    {
+      "id": "long-hard-youtube-saas-ai",
+      "tier": "long",
+      "difficulty": "hard",
+      "platform": "youtube",
+      "videoId": "wVHIhiT1Ow0",
+      "url": "https://www.youtube.com/watch?v=wVHIhiT1Ow0",
+      "title": "AI彻底消灭了软件？程序员真的要失业了吗？SaaS为何崩溃？科技互联网真要崩盘灭亡了？",
+      "duration": "44:16",
+      "durationSeconds": 2656,
+      "segmentCount": 1587,
+      "textCharCount": 17814,
+      "sourceSubtitlePath": "data/subtitles/youtube/wVHIhiT1Ow0.json",
+      "goldenJsonPath": "eval/data/cases/long-hard-youtube-saas-ai/golden.json",
+      "goldenTextPath": "eval/data/cases/long-hard-youtube-saas-ai/golden.txt"
+    }
+  ],
+  "missing": []
+}

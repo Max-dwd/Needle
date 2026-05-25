@@ -164,7 +164,7 @@ describe('browser source commands', () => {
     ]);
   });
 
-  it('preserves bilibili members-only detection when the list payload exposes badge text', async () => {
+  it('does not infer bilibili members-only from nested badge text', async () => {
     mockJsonOnce([
       {
         bvid: 'BVcharge001',
@@ -189,8 +189,8 @@ describe('browser source commands', () => {
         thumbnail_url: 'https://i0.hdslb.com/bfs/archive/charge.jpg',
         published_at: '2026-03-28T14:40:00.000Z',
         duration: '08:01',
-        is_members_only: 1,
-        access_status: 'members_only',
+        is_members_only: undefined,
+        access_status: undefined,
       },
     ]);
   });
@@ -216,6 +216,31 @@ describe('browser source commands', () => {
       channel_name: '',
       access_status: undefined,
       is_members_only: undefined,
+    });
+  });
+
+  it('normalizes YouTube members-only video-meta access status', async () => {
+    mockJsonOnce({
+      video_id: 'member12345',
+      title: 'Members Video',
+      thumbnail_url: 'https://img.example/member.jpg',
+      published_at: '2026-03-28T00:00:00.000Z',
+      duration: '2:05',
+      access_status: 'members_only',
+    });
+
+    const { fetchBrowserYoutubeVideoMeta } = await import(
+      './browser-youtube-source'
+    );
+    await expect(fetchBrowserYoutubeVideoMeta('member12345')).resolves.toEqual({
+      video_id: 'member12345',
+      title: 'Members Video',
+      thumbnail_url: 'https://img.example/member.jpg',
+      published_at: '2026-03-28T00:00:00.000Z',
+      duration: '2:05',
+      channel_name: '',
+      access_status: 'members_only',
+      is_members_only: 1,
     });
   });
 

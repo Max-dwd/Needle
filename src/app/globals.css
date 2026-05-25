@@ -1319,6 +1319,38 @@ a.feed-channel-link:hover {
   text-align: center;
 }
 
+.video-failure-hover {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 16px 16px;
+  color: var(--text-primary);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.video-failure-hover-title {
+  font-weight: 700;
+  color: #ef4444;
+}
+
+.video-failure-hover-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.video-failure-hover-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.video-failure-hover-reason {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .biliscope-ai-summary-popup {
   display: flex;
   flex-direction: column;

@@ -50,14 +50,16 @@ export default function MobileVideoSheet({
   hasPrev,
   initialAudioMode = false,
 }: MobileVideoSheetProps) {
+  const sheetRef = useRef<HTMLDivElement>(null);
+  const backdropRef = useRef<HTMLDivElement>(null);
+  const navIndicatorRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
-  const [dragY, setDragY] = useState(0);
-  const [dragX, setDragX] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [dragDirection, setDragDirection] = useState<
     'none' | 'vertical' | 'horizontal'
   >('none');
+  const [horizontalDragSign, setHorizontalDragSign] = useState<1 | -1 | 0>(0);
   const [isFirstOpen, setIsFirstOpen] = useState(true);
   const [isFullHeight, setIsFullHeight] = useState(false);
   const [isAudioPlaying, setIsAudioPlaying] = useState(() => {
@@ -98,9 +100,49 @@ export default function MobileVideoSheet({
   const touchStartX = useRef(0);
   const lastDragY = useRef(0);
   const lastDragX = useRef(0);
+  const dragYRef = useRef(0);
+  const dragXRef = useRef(0);
+  const dragFrameRef = useRef<number | null>(null);
 
   const lastVideoId = useRef(video.id);
   const seekNonceRef = useRef(0);
+
+  const getBaseTranslateY = useCallback(() => {
+    const windowH = typeof window !== 'undefined' ? window.innerHeight : 800;
+    const collapsedTop = windowH * 0.12;
+    return isFirstOpen ? windowH : isFullHeight ? 0 : collapsedTop;
+  }, [isFirstOpen, isFullHeight]);
+
+  const applyDragStyles = useCallback(() => {
+    dragFrameRef.current = null;
+    const dragY = dragYRef.current;
+    const dragX = dragXRef.current;
+    const baseY = getBaseTranslateY();
+
+    if (sheetRef.current) {
+      sheetRef.current.style.transform = `translate3d(0, ${baseY + dragY}px, 0)`;
+    }
+
+    if (backdropRef.current) {
+      backdropRef.current.style.opacity = String(
+        Math.max(0, 1 - Math.max(dragY / 400, Math.abs(dragX) / 800)),
+      );
+    }
+
+    if (navIndicatorRef.current) {
+      navIndicatorRef.current.style.transform = `translateX(${dragX}px)`;
+      navIndicatorRef.current.style.opacity = String(
+        Math.min(Math.abs(dragX) / 40, 1),
+      );
+      navIndicatorRef.current.style.left = dragX > 0 ? '0px' : 'auto';
+      navIndicatorRef.current.style.right = dragX < 0 ? '0px' : 'auto';
+    }
+  }, [getBaseTranslateY]);
+
+  const scheduleDragStyles = useCallback(() => {
+    if (dragFrameRef.current !== null) return;
+    dragFrameRef.current = requestAnimationFrame(applyDragStyles);
+  }, [applyDragStyles]);
 
   // Lock body scroll
   useEffect(() => {
@@ -110,8 +152,17 @@ export default function MobileVideoSheet({
     return () => {
       document.body.style.overflow = '';
       clearTimeout(timer);
+      if (dragFrameRef.current !== null) {
+        cancelAnimationFrame(dragFrameRef.current);
+      }
     };
   }, []);
+
+  useEffect(() => {
+    dragYRef.current = 0;
+    dragXRef.current = 0;
+    applyDragStyles();
+  }, [applyDragStyles]);
 
   // Handle Video Transition Animation
   useEffect(() => {
@@ -121,12 +172,15 @@ export default function MobileVideoSheet({
       const startFrame = requestAnimationFrame(() => {
         setIsTransitioning(true);
         // Start from the edge (snap to side instantly)
-        setDragX(direction === 'prev' ? -window.innerWidth : window.innerWidth);
+        dragXRef.current =
+          direction === 'prev' ? -window.innerWidth : window.innerWidth;
+        scheduleDragStyles();
 
         // Immediate animation back to center
         settleFrame = requestAnimationFrame(() => {
           setIsTransitioning(false);
-          setDragX(0);
+          dragXRef.current = 0;
+          scheduleDragStyles();
           if (contentRef.current) contentRef.current.scrollTop = 0;
           lastDragX.current = 0; // Reset for next transition
         });
@@ -139,7 +193,7 @@ export default function MobileVideoSheet({
         if (settleFrame) cancelAnimationFrame(settleFrame);
       };
     }
-  }, [video.id]);
+  }, [scheduleDragStyles, video.id]);
 
   const handleTouchStart = useCallback(
     (e: React.TouchEvent) => {
@@ -150,10 +204,14 @@ export default function MobileVideoSheet({
       touchStartTime.current = Date.now();
       setIsDragging(true);
       setDragDirection('none');
+      setHorizontalDragSign(0);
       lastDragY.current = 0;
       lastDragX.current = 0;
+      dragYRef.current = 0;
+      dragXRef.current = 0;
+      scheduleDragStyles();
     },
-    [isTransitioning],
+    [isTransitioning, scheduleDragStyles],
   );
 
   const handleTouchMove = useCallback(
@@ -188,7 +246,12 @@ export default function MobileVideoSheet({
             }
           }
         }
-        if (direction !== 'none') setDragDirection(direction);
+        if (direction !== 'none') {
+          setDragDirection(direction);
+          if (direction === 'horizontal') {
+            setHorizontalDragSign(diffX >= 0 ? 1 : -1);
+          }
+        }
       }
 
       if (direction === 'vertical') {
@@ -196,18 +259,27 @@ export default function MobileVideoSheet({
         let effectiveY = diffY;
         if (isFullHeight && diffY < 0) effectiveY = diffY * 0.3; // Resistance at top
 
-        setDragY(effectiveY);
+        dragYRef.current = effectiveY;
         lastDragY.current = effectiveY;
+        scheduleDragStyles();
       } else if (direction === 'horizontal') {
         const baseResistance = 0.3; // Increased friction
         const boundaryResistance =
           (diffX > 0 && !hasPrev) || (diffX < 0 && !hasNext) ? 0.3 : 1;
         const dampedX = diffX * baseResistance * boundaryResistance;
-        setDragX(dampedX);
+        dragXRef.current = dampedX;
         lastDragX.current = diffX; // Track original finger movement
+        scheduleDragStyles();
       }
     },
-    [dragDirection, hasNext, hasPrev, isDragging, isFullHeight],
+    [
+      dragDirection,
+      hasNext,
+      hasPrev,
+      isDragging,
+      isFullHeight,
+      scheduleDragStyles,
+    ],
   );
 
   const handleTouchEnd = useCallback(
@@ -243,27 +315,32 @@ export default function MobileVideoSheet({
             setIsFullHeight(false);
           }
         }
-        setDragY(0);
+        dragYRef.current = 0;
+        scheduleDragStyles();
       } else if (dragDirection === 'horizontal') {
         const threshold = 80; // Finger movement threshold (80px)
         if (lastDragX.current > threshold && onPrev && hasPrev) {
           setIsTransitioning(true);
-          setDragX(window.innerWidth);
+          dragXRef.current = window.innerWidth;
+          scheduleDragStyles();
           setTimeout(() => {
             onPrev();
           }, 300);
         } else if (lastDragX.current < -threshold && onNext && hasNext) {
           setIsTransitioning(true);
-          setDragX(-window.innerWidth);
+          dragXRef.current = -window.innerWidth;
+          scheduleDragStyles();
           setTimeout(() => {
             onNext();
           }, 300);
         } else {
-          setDragX(0);
+          dragXRef.current = 0;
+          scheduleDragStyles();
         }
       }
 
       setDragDirection('none');
+      setHorizontalDragSign(0);
     },
     [
       dragDirection,
@@ -274,6 +351,7 @@ export default function MobileVideoSheet({
       onClose,
       onNext,
       onPrev,
+      scheduleDragStyles,
     ],
   );
 
@@ -415,13 +493,6 @@ export default function MobileVideoSheet({
   }, [isMediaActive, preferredMode, video]);
 
   const sheetStyle = useMemo(() => {
-    const windowH = typeof window !== 'undefined' ? window.innerHeight : 800;
-    const collapsedTop = windowH * 0.12;
-
-    // Initial entrance from bottom, then stay at collapsedTop or expandedTop
-    const baseY = isFirstOpen ? windowH : isFullHeight ? 0 : collapsedTop;
-    const translateY = baseY + dragY;
-
     return {
       position: 'fixed' as const,
       left: 0,
@@ -436,7 +507,7 @@ export default function MobileVideoSheet({
       borderTopLeftRadius: isFullHeight ? 0 : 24,
       borderTopRightRadius: isFullHeight ? 0 : 24,
       boxShadow: '0 -12px 40px rgba(0,0,0,0.25)',
-      transform: `translate3d(0, ${translateY}px, 0)`,
+      transform: `translate3d(0, ${getBaseTranslateY()}px, 0)`,
       transition: isDragging
         ? 'none'
         : 'transform 0.5s cubic-bezier(0.32, 0.72, 0, 1), border-radius 0.5s cubic-bezier(0.32, 0.72, 0, 1)',
@@ -444,18 +515,16 @@ export default function MobileVideoSheet({
       animationOrigin: 'bottom',
       willChange: 'transform',
     };
-  }, [dragY, isDragging, isFirstOpen, isFullHeight]);
+  }, [getBaseTranslateY, isDragging, isFullHeight]);
 
   return (
     <>
       <div
+        ref={backdropRef}
         className="mobile-sheet-backdrop"
         onClick={onClose}
         style={{
-          opacity: Math.max(
-            0,
-            1 - Math.max(dragY / 400, Math.abs(dragX) / 800),
-          ),
+          opacity: 1,
           pointerEvents: isDragging ? 'none' : 'auto',
         }}
       />
@@ -463,20 +532,21 @@ export default function MobileVideoSheet({
       {/* Navigation Indicators */}
       {isDragging && dragDirection === 'horizontal' && (
         <div
+          ref={navIndicatorRef}
           style={{
             position: 'fixed',
             top: '50%',
-            left: dragX > 0 ? 0 : 'auto',
-            right: dragX < 0 ? 0 : 'auto',
-            transform: `translateX(${dragX}px)`,
+            left: 'auto',
+            right: 'auto',
+            transform: 'translateX(0)',
             display: 'flex',
             padding: '0 20px',
             zIndex: 301,
             pointerEvents: 'none',
-            opacity: Math.min(Math.abs(dragX) / 40, 1),
+            opacity: 0,
           }}
         >
-          {dragX > 0 && hasPrev && (
+          {horizontalDragSign > 0 && hasPrev && (
             <div
               style={{
                 background: 'var(--accent-purple)',
@@ -490,7 +560,7 @@ export default function MobileVideoSheet({
               ← 上一个视频
             </div>
           )}
-          {dragX < 0 && hasNext && (
+          {horizontalDragSign < 0 && hasNext && (
             <div
               style={{
                 background: 'var(--accent-purple)',
@@ -508,6 +578,7 @@ export default function MobileVideoSheet({
       )}
 
       <div
+        ref={sheetRef}
         style={sheetStyle}
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}

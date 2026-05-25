@@ -11,6 +11,8 @@ const CACHE_TTL_MS = 10 * 60 * 1000;
 const EXPIRY_REFRESH_GRACE_MS = 60 * 1000;
 const YOUTUBE_USER_AGENT =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
+export const YOUTUBE_PLAYBACK_FORMAT =
+  'best[ext=mp4][height<=720]/best';
 const YT_DLP_CANDIDATES = [
   process.env.YT_DLP_BIN,
   '/opt/homebrew/bin/yt-dlp',
@@ -19,7 +21,7 @@ const YT_DLP_CANDIDATES = [
 ].filter((value): value is string => Boolean(value && value.trim()));
 
 interface YouTubePlaybackCache {
-  version: 1;
+  version: 4;
   entries: Record<string, ResolvedYouTubeStream>;
 }
 
@@ -41,20 +43,21 @@ function pickYtDlpBinary(): string {
 
 function readCache(): YouTubePlaybackCache {
   const raw = getAppSetting(YOUTUBE_PLAYBACK_CACHE_KEY);
-  if (!raw) return { version: 1, entries: {} };
+  if (!raw) return { version: 4, entries: {} };
 
   try {
     const parsed = JSON.parse(raw) as Partial<YouTubePlaybackCache>;
-    if (!parsed || parsed.version !== 1 || !parsed.entries) {
-      return { version: 1, entries: {} };
+    if (!parsed || parsed.version !== 4 || !parsed.entries) {
+      return { version: 4, entries: {} };
     }
     return {
-      version: 1,
+      version: 4,
       entries: Object.fromEntries(
         Object.entries(parsed.entries).filter(([, entry]) => {
           return (
             typeof entry?.url === 'string' &&
             entry.url.startsWith('http') &&
+            isNativeYouTubeStreamUrl(entry.url) &&
             typeof entry.expiresAt === 'number' &&
             Number.isFinite(entry.expiresAt)
           );
@@ -62,7 +65,7 @@ function readCache(): YouTubePlaybackCache {
       ),
     };
   } catch {
-    return { version: 1, entries: {} };
+    return { version: 4, entries: {} };
   }
 }
 
@@ -75,7 +78,7 @@ function writeCache(cache: YouTubePlaybackCache) {
   );
   setAppSetting(
     YOUTUBE_PLAYBACK_CACHE_KEY,
-    JSON.stringify({ version: 1, entries }),
+    JSON.stringify({ version: 4, entries }),
   );
 }
 
@@ -118,6 +121,41 @@ function parseYtDlpUrls(stdout: string): string[] {
     .filter((line) => /^https?:\/\//i.test(line));
 }
 
+export function isNativeYouTubeStreamUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    const hostname = parsed.hostname.toLowerCase();
+    const href = parsed.href.toLowerCase();
+    if (hostname === 'manifest.googlevideo.com') {
+      return href.includes('/hls_playlist/') || href.includes('.m3u8');
+    }
+
+    const mime = parsed.searchParams.get('mime');
+    if (mime) {
+      const normalizedMime = mime.toLowerCase();
+      return (
+        normalizedMime === 'video/mp4' ||
+        normalizedMime === 'application/vnd.apple.mpegurl'
+      );
+    }
+
+    return (
+      hostname.endsWith('.googlevideo.com') &&
+      (parsed.pathname.includes('/videoplayback') ||
+        href.includes('/hls_playlist/') ||
+        href.includes('.m3u8'))
+    );
+  } catch {
+    return false;
+  }
+}
+
+export function selectNativeYouTubeStreamUrl(
+  urls: string[],
+): string | null {
+  return urls.find(isNativeYouTubeStreamUrl) ?? null;
+}
+
 export function invalidateYouTubePlaybackCache(videoId: string) {
   const cache = readCache();
   delete cache.entries[videoId];
@@ -139,7 +177,7 @@ export async function resolveYouTubeStream(
     [
       '-g',
       '-f',
-      'best[ext=mp4][height<=720]/best',
+      YOUTUBE_PLAYBACK_FORMAT,
       '--no-playlist',
       '--',
       targetUrl,
@@ -152,9 +190,9 @@ export async function resolveYouTubeStream(
   );
 
   const urls = parseYtDlpUrls(String(result.stdout || ''));
-  const url = urls[0];
+  const url = selectNativeYouTubeStreamUrl(urls);
   if (!url) {
-    throw new Error('yt-dlp did not return a playable YouTube stream');
+    throw new Error('yt-dlp did not return a native YouTube stream');
   }
 
   const now = Date.now();

@@ -459,6 +459,19 @@ export function normalizeVideoSummaryRecord(
   const title = asString(record.title);
   if (!rawId || !title) return null;
 
+  const directAccessStatus = normalizeAccessStatus(
+    record.access_status ?? record.accessStatus ?? record.members_only_status,
+  );
+  const accessStatus =
+    directAccessStatus ??
+    (platform === 'youtube' ? detectNestedAccessStatus(record) : undefined);
+  const directMembersOnly = normalizeMembersOnly(
+    record.is_members_only ??
+      record.isMembersOnly ??
+      record.members_only ??
+      record.isMembersOnlyText,
+  );
+
   return {
     video_id: rawId,
     title,
@@ -474,27 +487,11 @@ export function normalizeVideoSummaryRecord(
         record.created,
     ),
     duration: normalizeDuration(record.duration ?? record.length),
-    access_status:
-      normalizeAccessStatus(
-        record.access_status ??
-          record.accessStatus ??
-          record.members_only_status,
-      ) ?? detectNestedAccessStatus(record),
+    access_status: accessStatus,
     is_members_only:
-      normalizeMembersOnly(
-        record.is_members_only ??
-          record.isMembersOnly ??
-          record.members_only ??
-          record.isMembersOnlyText,
-      ) ??
-      ((normalizeAccessStatus(
-        record.access_status ??
-          record.accessStatus ??
-          record.members_only_status,
-      ) ?? detectNestedAccessStatus(record)) === 'members_only'
-        ? 1
-        : undefined) ??
-      detectNestedMembersOnly(record),
+      directMembersOnly ??
+      (accessStatus === 'members_only' ? 1 : undefined) ??
+      (platform === 'youtube' ? detectNestedMembersOnly(record) : undefined),
   };
 }
 

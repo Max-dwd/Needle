@@ -95,6 +95,41 @@ function isMembersOnlyText(value) {
     return (typeof value === 'string' &&
         /member|members only|subscriber-only|premium|会员|专属|付费/i.test(value));
 }
+function detectYoutubeMemberOnlyGate(...values) {
+    const texts = [];
+    const seen = new Set();
+    function collect(value, depth = 0) {
+        if (depth > 8 || value == null || seen.has(value))
+            return;
+        if (typeof value === 'string') {
+            const text = value.replace(/\s+/g, ' ').trim();
+            if (text)
+                texts.push(text);
+            return;
+        }
+        if (typeof value !== 'object')
+            return;
+        seen.add(value);
+        if (Array.isArray(value)) {
+            for (const item of value)
+                collect(item, depth + 1);
+            return;
+        }
+        for (const nested of Object.values(value)) {
+            collect(nested, depth + 1);
+        }
+    }
+    for (const value of values)
+        collect(value);
+    const candidates = [...texts, texts.join(' ')];
+    return candidates.some((raw) => {
+        const text = raw.replace(/\s+/g, ' ').trim();
+        return (/join this channel to get access to members[- ]only content like this video/i.test(text) ||
+            /members[- ]only content like this video/i.test(text) ||
+            /this video is (?:for|available to).{0,80}(?:members|channel members)/i.test(text) ||
+            /(?:requires|need).{0,40}(?:membership|channel membership).{0,80}(?:watch|view|video)/i.test(text));
+    });
+}
 function collectBadgeTexts(value) {
     if (!Array.isArray(value))
         return [];
@@ -264,6 +299,7 @@ export const __youtubeCommandTestUtils = {
     extractGridVideoRendererSummary,
     extractLockupVideoSummary,
     extractVideoRendererSummary,
+    detectYoutubeMemberOnlyGate,
     pickDurationText,
 };
 function extractJsonAssignmentFromHtml(html, names) {
@@ -482,6 +518,7 @@ async function fetchYoutubeVideoData(page, input) {
     const data = (await page.evaluate(`
     (async () => {
       const extractJsonAssignmentFromHtml = ${extractJsonAssignmentFromHtml.toString()};
+      const detectYoutubeMemberOnlyGate = ${detectYoutubeMemberOnlyGate.toString()};
       const videoId = ${JSON.stringify(videoId)};
 
       const watchResp = await fetch('/watch?v=' + encodeURIComponent(videoId), {
@@ -507,18 +544,20 @@ async function fetchYoutubeVideoData(page, input) {
         memberText = [playability.status, playability.reason, messages].filter(Boolean).join(' ');
       } catch {}
 
+      const isMembersOnly =
+        /member|members[- ]only|subscriber-only|premium/i.test(memberText)
+        || badges.some((badge) => /member|subscriber|premium/i.test(badge?.metadataBadgeRenderer?.label || ''))
+        || ownerBadges.some((badge) => /member|subscriber|premium/i.test(badge?.metadataBadgeRenderer?.label || ''))
+        || detectYoutubeMemberOnlyGate(playability, yt);
+
       return {
         video_id: details.videoId || videoId,
         title: details.title || '',
         thumbnail_url: details.thumbnail?.thumbnails?.slice(-1)?.[0]?.url || '',
         published_at: microformat.publishDate || microformat.uploadDate || '',
         duration: details.lengthSeconds ? Number(details.lengthSeconds) : 0,
-        is_members_only:
-          (/member|members only|subscriber-only|premium/i.test(memberText)
-            || badges.some((badge) => /member|subscriber|premium/i.test(badge?.metadataBadgeRenderer?.label || ''))
-            || ownerBadges.some((badge) => /member|subscriber|premium/i.test(badge?.metadataBadgeRenderer?.label || '')))
-            ? 1
-            : 0,
+        is_members_only: isMembersOnly ? 1 : 0,
+        access_status: isMembersOnly ? 'members_only' : undefined,
       };
     })()
   `));
@@ -542,6 +581,10 @@ async function fetchYoutubeVideoData(page, input) {
             isMembersOnlyText(data.is_members_only)
             ? 1
             : 0,
+        access_status: data.access_status === 'members_only' ||
+            data.accessStatus === 'members_only'
+            ? 'members_only'
+            : undefined,
     };
 }
 function readRequiredInput(input, flagName, label) {

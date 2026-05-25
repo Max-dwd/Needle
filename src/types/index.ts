@@ -22,6 +22,7 @@ export interface VideoWithMeta {
   channel_name: string;
   avatar_url: string | null;
   summary_status: SummaryTaskStatus | null;
+  summary_error: string | null;
   /** DB `channels.id` (FK on video row). */
   channel_id: string;
   /** Platform channel id (YouTube UC… / Bilibili mid) from joined `channels` row. */

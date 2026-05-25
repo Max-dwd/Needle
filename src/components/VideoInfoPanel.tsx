@@ -5,6 +5,7 @@ import React, {
   useCallback,
   useEffect,
   useImperativeHandle,
+  useMemo,
   useRef,
   useState,
 } from 'react';
@@ -45,6 +46,11 @@ interface VideoInfoPanelProps {
   onFollowModeChange?: (follow: boolean) => void;
   subtitleOverlay?: boolean;
   onSubtitleOverlayChange?: (enabled: boolean) => void;
+}
+
+interface SummaryScrollSection {
+  el: Element;
+  seconds: number;
 }
 
 function formatToken(n: number | string | undefined | null): string {
@@ -352,6 +358,9 @@ export default forwardRef<VideoInfoPanelRef, VideoInfoPanelProps>(
     const [selectedSubtitleModel, setSelectedSubtitleModel] =
       useState<string>('');
     const selectedSubtitleModelRef = useRef('');
+    const [selectedSubtitleFallbackModel, setSelectedSubtitleFallbackModel] =
+      useState<string>('');
+    const selectedSubtitleFallbackModelRef = useRef('');
     const [viewingHistory, setViewingHistory] = useState(false);
     const [activePanel, setActivePanel] = useState<
       'subtitle' | 'summary' | 'comments' | 'chat' | 'download' | 'research'
@@ -360,6 +369,7 @@ export default forwardRef<VideoInfoPanelRef, VideoInfoPanelProps>(
     const [isTabExpanded, setIsTabExpanded] = useState(false);
     const activeSegmentRef = useRef<HTMLButtonElement>(null);
     const scrollContainerRef = useRef<HTMLDivElement>(null);
+    const summarySectionIndexRef = useRef<SummaryScrollSection[]>([]);
 
     useEffect(() => {
       const checkMobile = () => {
@@ -377,6 +387,10 @@ export default forwardRef<VideoInfoPanelRef, VideoInfoPanelProps>(
     useEffect(() => {
       selectedSubtitleModelRef.current = selectedSubtitleModel;
     }, [selectedSubtitleModel]);
+
+    useEffect(() => {
+      selectedSubtitleFallbackModelRef.current = selectedSubtitleFallbackModel;
+    }, [selectedSubtitleFallbackModel]);
 
     const effectiveMarkdown = viewingHistory && summary?.previous?.markdown
       ? summary.previous.markdown
@@ -441,6 +455,18 @@ export default forwardRef<VideoInfoPanelRef, VideoInfoPanelProps>(
           selectedSubtitleModelRef.current
         ) {
           params.set('modelId', selectedSubtitleModelRef.current);
+        }
+        if (
+          (preferredMethod === 'gemini' ||
+            preferredMethod === 'api-fallback') &&
+          selectedSubtitleFallbackModelRef.current &&
+          selectedSubtitleFallbackModelRef.current !==
+            selectedSubtitleModelRef.current
+        ) {
+          params.set(
+            'fallbackModelId',
+            selectedSubtitleFallbackModelRef.current,
+          );
         }
         if (!isYt) {
           if (typeof bilibiliAid === 'number' && bilibiliAid > 0) {
@@ -912,13 +938,16 @@ export default forwardRef<VideoInfoPanelRef, VideoInfoPanelProps>(
       }
     };
 
-    const subtitleSegments = Array.isArray(subtitle?.segments)
-      ? subtitle.segments
-      : [];
-    const activeSegmentIndex = findActiveSegmentIndex(
-      subtitleSegments,
-      currentPlayerSeconds,
+    const subtitleSegments = useMemo(
+      () => (Array.isArray(subtitle?.segments) ? subtitle.segments : []),
+      [subtitle?.segments],
     );
+    const activeSegmentIndex = useMemo(() => {
+      if (activePanel !== 'subtitle' || subtitleSegments.length === 0) {
+        return -1;
+      }
+      return findActiveSegmentIndex(subtitleSegments, currentPlayerSeconds);
+    }, [activePanel, currentPlayerSeconds, subtitleSegments]);
 
     // 浮层字幕可用性：四态 —— 可用 / 加载中 / 不可用 / 粒度过粗
     type SubtitleOverlayAvailability =
@@ -978,11 +1007,15 @@ export default forwardRef<VideoInfoPanelRef, VideoInfoPanelProps>(
     }, []);
 
     useEffect(() => {
+      if (!followMode) {
+        prevPlayerSecondsRef.current = currentPlayerSeconds;
+        return;
+      }
       if (Math.abs(currentPlayerSeconds - prevPlayerSecondsRef.current) > 3) {
         isUserScrolledRef.current = false;
       }
       prevPlayerSecondsRef.current = currentPlayerSeconds;
-    }, [currentPlayerSeconds]);
+    }, [currentPlayerSeconds, followMode]);
 
     useEffect(() => {
       if (followMode) {
@@ -1009,21 +1042,51 @@ export default forwardRef<VideoInfoPanelRef, VideoInfoPanelProps>(
     }, [activeSegmentIndex, activePanel, followMode]);
 
     const lastScrolledSummarySecondsRef = useRef<number | null>(null);
+
+    useEffect(() => {
+      if (activePanel !== 'summary' || !scrollContainerRef.current) {
+        summarySectionIndexRef.current = [];
+        return;
+      }
+
+      const container = scrollContainerRef.current;
+      summarySectionIndexRef.current = Array.from(
+        container.querySelectorAll(
+          '[data-chapter-seconds], [data-summary-seconds]',
+        ),
+      )
+        .map((el) => ({
+          el,
+          seconds: parseInt(
+            el.getAttribute('data-chapter-seconds') ||
+              el.getAttribute('data-summary-seconds') ||
+              '0',
+          ),
+        }))
+        .filter((section) => Number.isFinite(section.seconds))
+        .sort((a, b) => a.seconds - b.seconds);
+    }, [activePanel, effectiveMarkdown, streamingMarkdown]);
+
     // Auto-scroll summary chapter
     useEffect(() => {
       if (!followMode || activePanel !== 'summary' || !scrollContainerRef.current) {
         lastScrolledSummarySecondsRef.current = null;
         return;
       }
-      const container = scrollContainerRef.current;
-      const sections = Array.from(container.querySelectorAll('[data-chapter-seconds], [data-summary-seconds]'))
-        .map(el => ({
-          el,
-          seconds: parseInt(el.getAttribute('data-chapter-seconds') || el.getAttribute('data-summary-seconds') || '0')
-        }))
-        .sort((a, b) => b.seconds - a.seconds);
-
-      const activeSection = sections.find(s => s.seconds <= currentPlayerSeconds);
+      const sections = summarySectionIndexRef.current;
+      let low = 0;
+      let high = sections.length - 1;
+      let activeSection: SummaryScrollSection | null = null;
+      while (low <= high) {
+        const mid = Math.floor((low + high) / 2);
+        const section = sections[mid];
+        if (section.seconds <= currentPlayerSeconds) {
+          activeSection = section;
+          low = mid + 1;
+        } else {
+          high = mid - 1;
+        }
+      }
       if (activeSection) {
         if (lastScrolledSummarySecondsRef.current !== activeSection.seconds) {
           isUserScrolledRef.current = false;
@@ -1245,14 +1308,16 @@ export default forwardRef<VideoInfoPanelRef, VideoInfoPanelProps>(
           ) : (
             <div
               style={{
-                display: 'flex',
+                display: 'grid',
+                gridTemplateColumns: `repeat(${panelButtons.length}, minmax(0, 1fr))`,
                 gap: 2,
                 padding: '4px',
                 background: 'var(--bg-hover)',
                 borderRadius: 12,
                 height: 44,
                 alignItems: 'center',
-                flexShrink: 0,
+                width: '100%',
+                minWidth: 0,
               }}
             >
               {panelButtons.map((panel) => {
@@ -1267,8 +1332,8 @@ export default forwardRef<VideoInfoPanelRef, VideoInfoPanelProps>(
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      gap: active ? 6 : 0,
-                      padding: active ? '0 12px' : '0 10px',
+                      gap: active ? 4 : 0,
+                      padding: '0 6px',
                       borderRadius: 9,
                       background: active ? 'var(--bg-secondary)' : 'transparent',
                       border: 'none',
@@ -1279,12 +1344,17 @@ export default forwardRef<VideoInfoPanelRef, VideoInfoPanelProps>(
                       whiteSpace: 'nowrap',
                       fontSize: 13,
                       fontWeight: 700,
-                      flexShrink: 0,
+                      minWidth: 0,
+                      overflow: 'hidden',
                     }}
                     title={panel.label}
                   >
-                    <span style={{ fontSize: 16 }}>{panel.icon}</span>
-                    {active && <span>{panel.label}</span>}
+                    <span style={{ fontSize: 16, flexShrink: 0 }}>{panel.icon}</span>
+                    {active && (
+                      <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {panel.label}
+                      </span>
+                    )}
                   </button>
                 );
               })}
@@ -1293,7 +1363,7 @@ export default forwardRef<VideoInfoPanelRef, VideoInfoPanelProps>(
 
           {/* Action Buttons Backplate */}
           <div style={{
-            display: 'flex',
+            display: isMobile ? 'flex' : 'none',
             alignItems: 'center',
             gap: 2,
             background: 'var(--bg-hover)',
@@ -1620,42 +1690,79 @@ export default forwardRef<VideoInfoPanelRef, VideoInfoPanelProps>(
                   {/* Actions Section */}
                   <div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                      <select
-                        value={selectedSubtitleModel}
-                        onChange={(event) =>
-                          setSelectedSubtitleModel(event.target.value)
-                        }
-                        disabled={subtitleApiExtracting || multimodalModels.length === 0}
-                        style={{
-                          width: '100%',
-                          background: 'rgba(255, 255, 255, 0.05)',
-                          color: colors.textStrong,
-                          border: '1px solid rgba(255, 255, 255, 0.1)',
-                          borderRadius: 8,
-                          fontSize: 12,
-                          padding: '8px 10px',
-                          outline: 'none',
-                        }}
-                      >
-                        {multimodalModels.length === 0 ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        <span style={{ color: colors.textMuted, fontSize: 11 }}>主模型</span>
+                        <select
+                          value={selectedSubtitleModel}
+                          onChange={(event) =>
+                            setSelectedSubtitleModel(event.target.value)
+                          }
+                          disabled={subtitleApiExtracting || multimodalModels.length === 0}
+                          style={{
+                            width: '100%',
+                            background: 'rgba(255, 255, 255, 0.05)',
+                            color: colors.textStrong,
+                            border: '1px solid rgba(255, 255, 255, 0.1)',
+                            borderRadius: 8,
+                            fontSize: 12,
+                            padding: '8px 10px',
+                            outline: 'none',
+                          }}
+                        >
+                          {multimodalModels.length === 0 ? (
+                            <option value="" style={{ background: 'var(--bg-secondary)' }}>
+                              无多模态模型
+                            </option>
+                          ) : (
+                            <option value="" style={{ background: 'var(--bg-secondary)' }}>
+                              默认多模态模型
+                            </option>
+                          )}
+                          {multimodalModels.map((model) => (
+                            <option
+                              key={model.id}
+                              value={model.id}
+                              style={{ background: 'var(--bg-secondary)' }}
+                            >
+                              {model.name || model.id}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        <span style={{ color: colors.textMuted, fontSize: 11 }}>备用模型</span>
+                        <select
+                          value={selectedSubtitleFallbackModel}
+                          onChange={(event) =>
+                            setSelectedSubtitleFallbackModel(event.target.value)
+                          }
+                          disabled={subtitleApiExtracting || multimodalModels.length === 0}
+                          style={{
+                            width: '100%',
+                            background: 'rgba(255, 255, 255, 0.05)',
+                            color: colors.textStrong,
+                            border: '1px solid rgba(255, 255, 255, 0.1)',
+                            borderRadius: 8,
+                            fontSize: 12,
+                            padding: '8px 10px',
+                            outline: 'none',
+                          }}
+                        >
                           <option value="" style={{ background: 'var(--bg-secondary)' }}>
-                            无多模态模型
+                            不使用备用模型
                           </option>
-                        ) : (
-                          <option value="" style={{ background: 'var(--bg-secondary)' }}>
-                            默认多模态模型
-                          </option>
-                        )}
-                        {multimodalModels.map((model) => (
-                          <option
-                            key={model.id}
-                            value={model.id}
-                            style={{ background: 'var(--bg-secondary)' }}
-                          >
-                            {model.name || model.id}
-                          </option>
-                        ))}
-                      </select>
+                          {multimodalModels.map((model) => (
+                            <option
+                              key={model.id}
+                              value={model.id}
+                              style={{ background: 'var(--bg-secondary)' }}
+                              disabled={model.id === selectedSubtitleModel}
+                            >
+                              {model.name || model.id}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
                       <button
                         onClick={() => void handleExtractSubtitleViaApi(true)}
                         disabled={
@@ -1990,33 +2097,66 @@ export default forwardRef<VideoInfoPanelRef, VideoInfoPanelProps>(
                         {subtitleRetrying ? '重试中...' : '立即重试'}
                       </button>
                     )}
-                    <select
-                      value={selectedSubtitleModel}
-                      onChange={(event) =>
-                        setSelectedSubtitleModel(event.target.value)
-                      }
-                      disabled={subtitleApiExtracting || multimodalModels.length === 0}
-                      style={{
-                        background: colors.inputBg,
-                        border: `1px solid ${colors.borderStrong}`,
-                        borderRadius: 8,
-                        color: colors.textStrong,
-                        fontSize: 13,
-                        minWidth: 150,
-                        padding: '9px 12px',
-                      }}
-                    >
-                      {multimodalModels.length === 0 ? (
-                        <option value="">无多模态模型</option>
-                      ) : (
-                        <option value="">默认多模态模型</option>
-                      )}
-                      {multimodalModels.map((model) => (
-                        <option key={model.id} value={model.id}>
-                          {model.name || model.id}
-                        </option>
-                      ))}
-                    </select>
+                    <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      <span style={{ color: colors.textMuted, fontSize: 11 }}>主模型</span>
+                      <select
+                        value={selectedSubtitleModel}
+                        onChange={(event) =>
+                          setSelectedSubtitleModel(event.target.value)
+                        }
+                        disabled={subtitleApiExtracting || multimodalModels.length === 0}
+                        style={{
+                          background: colors.inputBg,
+                          border: `1px solid ${colors.borderStrong}`,
+                          borderRadius: 8,
+                          color: colors.textStrong,
+                          fontSize: 13,
+                          minWidth: 150,
+                          padding: '9px 12px',
+                        }}
+                      >
+                        {multimodalModels.length === 0 ? (
+                          <option value="">无多模态模型</option>
+                        ) : (
+                          <option value="">默认多模态模型</option>
+                        )}
+                        {multimodalModels.map((model) => (
+                          <option key={model.id} value={model.id}>
+                            {model.name || model.id}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      <span style={{ color: colors.textMuted, fontSize: 11 }}>备用模型</span>
+                      <select
+                        value={selectedSubtitleFallbackModel}
+                        onChange={(event) =>
+                          setSelectedSubtitleFallbackModel(event.target.value)
+                        }
+                        disabled={subtitleApiExtracting || multimodalModels.length === 0}
+                        style={{
+                          background: colors.inputBg,
+                          border: `1px solid ${colors.borderStrong}`,
+                          borderRadius: 8,
+                          color: colors.textStrong,
+                          fontSize: 13,
+                          minWidth: 150,
+                          padding: '9px 12px',
+                        }}
+                      >
+                        <option value="">不使用备用模型</option>
+                        {multimodalModels.map((model) => (
+                          <option
+                            key={model.id}
+                            value={model.id}
+                            disabled={model.id === selectedSubtitleModel}
+                          >
+                            {model.name || model.id}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
                     <button
                       type="button"
                       onClick={() => void handleExtractSubtitleViaApi()}
@@ -2045,7 +2185,7 @@ export default forwardRef<VideoInfoPanelRef, VideoInfoPanelProps>(
                     </button>
                   </div>
                   <div style={{ color: colors.textFaint, fontSize: 11 }}>
-                    API 提取会调用多模态模型并使用设置页中的字幕提示词模板。
+                    API 提取会调用多模态模型并使用设置页中的字幕提示词模板；主模型失败时会尝试备用模型。
                   </div>
                 </div>
               )}
