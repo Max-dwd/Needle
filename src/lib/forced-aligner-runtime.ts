@@ -10,14 +10,21 @@ const execFileAsync = promisify(execFile);
 const MLX_FORCED_ALIGNER_BIN = (
   process.env.MLX_FORCED_ALIGNER_BIN || 'mlx_forced_aligner'
 ).trim();
+const FORCED_ALIGNER_REMOTE_URL = (
+  process.env.FORCED_ALIGNER_REMOTE_URL || ''
+).trim();
 const CACHE_TTL_MS = 60_000;
 const AVAILABILITY_CACHE_KEY = Symbol.for(
   'needle.forcedAlignerAvailabilityCache',
 );
 
+export type ForcedAlignerRuntime = 'local' | 'remote';
+
 export interface MlxForcedAlignerStatus {
   available: boolean;
+  runtime: ForcedAlignerRuntime;
   binPath: string;
+  remoteUrl?: string;
   version: string | null;
   checkedAt: string;
   error?: string;
@@ -50,6 +57,18 @@ interface CacheRecord {
 type GlobalWithAlignerCache = typeof globalThis & {
   [AVAILABILITY_CACHE_KEY]?: CacheRecord;
 };
+
+function getForcedAlignerRuntime(): ForcedAlignerRuntime {
+  return process.env.FORCED_ALIGNER_RUNTIME?.trim().toLowerCase() === 'remote'
+    ? 'remote'
+    : 'local';
+}
+
+function getForcedAlignerRemoteUrl(): string {
+  return (process.env.FORCED_ALIGNER_REMOTE_URL || FORCED_ALIGNER_REMOTE_URL)
+    .trim()
+    .replace(/\/+$/, '');
+}
 
 function getGlobalCache(): CacheRecord | undefined {
   return (globalThis as GlobalWithAlignerCache)[AVAILABILITY_CACHE_KEY];
@@ -84,6 +103,97 @@ function firstUsefulLine(value: string | Buffer | undefined): string | null {
   );
 }
 
+function getAlignerTimeoutSignal(
+  audioDurationSeconds: number | null | undefined,
+  userSignal?: AbortSignal,
+): AbortSignal {
+  const durationSeconds =
+    Number.isFinite(Number(audioDurationSeconds)) &&
+    Number(audioDurationSeconds) > 0
+      ? Number(audioDurationSeconds)
+      : 15 * 60;
+  const timeoutSignal = AbortSignal.timeout(
+    Math.max(60_000, Math.ceil(durationSeconds * 3 * 1000)),
+  );
+  return userSignal
+    ? AbortSignal.any([userSignal, timeoutSignal])
+    : timeoutSignal;
+}
+
+function remoteStatusToLocalStatus(
+  payload: Record<string, unknown>,
+  remoteUrl: string,
+  checkedAt: string,
+): MlxForcedAlignerStatus {
+  const available = payload.available === true;
+  const version = typeof payload.version === 'string' ? payload.version : null;
+  const binPath =
+    typeof payload.binPath === 'string' && payload.binPath.trim()
+      ? payload.binPath.trim()
+      : 'remote';
+  const error =
+    typeof payload.error === 'string' && payload.error.trim()
+      ? payload.error.trim()
+      : undefined;
+
+  return {
+    available,
+    runtime: 'remote',
+    binPath,
+    remoteUrl,
+    version,
+    checkedAt,
+    ...(error ? { error } : {}),
+  };
+}
+
+async function getRemoteForcedAlignerStatus(
+  checkedAt: string,
+): Promise<MlxForcedAlignerStatus> {
+  const remoteUrl = getForcedAlignerRemoteUrl();
+  if (!remoteUrl) {
+    return {
+      available: false,
+      runtime: 'remote',
+      binPath: 'remote',
+      remoteUrl: undefined,
+      version: null,
+      checkedAt,
+      error: 'FORCED_ALIGNER_REMOTE_URL is required when FORCED_ALIGNER_RUNTIME=remote',
+    };
+  }
+
+  try {
+    const res = await fetch(`${remoteUrl}/status`, {
+      method: 'GET',
+      signal: AbortSignal.timeout(10_000),
+    });
+    const payload = (await res.json()) as Record<string, unknown>;
+    if (!res.ok) {
+      throw new Error(
+        typeof payload.error === 'string'
+          ? payload.error
+          : `remote status returned HTTP ${res.status}`,
+      );
+    }
+    const status = remoteStatusToLocalStatus(payload, remoteUrl, checkedAt);
+    setGlobalCache(status);
+    return status;
+  } catch (error) {
+    const status: MlxForcedAlignerStatus = {
+      available: false,
+      runtime: 'remote',
+      binPath: 'remote',
+      remoteUrl,
+      version: null,
+      checkedAt,
+      error: readExecError(error),
+    };
+    setGlobalCache(status);
+    return status;
+  }
+}
+
 export async function getForcedAlignerStatus(
   force = false,
 ): Promise<MlxForcedAlignerStatus> {
@@ -91,6 +201,10 @@ export async function getForcedAlignerStatus(
   if (!force && cached && cached.expiresAt > Date.now()) return cached.value;
 
   const checkedAt = new Date().toISOString();
+  if (getForcedAlignerRuntime() === 'remote') {
+    return getRemoteForcedAlignerStatus(checkedAt);
+  }
+
   try {
     await execFileAsync(MLX_FORCED_ALIGNER_BIN, ['--help'], {
       signal: AbortSignal.timeout(10_000),
@@ -116,6 +230,7 @@ export async function getForcedAlignerStatus(
 
     const status: MlxForcedAlignerStatus = {
       available: true,
+      runtime: 'local',
       binPath: MLX_FORCED_ALIGNER_BIN,
       version,
       checkedAt,
@@ -125,6 +240,7 @@ export async function getForcedAlignerStatus(
   } catch (error) {
     const status: MlxForcedAlignerStatus = {
       available: false,
+      runtime: 'local',
       binPath: MLX_FORCED_ALIGNER_BIN,
       version: null,
       checkedAt,
@@ -197,6 +313,61 @@ function pickOutputJsonPath(outputDir: string, hint: string): string {
   return entries[0];
 }
 
+async function runRemoteForcedAligner(
+  audioPath: string,
+  textPath: string,
+  options: RunForcedAlignerOptions,
+  modelId: string,
+): Promise<AlignerResult> {
+  const remoteUrl = getForcedAlignerRemoteUrl();
+  if (!remoteUrl) {
+    throw new Error(
+      'FORCED_ALIGNER_REMOTE_URL is required when FORCED_ALIGNER_RUNTIME=remote',
+    );
+  }
+
+  const signal = getAlignerTimeoutSignal(
+    options.audioDurationSeconds,
+    options.signal,
+  );
+  const payload = {
+    audioFilename: path.basename(audioPath),
+    audioBase64: fs.readFileSync(audioPath).toString('base64'),
+    text: fs.readFileSync(textPath, 'utf8'),
+    modelId,
+  };
+
+  const res = await fetch(`${remoteUrl}/align`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+    signal,
+  });
+  const responseText = await res.text();
+  if (!res.ok) {
+    let message = responseText.trim();
+    try {
+      const errorPayload = JSON.parse(responseText) as Record<string, unknown>;
+      if (typeof errorPayload.error === 'string') {
+        message = errorPayload.error;
+      }
+    } catch {
+      // Keep the raw response text.
+    }
+    throw new Error(
+      message || `remote forced aligner returned HTTP ${res.status}`,
+    );
+  }
+
+  const result = parseAlignerJson(responseText);
+  if (result.words.length === 0) {
+    throw new Error('remote forced aligner returned no aligned words');
+  }
+  return result;
+}
+
 export async function runForcedAligner(
   audioPath: string,
   textPath: string,
@@ -209,17 +380,14 @@ export async function runForcedAligner(
   const outputPath = path.join(outputDir, 'aligned.json');
   const modelId = options.modelId || DEFAULT_FORCED_ALIGNER_MODEL_ID;
 
-  const durationSeconds =
-    Number.isFinite(Number(options.audioDurationSeconds)) &&
-    Number(options.audioDurationSeconds) > 0
-      ? Number(options.audioDurationSeconds)
-      : 15 * 60;
-  const timeoutSignal = AbortSignal.timeout(
-    Math.max(60_000, Math.ceil(durationSeconds * 3 * 1000)),
+  if (getForcedAlignerRuntime() === 'remote') {
+    return runRemoteForcedAligner(audioPath, textPath, options, modelId);
+  }
+
+  const signal = getAlignerTimeoutSignal(
+    options.audioDurationSeconds,
+    options.signal,
   );
-  const signal = options.signal
-    ? AbortSignal.any([options.signal, timeoutSignal])
-    : timeoutSignal;
 
   await execFileAsync(
     MLX_FORCED_ALIGNER_BIN,
@@ -258,4 +426,6 @@ export async function runForcedAligner(
 
 export const __forcedAlignerRuntimeTestUtils = {
   parseAlignerJson,
+  getForcedAlignerRuntime,
+  getForcedAlignerRemoteUrl,
 };

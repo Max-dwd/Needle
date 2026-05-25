@@ -10,7 +10,7 @@ export const DEFAULT_FORCED_ALIGNER_MODEL_ID =
   process.env.FORCED_ALIGNER_MODEL_ID ||
   'mlx-community/Qwen3-ForcedAligner-0.6B-8bit';
 
-export const DEFAULT_LLM_ALIGNER_CHUNK_SECONDS = 900; // 15 分钟
+export const DEFAULT_LLM_ALIGNER_CHUNK_SECONDS = 300; // 5 分钟
 
 export interface SubtitleLlmAlignerAlignerConfig {
   modelId: string;
@@ -20,6 +20,14 @@ export interface SubtitleLlmAlignerAlignerConfig {
 
 export interface SubtitleLlmAlignerLlmConfig {
   expectSpeakerLabels: boolean;
+  maxSegmentSeconds: number;
+  verbatimCoveragePrompt?: boolean;
+}
+
+export interface SubtitleLlmAlignerQualityConfig {
+  minMatchedCharRatio: number;
+  maxInterpolatedChunkRatio: number;
+  maxLocalInterpolatedUtteranceRatio: number;
 }
 
 export interface SubtitleLlmAlignerConfig {
@@ -27,6 +35,7 @@ export interface SubtitleLlmAlignerConfig {
   chunkSeconds: number;
   aligner: SubtitleLlmAlignerAlignerConfig;
   llm: SubtitleLlmAlignerLlmConfig;
+  quality: SubtitleLlmAlignerQualityConfig;
   updatedAt: string | null;
 }
 
@@ -35,6 +44,7 @@ interface StoredSubtitleLlmAlignerConfig {
   chunkSeconds?: unknown;
   aligner?: unknown;
   llm?: unknown;
+  quality?: unknown;
 }
 
 const DEFAULT_ALIGNER_CONFIG: SubtitleLlmAlignerAlignerConfig = {
@@ -45,6 +55,14 @@ const DEFAULT_ALIGNER_CONFIG: SubtitleLlmAlignerAlignerConfig = {
 
 const DEFAULT_LLM_CONFIG: SubtitleLlmAlignerLlmConfig = {
   expectSpeakerLabels: true,
+  maxSegmentSeconds: 3,
+  verbatimCoveragePrompt: false,
+};
+
+const DEFAULT_QUALITY_CONFIG: SubtitleLlmAlignerQualityConfig = {
+  minMatchedCharRatio: 0.9,
+  maxInterpolatedChunkRatio: 0,
+  maxLocalInterpolatedUtteranceRatio: 0.25,
 };
 
 function normalizeText(value: unknown, fallback: string): string {
@@ -70,9 +88,7 @@ function normalizeRatio(value: unknown, fallback: number): number {
   return Math.min(1, Math.max(0, numeric));
 }
 
-function normalizeAlignerConfig(
-  raw: unknown,
-): SubtitleLlmAlignerAlignerConfig {
+function normalizeAlignerConfig(raw: unknown): SubtitleLlmAlignerAlignerConfig {
   const value =
     raw && typeof raw === 'object'
       ? (raw as Partial<SubtitleLlmAlignerAlignerConfig>)
@@ -100,6 +116,37 @@ function normalizeLlmConfig(raw: unknown): SubtitleLlmAlignerLlmConfig {
       value.expectSpeakerLabels === undefined
         ? DEFAULT_LLM_CONFIG.expectSpeakerLabels
         : Boolean(value.expectSpeakerLabels),
+    maxSegmentSeconds: normalizeInteger(
+      value.maxSegmentSeconds,
+      DEFAULT_LLM_CONFIG.maxSegmentSeconds,
+      3,
+      60,
+    ),
+    verbatimCoveragePrompt:
+      value.verbatimCoveragePrompt === undefined
+        ? DEFAULT_LLM_CONFIG.verbatimCoveragePrompt
+        : Boolean(value.verbatimCoveragePrompt),
+  };
+}
+
+function normalizeQualityConfig(raw: unknown): SubtitleLlmAlignerQualityConfig {
+  const value =
+    raw && typeof raw === 'object'
+      ? (raw as Partial<SubtitleLlmAlignerQualityConfig>)
+      : {};
+  return {
+    minMatchedCharRatio: normalizeRatio(
+      value.minMatchedCharRatio,
+      DEFAULT_QUALITY_CONFIG.minMatchedCharRatio,
+    ),
+    maxInterpolatedChunkRatio: normalizeRatio(
+      value.maxInterpolatedChunkRatio,
+      DEFAULT_QUALITY_CONFIG.maxInterpolatedChunkRatio,
+    ),
+    maxLocalInterpolatedUtteranceRatio: normalizeRatio(
+      value.maxLocalInterpolatedUtteranceRatio,
+      DEFAULT_QUALITY_CONFIG.maxLocalInterpolatedUtteranceRatio,
+    ),
   };
 }
 
@@ -117,11 +164,12 @@ function normalizeConfig(
     chunkSeconds: normalizeInteger(
       value.chunkSeconds,
       DEFAULT_LLM_ALIGNER_CHUNK_SECONDS,
-      5 * 60,
+      60,
       60 * 60,
     ),
     aligner: normalizeAlignerConfig(value.aligner),
     llm: normalizeLlmConfig(value.llm),
+    quality: normalizeQualityConfig(value.quality),
   };
 }
 
@@ -153,6 +201,7 @@ export function setSubtitleLlmAlignerConfig(
       chunkSeconds: normalized.chunkSeconds,
       aligner: normalized.aligner,
       llm: normalized.llm,
+      quality: normalized.quality,
     }),
   );
   return getSubtitleLlmAlignerConfig();

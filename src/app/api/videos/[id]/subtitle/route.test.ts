@@ -107,7 +107,7 @@ describe('POST /api/videos/[id]/subtitle', () => {
   it('disables browser subtitle fetching for player api fallback extraction', async () => {
     const response = await POST(
       makeRequest(
-        'http://localhost/api/videos/1/subtitle?source=player&preferredMethod=api-fallback&async=1',
+        'http://localhost/api/videos/1/subtitle?source=player&preferredMethod=api-fallback&modelId=primary&fallbackModelId=backup&async=1',
       ),
       { params: Promise.resolve({ id: '1' }) },
     );
@@ -119,6 +119,8 @@ describe('POST /api/videos/[id]/subtitle', () => {
         requestSource: 'player',
         preferredMethod: 'api-fallback',
         allowBrowser: false,
+        apiModelId: 'primary',
+        apiFallbackModelId: 'backup',
         force: true,
         respectPause: false,
       }),

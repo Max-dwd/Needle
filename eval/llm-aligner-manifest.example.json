@@ -1,0 +1,36 @@
+{
+  "outputRoot": "eval/runs",
+  "concurrency": 2,
+  "chunkConcurrency": 1,
+  "defaults": {
+    "platform": "eval",
+    "modelId": "default",
+    "chunkSeconds": 300,
+    "keepAudioChunks": false,
+    "llm": {
+      "expectSpeakerLabels": true,
+      "maxSegmentSeconds": 12
+    },
+    "aligner": {
+      "modelId": "mlx-community/Qwen3-ForcedAligner-0.6B-8bit",
+      "minAvgProb": 0.3,
+      "minWordRatio": 0.3
+    }
+  },
+  "experiments": [
+    {
+      "id": "sample-5min",
+      "audioPath": "/absolute/path/to/audio.mp3",
+      "goldenJsonPath": "eval/data/cases/short-bilibili-ai-news/golden.json",
+      "title": "Sample 5 minute audio",
+      "chunkSeconds": 300
+    },
+    {
+      "id": "sample-15min",
+      "audioPath": "/absolute/path/to/audio.mp3",
+      "goldenSubtitlePath": "eval/data/cases/medium-youtube-google-next/golden.json",
+      "title": "Sample 15 minute audio",
+      "chunkSeconds": 900
+    }
+  ]
+}

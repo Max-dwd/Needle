@@ -67,15 +67,22 @@ def numeric(value: Any) -> float | None:
     return number if number == number and number not in (float("inf"), float("-inf")) else None
 
 
+def first_present(item: dict[str, Any], *keys: str) -> Any:
+    for key in keys:
+        if key in item and item[key] is not None:
+            return item[key]
+    return None
+
+
 def normalize_item(item: dict[str, Any]) -> dict[str, Any] | None:
-    text = item.get("text") or item.get("word") or item.get("token") or item.get("char")
-    start = numeric(item.get("start") or item.get("start_time"))
-    end = numeric(item.get("end") or item.get("end_time"))
+    text = first_present(item, "text", "word", "token", "char")
+    start = numeric(first_present(item, "start", "start_time"))
+    end = numeric(first_present(item, "end", "end_time"))
     if not isinstance(text, str) or not text.strip() or start is None or end is None:
         return None
     if end < start:
         return None
-    prob = numeric(item.get("prob") or item.get("score") or item.get("confidence"))
+    prob = numeric(first_present(item, "prob", "score", "confidence"))
     normalized: dict[str, Any] = {
         "text": text.strip(),
         "start": start,

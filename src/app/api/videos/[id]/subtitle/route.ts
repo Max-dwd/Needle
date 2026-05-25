@@ -44,6 +44,8 @@ async function handleSubtitleRequest(
   const normalizedPreferredMethod = preferredMethod?.toLowerCase();
   const apiModelId =
     req.nextUrl.searchParams.get('modelId')?.trim() || undefined;
+  const apiFallbackModelId =
+    req.nextUrl.searchParams.get('fallbackModelId')?.trim() || undefined;
   const runAsync = req.nextUrl.searchParams.get('async') === '1';
   const aid = parseOptionalPositiveInt(req.nextUrl.searchParams.get('aid'));
   const cid = parseOptionalPositiveInt(req.nextUrl.searchParams.get('cid'));
@@ -59,6 +61,7 @@ async function handleSubtitleRequest(
         : undefined,
     bilibiliContext: aid || cid ? { aid, cid } : undefined,
     apiModelId,
+    apiFallbackModelId,
     force,
     respectPause: false,
   };
