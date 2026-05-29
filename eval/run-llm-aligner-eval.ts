@@ -1,6 +1,11 @@
 #!/usr/bin/env tsx
 import fs from 'fs';
 import path from 'path';
+import {
+  loadEvalConfig,
+  loadRepoEnv,
+  type EvalConfigLoadResult,
+} from './config';
 import type {
   LlmAlignerEvalDefaults,
   LlmAlignerEvalExperiment,
@@ -15,11 +20,16 @@ interface ManifestFile {
 }
 
 interface CliOptions {
+  config?: string;
+  validateConfig?: boolean;
   manifest?: string;
   outputRoot?: string;
   concurrency?: number;
   chunkConcurrency?: number;
   audio?: string;
+  caseId?: string;
+  caseDir?: string;
+  caseManifestPath?: string;
   id?: string;
   title?: string;
   channelName?: string;
@@ -32,64 +42,6 @@ interface CliOptions {
   goldenJsonPath?: string;
   goldenSubtitlePath?: string;
   keepAudioChunks?: boolean;
-}
-
-function parseEnvLine(line: string): [string, string] | null {
-  const trimmed = line.trim();
-  if (!trimmed || trimmed.startsWith('#')) return null;
-
-  const normalized = trimmed.startsWith('export ')
-    ? trimmed.slice('export '.length).trimStart()
-    : trimmed;
-  const equalsIndex = normalized.indexOf('=');
-  if (equalsIndex <= 0) return null;
-
-  const key = normalized.slice(0, equalsIndex).trim();
-  if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(key)) return null;
-
-  let value = normalized.slice(equalsIndex + 1).trim();
-  const quote = value[0];
-  if (
-    (quote === '"' || quote === "'") &&
-    value.length >= 2 &&
-    value[value.length - 1] === quote
-  ) {
-    value = value.slice(1, -1);
-    if (quote === '"') {
-      value = value
-        .replace(/\\n/g, '\n')
-        .replace(/\\r/g, '\r')
-        .replace(/\\t/g, '\t')
-        .replace(/\\"/g, '"')
-        .replace(/\\\\/g, '\\');
-    }
-  } else {
-    const hashIndex = value.indexOf('#');
-    if (hashIndex >= 0) {
-      value = value.slice(0, hashIndex).trimEnd();
-    }
-  }
-
-  return [key, value];
-}
-
-function loadEnvFile(filePath: string): void {
-  if (!fs.existsSync(filePath)) return;
-  const lines = fs.readFileSync(filePath, 'utf8').split(/\r?\n/);
-  for (const line of lines) {
-    const entry = parseEnvLine(line);
-    if (!entry) continue;
-    const [key, value] = entry;
-    if (process.env[key] === undefined) {
-      process.env[key] = value;
-    }
-  }
-}
-
-function loadRepoEnv(): void {
-  const repoRoot = path.resolve(__dirname, '..');
-  loadEnvFile(path.join(repoRoot, '.env.local'));
-  loadEnvFile(path.join(repoRoot, '.env'));
 }
 
 function parseArgs(argv: string[]): CliOptions {
@@ -106,6 +58,12 @@ function parseArgs(argv: string[]): CliOptions {
     };
 
     switch (arg) {
+      case '--config':
+        options.config = next();
+        break;
+      case '--validate-config':
+        options.validateConfig = true;
+        break;
       case '--manifest':
       case '-m':
         options.manifest = next();
@@ -122,6 +80,16 @@ function parseArgs(argv: string[]): CliOptions {
         break;
       case '--audio':
         options.audio = next();
+        break;
+      case '--case':
+      case '--case-id':
+        options.caseId = next();
+        break;
+      case '--case-dir':
+        options.caseDir = next();
+        break;
+      case '--case-manifest':
+        options.caseManifestPath = next();
         break;
       case '--id':
         options.id = next();
@@ -172,6 +140,8 @@ function parseArgs(argv: string[]): CliOptions {
 
 function printHelp(): void {
   console.log(`Usage:
+  npm run eval:llm-aligner -- --config eval/config.local.yaml
+
   npm exec tsx -- eval/run-llm-aligner-eval.ts --manifest eval/llm-aligner-manifest.example.json
 
   npm exec tsx -- eval/run-llm-aligner-eval.ts \\
@@ -182,11 +152,16 @@ function printHelp(): void {
     --concurrency 2
 
 Options:
+  --config                  YAML eval config file (recommended)
+  --validate-config         Validate YAML config and exit without running eval
   --manifest, -m             JSON manifest with experiments[]
   --output-root              Directory for run outputs (default: eval/runs)
   --concurrency, -c          Number of experiments to run in parallel
   --chunk-concurrency        Number of chunks to process in parallel per experiment
   --audio                    Single-experiment audio input
+  --case                     Single eval case id from eval/data/manifest.json
+  --case-dir                 Single eval case directory with metadata/golden/audio
+  --case-manifest            Golden dataset manifest for --case
   --id                       Single-experiment id
   --model-id                 Model id from Settings -> Models
   --provider-model           Override provider model slug while reusing model id credentials
@@ -205,8 +180,10 @@ function readJsonFile<T>(filePath: string): T {
 }
 
 function buildSingleExperiment(options: CliOptions): ManifestFile {
-  if (!options.audio) {
-    throw new Error('either --manifest or --audio is required');
+  if (!options.audio && !options.caseId && !options.caseDir) {
+    throw new Error(
+      'either --manifest, --audio, --case, or --case-dir is required',
+    );
   }
   const model = options.modelFile
     ? readJsonFile<LlmAlignerEvalExperiment['model']>(options.modelFile)
@@ -219,8 +196,14 @@ function buildSingleExperiment(options: CliOptions): ManifestFile {
       {
         id:
           options.id ||
-          path.basename(options.audio, path.extname(options.audio)),
+          options.caseId ||
+          (options.audio
+            ? path.basename(options.audio, path.extname(options.audio))
+            : undefined),
         audioPath: options.audio,
+        caseId: options.caseId,
+        caseDir: options.caseDir,
+        caseManifestPath: options.caseManifestPath,
         title: options.title,
         channelName: options.channelName,
         modelId: options.modelId,
@@ -246,13 +229,96 @@ function buildSingleExperiment(options: CliOptions): ManifestFile {
   };
 }
 
+function assertConfigModeOptions(options: CliOptions): void {
+  const unsupported: string[] = [];
+  if (options.manifest) unsupported.push('--manifest');
+  if (options.audio) unsupported.push('--audio');
+  if (options.caseDir) unsupported.push('--case-dir');
+  if (options.caseManifestPath) unsupported.push('--case-manifest');
+  if (options.modelId) unsupported.push('--model-id');
+  if (options.providerModel) unsupported.push('--provider-model');
+  if (options.modelFile) unsupported.push('--model-file');
+  if (options.goldenJsonPath) unsupported.push('--golden-json');
+  if (options.goldenSubtitlePath) unsupported.push('--golden-subtitle');
+  if (options.title) unsupported.push('--title');
+  if (options.channelName) unsupported.push('--channel');
+  if (unsupported.length > 0) {
+    throw new Error(
+      `--config cannot be combined with ${unsupported.join(', ')} in v1`,
+    );
+  }
+}
+
+function buildConfigManifest(
+  configLoad: EvalConfigLoadResult,
+  options: CliOptions,
+): ManifestFile {
+  assertConfigModeOptions(options);
+
+  const { config, configSource, configSnapshot } = configLoad;
+  const selectedTargets = options.caseId
+    ? config.dataset.targets.filter((target) => target.id === options.caseId)
+    : config.dataset.targets;
+  if (selectedTargets.length === 0) {
+    throw new Error(`eval config case not found: ${options.caseId}`);
+  }
+
+  const llmAligner = config.pipeline.llmAligner;
+  const defaults: LlmAlignerEvalDefaults = {
+    model: config.model,
+    chunkSeconds: options.chunkSeconds ?? llmAligner.chunkSeconds,
+    chunkConcurrency: options.chunkConcurrency ?? llmAligner.chunkConcurrency,
+    aligner: config.aligner,
+    llm: {
+      maxSegmentSeconds:
+        options.maxSegmentSeconds ?? llmAligner.maxSegmentSeconds,
+      expectSpeakerLabels: llmAligner.expectSpeakerLabels,
+      verbatimCoveragePrompt:
+        options.coveragePrompt || llmAligner.verbatimCoveragePrompt,
+    },
+    keepAudioChunks: options.keepAudioChunks || config.run.keepAudioChunks,
+    caseManifestPath: path.join(config.dataset.outputDir, 'manifest.json'),
+    configSource,
+    configSnapshot,
+    ...(config.qualityGate ? { qualityGate: config.qualityGate } : {}),
+  };
+
+  return {
+    outputRoot: options.outputRoot || config.run.outputRoot,
+    concurrency: options.concurrency ?? config.run.concurrency,
+    chunkConcurrency:
+      options.chunkConcurrency ?? config.pipeline.llmAligner.chunkConcurrency,
+    defaults,
+    experiments: selectedTargets.map((target) => ({
+      id: target.id,
+      caseId: target.id,
+      platform: target.platform,
+      videoId: target.videoId,
+    })),
+  };
+}
+
 async function main(): Promise<void> {
   loadRepoEnv();
 
   const options = parseArgs(process.argv.slice(2));
-  const manifest = options.manifest
-    ? readJsonFile<ManifestFile>(options.manifest)
-    : buildSingleExperiment(options);
+  if (options.validateConfig) {
+    if (!options.config) {
+      throw new Error('--validate-config requires --config');
+    }
+    const configLoad = loadEvalConfig(options.config, { requireApiKey: false });
+    const manifest = buildConfigManifest(configLoad, options);
+    console.log(
+      `[ok] eval config ${path.relative(process.cwd(), configLoad.configSource)} experiments=${manifest.experiments.length} outputRoot=${path.relative(process.cwd(), manifest.outputRoot || '')}`,
+    );
+    return;
+  }
+
+  const manifest = options.config
+    ? buildConfigManifest(loadEvalConfig(options.config), options)
+    : options.manifest
+      ? readJsonFile<ManifestFile>(options.manifest)
+      : buildSingleExperiment(options);
 
   const { runLlmAlignerManifest } = await import('./llm-aligner-pipeline');
   const results = await runLlmAlignerManifest({
@@ -270,8 +336,11 @@ async function main(): Promise<void> {
       const quality = result.quality
         ? ` ncer=${result.quality.text.normalizedCharErrorRate} coverage=${result.quality.text.coverage} startMae=${result.quality.timing.startMaeSeconds ?? 'n/a'}s endMae=${result.quality.timing.endMaeSeconds ?? 'n/a'}s`
         : '';
+      const qualityGate = result.qualityGateResult
+        ? ` gate=${result.qualityGateResult.passed ? 'pass' : 'fail'}`
+        : '';
       console.log(
-        `[ok] ${result.id} segments=${result.summary.segmentCount} chunks=${result.summary.chunkCount} fallback=${result.summary.fallbackRatio}${quality} out=${result.outputDir}`,
+        `[ok] ${result.id} segments=${result.summary.segmentCount} chunks=${result.summary.chunkCount} fallback=${result.summary.fallbackRatio}${quality}${qualityGate} out=${result.outputDir}`,
       );
     } else {
       failed += 1;

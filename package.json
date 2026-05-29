@@ -26,6 +26,7 @@
     "export:summary-md": "node scripts/export-subtitle-markdown.mjs",
     "eval:golden:build": "tsx eval/build-golden-dataset.ts",
     "eval:llm-aligner": "tsx eval/run-llm-aligner-eval.ts",
+    "eval:ui": "tsx eval/ui/server.ts",
     "browser:runtime:build": "npm --prefix browser-runtime run build",
     "browser:runtime:typecheck": "npm --prefix browser-runtime run typecheck",
     "browser:runtime:test": "npm --prefix browser-runtime run test",
@@ -55,7 +56,8 @@
     "tailwindcss": "^4.2.2",
     "tar": "^7.5.13",
     "ws": "^8.18.3",
-    "xml2js": "^0.6.2"
+    "xml2js": "^0.6.2",
+    "yaml": "^2.9.0"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",

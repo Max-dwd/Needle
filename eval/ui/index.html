@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Needle Eval Viewer</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <div class="eyebrow">Needle Eval</div>
+        <h1>Subtitle Evaluation Artifacts</h1>
+      </div>
+      <button id="refresh" type="button" title="Reload artifacts">
+        <span>Refresh</span>
+      </button>
+    </header>
+
+    <div id="error" class="error" hidden></div>
+
+    <div class="layout">
+      <aside class="sidebar">
+        <section>
+          <h2>Runs</h2>
+          <div id="runs" class="list"></div>
+        </section>
+        <section>
+          <h2>Cases</h2>
+          <div id="cases" class="case-list"></div>
+        </section>
+        <section>
+          <h2>Pipelines</h2>
+          <div id="pipelines" class="chips"></div>
+        </section>
+      </aside>
+
+      <main class="content">
+        <section id="run-head" class="run-head empty">
+          <div>
+            <div class="meta">No run selected</div>
+            <h2>Run artifacts will appear here</h2>
+            <p>Run the CLI harness, then refresh this viewer.</p>
+          </div>
+        </section>
+
+        <section id="metrics" class="metrics"></section>
+        <section id="timing" class="timing"></section>
+        <section id="alignment-summary" class="alignment-summary"></section>
+
+        <section class="table">
+          <div class="table-head">
+            <span>Time</span>
+            <span>Golden</span>
+            <span>Generated</span>
+            <span>Status</span>
+          </div>
+          <div id="pairs"></div>
+        </section>
+      </main>
+    </div>
+
+    <script src="/app.js"></script>
+  </body>
+</html>

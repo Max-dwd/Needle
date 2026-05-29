@@ -1,134 +1,158 @@
-# LLM Aligner Eval
+# Needle Subtitle Pipeline Eval
 
-This folder extracts Needle's current `llm-aligner` subtitle path into a file-based experiment runner. It takes local audio files, chunks them, asks a configured multimodal model to transcribe each chunk, runs the local MLX forced aligner, then writes subtitle and metrics artifacts per experiment.
+## Project Description
 
-The runner is intentionally independent from the app video table. It reuses the production pipeline functions from:
+This eval project tests Needle's artifact-only subtitle pipeline for YouTube and
+Bilibili videos. The content set focuses on English and Chinese technical talks,
+education videos, keynotes, and conversation-style videos across short, medium,
+long, and hard cases. The goal is to measure whether an audio-based LLM
+transcription plus forced-alignment pipeline can produce subtitles that are
+close enough to trusted browser captions in both text coverage and timestamp
+quality.
 
-- `src/lib/subtitle-llm-align-correction.ts`
-- `src/lib/forced-aligner-runtime.ts`
-- `src/lib/audio-slicer.ts`
-- `src/lib/subtitle-providers/*`
+## Setup
 
-## Run
-
-```bash
-npm exec tsx -- eval/run-llm-aligner-eval.ts \
-  --manifest eval/llm-aligner-manifest.example.json
-```
-
-Single audio file:
+1. Install project dependencies from the repo root:
 
 ```bash
-npm exec tsx -- eval/run-llm-aligner-eval.ts \
-  --audio /path/to/audio.mp3 \
-  --id sample-a \
-  --model-id your-multimodal-model-id \
-  --chunk-seconds 300 \
-  --max-segment-seconds 3 \
-  --golden-json eval/data/cases/short-bilibili-ai-news/golden.json \
-  --chunk-concurrency 2
+npm install
 ```
 
-`--model-id` resolves from Settings -> Models via the local SQLite app settings. For isolated experiments, pass a model JSON with `--model-file` or inline `model` in the manifest.
-Use `--provider-model <slug>` when you want to reuse a configured model's endpoint/API key but test another provider model slug from the same provider. This is useful for temporary A/B runs and avoids writing API keys to ad hoc model files.
-Use `--coverage-prompt` to add stricter verbatim-coverage instructions for a single run without changing the default production transcription prompt.
-
-Before importing the eval pipeline, the CLI loads environment variables from the repo root in this order:
-
-1. `.env.local`
-2. `.env`
-
-Existing shell variables win. Values that are already present in `process.env` are not overwritten, and `.env` does not override values loaded from `.env.local`. This keeps eval runs aligned with the app runtime so settings such as `MLX_FORCED_ALIGNER_BIN` are available before production modules read env at import time.
-
-## Golden Quality Metrics
-
-Manifest `defaults` and each `experiments[]` entry may include either:
-
-- `goldenJsonPath`: path to a generated golden file such as `eval/data/cases/*/golden.json`.
-- `goldenSubtitlePath`: path to a Needle-style subtitle JSON file. This is accepted as an alias for ad hoc references.
-
-When a golden path is present, the runner adds `quality` to `metrics.json` and to `subtitle.json.metadata`. The console `[ok]` line also includes a compact quality summary:
-
-```text
-[ok] sample segments=120 chunks=2 fallback=0 ncer=0.0831 coverage=0.942 startMae=0.421s endMae=0.517s out=eval/runs/...
-```
-
-Current scoring is intentionally simple and stable:
-
-- `text.normalizedCharErrorRate`: CER over NFKC/lowercased text after removing whitespace and punctuation.
-- `text.coverage`: LCS reference-character coverage found in the hypothesis text. This is less brittle than greedy subsequence coverage when a local word difference shifts later matching text.
-- `segments.countRatio`: hypothesis segment count divided by reference segment count.
-- `pairingMethod`: currently `lcs-anchor`, meaning timing errors compare hypothesis segment boundaries against nearby reference characters found by LCS text anchors.
-- `timing.startMaeSeconds` / `endMaeSeconds`: LCS-anchor timing MAE. This is the primary timing gate when text coverage is acceptable, because it is less distorted by local insertions/deletions than proportional text-position pairing.
-- `timing.startP95Seconds` / `endP95Seconds`: LCS-anchor timing P95.
-- `textPositionTiming`: the older proportional text-position timing metrics, kept as a drift diagnostic.
-- `fallbackRatio`: copied from the run summary so quality reports show how often aligner fallback was used.
-
-If no golden path is configured, the runner keeps the previous behavior and does not write `quality`.
-
-## Subtitle Timing Analysis
-
-Compare any hypothesis `subtitle.json` against a golden reference without rerunning the eval pipeline:
+1. Install the local forced-aligner runtime:
 
 ```bash
-npm exec tsx -- eval/analyze-subtitle-timing.ts \
-  --hyp eval/runs/<run>/subtitle.json \
-  --golden eval/data/cases/short-bilibili-ai-news/golden.json
+python3.13 -m venv .venv
+.venv/bin/python -m pip install --upgrade pip
+.venv/bin/python -m pip install mlx-audio mlx-forced-aligner
 ```
 
-The helper reports text-position pairing: each hypothesis segment is matched to the reference timeline at the same proportional normalized text position. It reports median / MAE / P95 for start, end, and combined boundary timing errors overall and by early / mid / late text-position buckets. Use it as a drift diagnostic; the eval runner's primary `quality.timing` uses LCS anchors.
-
-If `eval/runs/<run>/metrics.json` exists next to the hypothesis file, chunk metadata is loaded automatically and the report also includes chunk-boundary-distance buckets. Pass `--metrics <path>` for another metrics file, `--boundary-window-seconds 10` to adjust the near-boundary window, or `--json-output eval/runs/<run>/timing-analysis.json` to persist the full per-segment analysis.
-
-## Parallelism
-
-- `concurrency`: how many experiments run at the same time.
-- `chunkConcurrency`: how many chunks inside one experiment run at the same time.
-
-Keep `chunkConcurrency` low for MLX forced-aligner runs if the machine is memory constrained.
-
-## Segment Target
-
-`llm.maxSegmentSeconds` and CLI `--max-segment-seconds` control the final subtitle split target, not the audio chunk length. The default is `3` seconds to match the checked-in golden dataset's short 1-4 second subtitle style. Use a larger value only when deliberately testing long-segment behavior.
-
-## Output
-
-Each experiment writes a separate directory under `eval/runs/` unless `outputDir` is set:
-
-- `input.json`: normalized input and redacted model metadata
-- `transcripts/chunk-*.json`: LLM utterance output per chunk
-- `aligner/chunk-*/`: transcript text and aligner JSON output
-- `subtitle.json`: Needle-style subtitle payload
-- `subtitle.txt`: readable timestamped subtitle text
-- `metrics.json`: full experiment metrics, optional `quality`, and chunk records
-
-Audio chunks are removed by default. Set `keepAudioChunks: true` or pass `--keep-audio-chunks` when you need to inspect them.
-
-## Runtime Requirements
-
-Use the same local runtime as the app:
+1. Copy the eval config and edit the video targets, provider, and model:
 
 ```bash
+cp eval/config.example.yaml eval/config.local.yaml
+```
+
+1. Put required secrets and local tool paths in the repo-root `.env.local`.
+
+The YAML chooses the provider with `model.protocol`, `model.endpoint`, and
+`model.model`; `.env.local` only stores secrets and machine-local paths.
+
+```env
+# .env.example
+NEEDLE_EVAL_API_KEY=replace-with-your-provider-key
 MLX_FORCED_ALIGNER_BIN=./scripts/mlx_forced_aligner_wrapper.py
 FFMPEG_BIN=ffmpeg
 FFPROBE_BIN=ffprobe
 ```
 
-The forced aligner wrapper expects the repo-local MLX runtime described in the main README.
-Put local paths in `.env.local` when possible so both the app and eval runner see the same runtime configuration.
+1. In `eval/config.local.yaml`, point `apiKeyEnv` at the key name above:
 
-## Golden Dataset
-
-Build the checked-in golden references from locally fetched Needle subtitles:
-
-```bash
-npm run eval:golden:build
+```yaml
+model:
+  protocol: gemini
+  endpoint: https://generativelanguage.googleapis.com/v1beta
+  model: gemini-3.1-flash-lite
+  apiKeyEnv: NEEDLE_EVAL_API_KEY
 ```
 
-The output lives in `eval/data/`:
+1. Validate the config before running live fetches or eval jobs:
 
-- `manifest.json`: case list, metadata, and any missing local subtitles
-- `cases/*/golden.json`: normalized reference subtitle payload
-- `cases/*/golden.txt`: timestamped readable reference subtitle
+```bash
+npm run eval:llm-aligner -- --config eval/config.local.yaml --validate-config
+```
 
-Use `npm run eval:golden:build -- --strict` when a missing target should fail the command.
+## How To Run
+
+Build or refresh the golden dataset from configured live videos:
+
+```bash
+npm run eval:golden:build -- --config eval/config.local.yaml
+```
+
+Run the artifact-only subtitle pipeline:
+
+```bash
+npm run eval:llm-aligner -- --config eval/config.local.yaml
+```
+
+Run a single case:
+
+```bash
+npm run eval:llm-aligner -- --config eval/config.local.yaml --case short-youtube-llm-ibm
+```
+
+Open the eval artifact viewer:
+
+```bash
+npm run eval:ui
+```
+
+Then visit `http://127.0.0.1:4173`. If the port is busy:
+
+```bash
+npm run eval:ui -- --port 4174
+```
+
+## Eval Results
+
+Snapshot: 12 configured cases from `eval/config.example.yaml`, generated on
+2026-05-26 with `gemini-3.1-flash-lite`. The latest recorded run passed 10 of
+12 quality gates.
+
+Precision and recall are reported as eval proxies because the current harness
+stores subtitle quality metrics rather than classification labels:
+
+- Precision proxy: `1 - normalizedCharErrorRate`
+- Recall proxy: LCS text coverage against the golden subtitle
+- Cost: measured average token or local compute cost per case; dollar cost is
+not stored in the current artifacts.
+
+
+| Stage                | Precision     | Recall        | Cost                                    |
+| -------------------- | ------------- | ------------- | --------------------------------------- |
+| Golden caption fetch | N/A           | N/A           | Browser/runtime fetch only              |
+| Audio cache/prep     | N/A           | N/A           | Local `ffmpeg`/`ffprobe` work           |
+| LLM transcription    | TBD per stage | TBD per stage | 54,400 tokens avg/case                  |
+| Forced alignment     | TBD per stage | TBD per stage | 117.1s local aligner avg/case           |
+| End-to-end           | 0.9318        | 0.9543        | 224.3s avg/case, 54,400 tokens avg/case |
+
+
+Known failures:
+
+
+| Case                              | Main issue                                       |
+| --------------------------------- | ------------------------------------------------ |
+| `short-chinese-chloe-remember`    | Text coverage below the configured gate          |
+| `long-hard-youtube-openai-devday` | One interpolated alignment chunk lowers coverage |
+
+
+## Pipeline Stages
+
+1. Golden dataset build: fetch video metadata, trusted browser captions, and
+
+audio for configured videos. This creates stable case directories so later runs
+can compare against the same references.
+
+1. Audio chunking: split long audio into smaller chunks. This keeps LLM audio
+
+requests manageable and makes retries/debugging cheaper.
+
+1. LLM transcription: send each audio chunk to the configured multimodal model.
+
+This stage is used because the target pipeline must work even when platform
+captions are missing or insufficient.
+
+1. Forced alignment: align the transcript text back to audio with a local MLX
+
+forced aligner. This stage gives word/segment timing instead of relying on the
+LLM to invent timestamps.
+
+1. Quality scoring: compare generated subtitles against golden captions with
+
+text coverage, normalized character error rate, segment count ratio, and
+timestamp MAE/P95. This makes pipeline changes measurable instead of judged by
+manual inspection alone.
+
+1. Artifact viewer: inspect saved runs from `eval/runs` without starting long
+
+eval jobs from the UI. This keeps generation, logging, and review separate.

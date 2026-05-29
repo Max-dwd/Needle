@@ -43,8 +43,11 @@ const FFPROBE_CANDIDATES = [
 ].filter((value): value is string => Boolean(value && value.trim()));
 
 export interface LlmAlignerEvalExperiment {
-  id: string;
-  audioPath: string;
+  id?: string;
+  audioPath?: string;
+  caseId?: string;
+  caseDir?: string;
+  caseManifestPath?: string;
   outputDir?: string;
   goldenJsonPath?: string;
   goldenSubtitlePath?: string;
@@ -62,11 +65,14 @@ export interface LlmAlignerEvalExperiment {
   aligner?: Partial<SubtitleLlmAlignerAlignerConfig>;
   llm?: Partial<SubtitleLlmAlignerLlmConfig>;
   keepAudioChunks?: boolean;
+  configSource?: string;
+  configSnapshot?: unknown;
+  qualityGate?: LlmAlignerQualityGate;
 }
 
 export interface LlmAlignerEvalDefaults extends Omit<
   LlmAlignerEvalExperiment,
-  'id' | 'audioPath' | 'outputDir'
+  'id' | 'audioPath' | 'caseId' | 'caseDir' | 'outputDir'
 > {
   outputRoot?: string;
 }
@@ -95,6 +101,8 @@ export interface LlmAlignerEvalChunkRecord {
   collapsedTimingUtteranceCount?: number;
   localInterpolatedUtteranceCount?: number;
   matchedCharRatio?: number;
+  transcribeDurationMs?: number;
+  alignerDurationMs?: number;
   totalTokens?: number;
   ttftSeconds?: number;
   error?: string;
@@ -115,17 +123,78 @@ export interface LlmAlignerEvalResult {
     aligner: SubtitleLlmAlignerAlignerConfig;
     llm: SubtitleLlmAlignerLlmConfig;
   };
+  case?: {
+    id: string;
+    dir: string;
+    metadataPath?: string;
+  };
   summary: ReturnType<typeof summarizeChunkResults> & {
     segmentCount: number;
     fallbackRatio: number;
   };
   quality?: LlmAlignerQualityMetrics;
+  qualityGate?: LlmAlignerQualityGate;
+  qualityGateResult?: LlmAlignerQualityGateResult;
+  configSource?: string;
+  configSnapshot?: unknown;
+  phaseTiming: LlmAlignerEvalPhaseTiming;
   chunks: LlmAlignerEvalChunkRecord[];
   files: {
+    run: string;
     subtitleJson: string;
     subtitleText: string;
     metrics: string;
+    alignment?: string;
   };
+}
+
+export interface LlmAlignerEvalPhaseTiming {
+  totalDurationMs: number;
+  audioPrepareDurationMs: number;
+  chunkWallDurationMs: number;
+  transcribeDurationMs: number;
+  alignerDurationMs: number;
+}
+
+export interface LlmAlignerAlignmentPair {
+  index: number;
+  status:
+    | 'match'
+    | 'text_mismatch'
+    | 'timestamp_drift'
+    | 'missing_generated'
+    | 'extra_generated';
+  golden: SubtitleSegmentLike | null;
+  generated: SubtitleSegmentLike | null;
+  textSimilarity: number | null;
+  startDriftSeconds: number | null;
+  endDriftSeconds: number | null;
+}
+
+export interface LlmAlignerAlignmentArtifact {
+  version: 1;
+  generatedAt: string;
+  case: {
+    id: string | null;
+    goldenPath: string;
+  };
+  generated: {
+    subtitlePath: string;
+  };
+  thresholds: {
+    minTextSimilarity: number;
+    maxStartDriftSeconds: number;
+    maxEndDriftSeconds: number;
+  };
+  summary: {
+    pairCount: number;
+    matchCount: number;
+    textMismatchCount: number;
+    timestampDriftCount: number;
+    missingGeneratedCount: number;
+    extraGeneratedCount: number;
+  };
+  pairs: LlmAlignerAlignmentPair[];
 }
 
 export interface LlmAlignerQualityMetrics {
@@ -158,6 +227,29 @@ export interface LlmAlignerQualityMetrics {
     endP95Seconds: number | null;
   };
   fallbackRatio: number;
+}
+
+export interface LlmAlignerQualityGate {
+  minCoverage?: number;
+  maxNormalizedCharErrorRate?: number;
+  maxStartMaeSeconds?: number;
+  maxStartP95Seconds?: number;
+  maxEndMaeSeconds?: number;
+  maxEndP95Seconds?: number;
+}
+
+export interface LlmAlignerQualityGateCheck {
+  name: string;
+  operator: '>=' | '<=';
+  expected: number;
+  actual: number | null;
+  passed: boolean;
+}
+
+export interface LlmAlignerQualityGateResult {
+  passed: boolean;
+  checks: LlmAlignerQualityGateCheck[];
+  reason?: string;
 }
 
 interface ChunkRange {
@@ -328,7 +420,10 @@ function resolveModel(
   >,
 ): AiSummaryModelConfig {
   if (experiment.model) {
-    return applyProviderModelOverride(experiment.model, experiment.providerModel);
+    return applyProviderModelOverride(
+      experiment.model,
+      experiment.providerModel,
+    );
   }
 
   const settings = getAiSummarySettings();
@@ -663,11 +758,15 @@ function collectLcsAnchorTimingErrors(input: {
 }): TimingErrorCollection {
   const referenceTimeline = buildTextCharTimeline(input.referenceSegments);
   const hypothesisTimeline = buildTextCharTimeline(input.hypothesisSegments);
-  const anchorPairs = collectLcsAnchorPairs(referenceTimeline, hypothesisTimeline);
+  const anchorPairs = collectLcsAnchorPairs(
+    referenceTimeline,
+    hypothesisTimeline,
+  );
   const referenceTimeByHypothesisIndex = new Map<number, number>();
   for (const [referenceIndex, hypothesisIndex] of anchorPairs) {
     const reference = referenceTimeline[referenceIndex];
-    if (reference) referenceTimeByHypothesisIndex.set(hypothesisIndex, reference.time);
+    if (reference)
+      referenceTimeByHypothesisIndex.set(hypothesisIndex, reference.time);
   }
 
   const startErrors: number[] = [];
@@ -726,7 +825,9 @@ function collectLcsAnchorPairs(
   const columnCount = hypothesis.length + 1;
   if (rowCount <= 1 || columnCount <= 1) return [];
   if (Math.max(reference.length, hypothesis.length) > 65535) {
-    throw new Error('lcs-anchor timing supports at most 65535 normalized chars');
+    throw new Error(
+      'lcs-anchor timing supports at most 65535 normalized chars',
+    );
   }
 
   const table = new Uint16Array(rowCount * columnCount);
@@ -867,6 +968,81 @@ export function scoreLlmAlignerQuality(input: {
   };
 }
 
+function evaluateQualityGate(
+  gate: LlmAlignerQualityGate,
+  quality: LlmAlignerQualityMetrics | undefined,
+): LlmAlignerQualityGateResult {
+  if (!quality) {
+    return {
+      passed: false,
+      checks: [],
+      reason: 'quality metrics unavailable',
+    };
+  }
+
+  const checks: LlmAlignerQualityGateCheck[] = [];
+  const addMinCheck = (
+    name: string,
+    actual: number | null,
+    expected?: number,
+  ) => {
+    if (expected === undefined) return;
+    checks.push({
+      name,
+      operator: '>=',
+      expected,
+      actual,
+      passed: actual !== null && actual >= expected,
+    });
+  };
+  const addMaxCheck = (
+    name: string,
+    actual: number | null,
+    expected?: number,
+  ) => {
+    if (expected === undefined) return;
+    checks.push({
+      name,
+      operator: '<=',
+      expected,
+      actual,
+      passed: actual !== null && actual <= expected,
+    });
+  };
+
+  addMinCheck('text.coverage', quality.text.coverage, gate.minCoverage);
+  addMaxCheck(
+    'text.normalizedCharErrorRate',
+    quality.text.normalizedCharErrorRate,
+    gate.maxNormalizedCharErrorRate,
+  );
+  addMaxCheck(
+    'timing.startMaeSeconds',
+    quality.timing.startMaeSeconds,
+    gate.maxStartMaeSeconds,
+  );
+  addMaxCheck(
+    'timing.startP95Seconds',
+    quality.timing.startP95Seconds,
+    gate.maxStartP95Seconds,
+  );
+  addMaxCheck(
+    'timing.endMaeSeconds',
+    quality.timing.endMaeSeconds,
+    gate.maxEndMaeSeconds,
+  );
+  addMaxCheck(
+    'timing.endP95Seconds',
+    quality.timing.endP95Seconds,
+    gate.maxEndP95Seconds,
+  );
+
+  return {
+    passed: checks.every((check) => check.passed),
+    checks,
+  };
+}
+
 function formatSeconds(seconds: number): string {
   const total = Math.max(0, Math.floor(seconds));
   const h = Math.floor(total / 3600);
@@ -881,6 +1057,279 @@ function formatSeconds(seconds: number): string {
 function writeJson(filePath: string, value: unknown): void {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   fs.writeFileSync(filePath, `${JSON.stringify(value, null, 2)}\n`, 'utf8');
+}
+
+function resolveMaybeRelative(
+  filePath: string,
+  baseDir = process.cwd(),
+): string {
+  return path.isAbsolute(filePath) ? filePath : path.resolve(baseDir, filePath);
+}
+
+function findCaseAudioPath(caseDir: string): string | null {
+  for (const extension of ['mp3', 'm4a', 'wav', 'aac', 'webm', 'mp4']) {
+    const candidate = path.join(caseDir, `audio.${extension}`);
+    if (fs.existsSync(candidate)) return candidate;
+  }
+  return null;
+}
+
+function readJsonIfExists(filePath: string): Record<string, unknown> | null {
+  if (!fs.existsSync(filePath)) return null;
+  return JSON.parse(fs.readFileSync(filePath, 'utf8')) as Record<
+    string,
+    unknown
+  >;
+}
+
+function resolveEvalCaseInput(experiment: LlmAlignerEvalExperiment): {
+  caseId?: string;
+  caseDir?: string;
+  metadataPath?: string;
+  audioPath?: string;
+  goldenJsonPath?: string;
+  platform?: string;
+  videoId?: string;
+  title?: string;
+  channelName?: string;
+  description?: string;
+} {
+  let caseDir = experiment.caseDir
+    ? resolveMaybeRelative(experiment.caseDir)
+    : undefined;
+  let caseId = experiment.caseId;
+
+  if (!caseDir && caseId) {
+    const manifestPath = resolveMaybeRelative(
+      experiment.caseManifestPath || path.join('eval', 'data', 'manifest.json'),
+    );
+    const manifest = readJsonIfExists(manifestPath);
+    const cases = Array.isArray(manifest?.cases) ? manifest.cases : [];
+    const entry = cases.find(
+      (candidate): candidate is Record<string, unknown> =>
+        Boolean(
+          candidate &&
+          typeof candidate === 'object' &&
+          (candidate as Record<string, unknown>).id === caseId,
+        ),
+    );
+    if (!entry) throw new Error(`eval case not found: ${caseId}`);
+    const manifestDir = path.dirname(manifestPath);
+    if (typeof entry.caseDir === 'string') {
+      caseDir = resolveMaybeRelative(entry.caseDir);
+    } else if (typeof entry.goldenJsonPath === 'string') {
+      caseDir = path.dirname(resolveMaybeRelative(entry.goldenJsonPath));
+    }
+    if (!experiment.audioPath && typeof entry.audioPath === 'string') {
+      experiment = { ...experiment, audioPath: entry.audioPath };
+    }
+    if (
+      !experiment.goldenJsonPath &&
+      typeof entry.goldenJsonPath === 'string'
+    ) {
+      experiment = { ...experiment, goldenJsonPath: entry.goldenJsonPath };
+    }
+    if (!caseDir && typeof entry.caseDir === 'string') {
+      caseDir = resolveMaybeRelative(entry.caseDir, manifestDir);
+    }
+  }
+
+  if (!caseDir) {
+    return {
+      audioPath: experiment.audioPath,
+      goldenJsonPath: experiment.goldenJsonPath,
+      platform: experiment.platform,
+      videoId: experiment.videoId,
+      title: experiment.title,
+      channelName: experiment.channelName,
+      description: experiment.description,
+    };
+  }
+
+  const metadataPath = path.join(caseDir, 'metadata.json');
+  const metadata = readJsonIfExists(metadataPath);
+  const video = metadata?.video as Record<string, unknown> | undefined;
+  const audio = metadata?.audio as Record<string, unknown> | undefined;
+  const golden = metadata?.golden as Record<string, unknown> | undefined;
+  caseId =
+    caseId || (typeof metadata?.id === 'string' ? metadata.id : undefined);
+
+  const metadataAudioPath =
+    typeof audio?.cachedAudioPath === 'string' && audio.cachedAudioPath
+      ? resolveMaybeRelative(audio.cachedAudioPath)
+      : undefined;
+  const metadataGoldenPath =
+    typeof golden?.jsonPath === 'string' && golden.jsonPath
+      ? resolveMaybeRelative(golden.jsonPath)
+      : undefined;
+
+  return {
+    caseId,
+    caseDir,
+    metadataPath: fs.existsSync(metadataPath) ? metadataPath : undefined,
+    audioPath:
+      experiment.audioPath ||
+      metadataAudioPath ||
+      findCaseAudioPath(caseDir) ||
+      undefined,
+    goldenJsonPath:
+      experiment.goldenJsonPath ||
+      metadataGoldenPath ||
+      path.join(caseDir, 'golden.json'),
+    platform:
+      experiment.platform ||
+      (typeof video?.platform === 'string' ? video.platform : undefined),
+    videoId:
+      experiment.videoId ||
+      (typeof video?.videoId === 'string' ? video.videoId : undefined),
+    title:
+      experiment.title ||
+      (typeof video?.title === 'string' ? video.title : undefined),
+    channelName:
+      experiment.channelName ||
+      (typeof video?.channelName === 'string' ? video.channelName : undefined),
+    description: experiment.description,
+  };
+}
+
+function normalizedTextSimilarity(left: string, right: string): number {
+  const reference = normalizeQualityText(left);
+  const hypothesis = normalizeQualityText(right);
+  if (!reference && !hypothesis) return 1;
+  if (!reference || !hypothesis) return 0;
+  const distance = charEditDistance(reference, hypothesis);
+  return Number(
+    (1 - distance / Math.max(reference.length, hypothesis.length)).toFixed(4),
+  );
+}
+
+function overlapSeconds(
+  left: SubtitleSegmentLike,
+  right: SubtitleSegmentLike,
+): number {
+  return Math.max(
+    0,
+    Math.min(left.end, right.end) - Math.max(left.start, right.start),
+  );
+}
+
+function buildAlignmentArtifact(input: {
+  caseId?: string;
+  golden: {
+    goldenPath: string;
+    segments: SubtitleSegmentLike[];
+  };
+  generatedSubtitlePath: string;
+  generatedSegments: SubtitleSegmentLike[];
+}): LlmAlignerAlignmentArtifact {
+  const minTextSimilarity = 0.92;
+  const maxStartDriftSeconds = 0.8;
+  const maxEndDriftSeconds = 1.2;
+  const usedGenerated = new Set<number>();
+  const pairs: LlmAlignerAlignmentPair[] = [];
+
+  for (const [goldenIndex, golden] of input.golden.segments.entries()) {
+    let bestIndex = -1;
+    let bestScore = 0;
+    for (const [
+      generatedIndex,
+      generated,
+    ] of input.generatedSegments.entries()) {
+      if (usedGenerated.has(generatedIndex)) continue;
+      const overlap = overlapSeconds(golden, generated);
+      const startDistance = Math.abs(golden.start - generated.start);
+      const similarity = normalizedTextSimilarity(golden.text, generated.text);
+      const score =
+        overlap > 0
+          ? overlap + similarity
+          : startDistance <= 3
+            ? 0.2 + similarity
+            : 0;
+      if (score > bestScore) {
+        bestScore = score;
+        bestIndex = generatedIndex;
+      }
+    }
+
+    const generated =
+      bestIndex >= 0 ? input.generatedSegments[bestIndex]! : null;
+    if (bestIndex >= 0) usedGenerated.add(bestIndex);
+    const textSimilarity = generated
+      ? normalizedTextSimilarity(golden.text, generated.text)
+      : null;
+    const startDriftSeconds = generated
+      ? Number((generated.start - golden.start).toFixed(3))
+      : null;
+    const endDriftSeconds = generated
+      ? Number((generated.end - golden.end).toFixed(3))
+      : null;
+    const status: LlmAlignerAlignmentPair['status'] = !generated
+      ? 'missing_generated'
+      : textSimilarity !== null && textSimilarity < minTextSimilarity
+        ? 'text_mismatch'
+        : Math.abs(startDriftSeconds || 0) > maxStartDriftSeconds ||
+            Math.abs(endDriftSeconds || 0) > maxEndDriftSeconds
+          ? 'timestamp_drift'
+          : 'match';
+
+    pairs.push({
+      index: goldenIndex,
+      status,
+      golden,
+      generated,
+      textSimilarity,
+      startDriftSeconds,
+      endDriftSeconds,
+    });
+  }
+
+  for (const [generatedIndex, generated] of input.generatedSegments.entries()) {
+    if (usedGenerated.has(generatedIndex)) continue;
+    pairs.push({
+      index: pairs.length,
+      status: 'extra_generated',
+      golden: null,
+      generated,
+      textSimilarity: null,
+      startDriftSeconds: null,
+      endDriftSeconds: null,
+    });
+  }
+
+  const summary = {
+    pairCount: pairs.length,
+    matchCount: pairs.filter((pair) => pair.status === 'match').length,
+    textMismatchCount: pairs.filter((pair) => pair.status === 'text_mismatch')
+      .length,
+    timestampDriftCount: pairs.filter(
+      (pair) => pair.status === 'timestamp_drift',
+    ).length,
+    missingGeneratedCount: pairs.filter(
+      (pair) => pair.status === 'missing_generated',
+    ).length,
+    extraGeneratedCount: pairs.filter(
+      (pair) => pair.status === 'extra_generated',
+    ).length,
+  };
+
+  return {
+    version: 1,
+    generatedAt: new Date().toISOString(),
+    case: {
+      id: input.caseId || null,
+      goldenPath: input.golden.goldenPath,
+    },
+    generated: {
+      subtitlePath: input.generatedSubtitlePath,
+    },
+    thresholds: {
+      minTextSimilarity,
+      maxStartDriftSeconds,
+      maxEndDriftSeconds,
+    },
+    summary,
+    pairs,
+  };
 }
 
 function mergeExperimentDefaults(
@@ -925,6 +1374,8 @@ async function runChunk(input: {
   let utterances: TranscribedUtterance[] = [];
   let totalTokens: number | undefined;
   let ttftSeconds: number | undefined;
+  let transcribeDurationMs = 0;
+  const transcribeStartedMs = Date.now();
 
   try {
     const transcribed = await transcribeChunk({
@@ -942,15 +1393,18 @@ async function runChunk(input: {
       chunkSeconds: input.chunkSeconds,
       signal: input.signal,
     });
+    transcribeDurationMs = Date.now() - transcribeStartedMs;
     utterances = transcribed.utterances;
     totalTokens = transcribed.totalTokens;
     ttftSeconds = transcribed.ttftSeconds;
   } catch (error) {
+    transcribeDurationMs = Date.now() - transcribeStartedMs;
     const result = buildTranscribeFailedChunk({
       chunkIndex: range.index,
       chunkOffsetSec: range.offsetSec,
       durationSec,
       maxSegmentSeconds: input.llmConfig.maxSegmentSeconds,
+      transcribeDurationMs,
     });
     const record: LlmAlignerEvalChunkRecord = {
       index: range.index,
@@ -966,6 +1420,8 @@ async function runChunk(input: {
       alignFallback: result.alignFallback,
       avgProb: result.avgProb,
       wordCount: result.wordCount,
+      transcribeDurationMs,
+      alignerDurationMs: result.alignerDurationMs,
       error: error instanceof Error ? error.message : String(error),
     };
     return { result, record };
@@ -983,6 +1439,7 @@ async function runChunk(input: {
     utterances,
     totalTokens,
     ttftSeconds,
+    transcribeDurationMs,
   });
 
   const alignerOutputDir = path.join(
@@ -1008,6 +1465,8 @@ async function runChunk(input: {
     runAligner: runForcedAligner,
   });
 
+  const resultWithTiming = { ...result, transcribeDurationMs };
+
   const record: LlmAlignerEvalChunkRecord = {
     index: range.index,
     offsetSec: range.offsetSec,
@@ -1026,10 +1485,12 @@ async function runChunk(input: {
     collapsedTimingUtteranceCount: result.collapsedTimingUtteranceCount,
     localInterpolatedUtteranceCount: result.localInterpolatedUtteranceCount,
     matchedCharRatio: result.matchedCharRatio,
+    transcribeDurationMs,
+    alignerDurationMs: result.alignerDurationMs,
     totalTokens,
     ttftSeconds,
   };
-  return { result, record, totalTokens, ttftSeconds };
+  return { result: resultWithTiming, record, totalTokens, ttftSeconds };
 }
 
 export async function runLlmAlignerExperiment(
@@ -1038,7 +1499,17 @@ export async function runLlmAlignerExperiment(
 ): Promise<LlmAlignerEvalResult> {
   const startedAt = new Date().toISOString();
   const startedMs = Date.now();
-  const id = sanitizeFileName(experiment.id);
+  const caseInput = resolveEvalCaseInput(experiment);
+  const id = sanitizeFileName(
+    experiment.id ||
+      caseInput.caseId ||
+      (caseInput.audioPath
+        ? path.basename(caseInput.audioPath, path.extname(caseInput.audioPath))
+        : 'llm-aligner-eval'),
+  );
+  if (!caseInput.audioPath) {
+    throw new Error(`eval audio is missing for ${id}`);
+  }
   const outputRoot = options.outputRoot || DEFAULT_OUTPUT_ROOT;
   const outputDir = path.resolve(
     experiment.outputDir ||
@@ -1056,14 +1527,16 @@ export async function runLlmAlignerExperiment(
   }
   const transcriber = getTranscriber(model);
 
+  const audioPrepareStartedMs = Date.now();
   const normalizedAudioPath = await normalizeAudioToMp3(
-    path.resolve(experiment.audioPath),
+    path.resolve(caseInput.audioPath),
     outputDir,
   );
   const durationSeconds = await probeAudioDurationSeconds(
     normalizedAudioPath,
     options.signal,
   );
+  const audioPrepareDurationMs = Date.now() - audioPrepareStartedMs;
   const chunkSeconds = clampInteger(
     Math.min(
       Number(experiment.chunkSeconds) || DEFAULT_LLM_ALIGNER_CHUNK_SECONDS,
@@ -1082,21 +1555,30 @@ export async function runLlmAlignerExperiment(
   const alignerConfig = normalizeAlignerConfig(experiment.aligner);
   const llmConfig = normalizeLlmConfig(experiment.llm);
   const video: LlmAlignVideoContext = {
-    platform: experiment.platform || 'eval',
-    video_id: experiment.videoId || id,
-    title: experiment.title || id,
-    channel_name: experiment.channelName || null,
-    description: experiment.description || null,
+    platform: caseInput.platform || 'eval',
+    video_id: caseInput.videoId || id,
+    title: caseInput.title || id,
+    channel_name: caseInput.channelName || null,
+    description: caseInput.description || null,
   };
   const ranges = buildChunkRanges(durationSeconds, chunkSeconds);
   writeJson(path.join(outputDir, 'input.json'), {
     ...experiment,
     model: { ...model, apiKey: model.apiKey ? '[redacted]' : '' },
+    case: caseInput.caseDir
+      ? {
+          id: caseInput.caseId || null,
+          dir: caseInput.caseDir,
+          metadataPath: caseInput.metadataPath || null,
+        }
+      : null,
+    audioPath: path.resolve(caseInput.audioPath),
     normalizedAudioPath,
     durationSeconds,
     chunkCount: ranges.length,
   });
 
+  const chunkStartedMs = Date.now();
   const chunkWork = await mapLimit(ranges, chunkConcurrency, (range) =>
     runChunk({
       range,
@@ -1113,6 +1595,7 @@ export async function runLlmAlignerExperiment(
       signal: options.signal,
     }),
   );
+  const chunkWallDurationMs = Date.now() - chunkStartedMs;
 
   const chunkResults = chunkWork.map((entry) => entry.result);
   const segments = assembleSegments(chunkResults, {
@@ -1147,7 +1630,7 @@ export async function runLlmAlignerExperiment(
     fallbackRatio,
   };
   const golden = readGoldenSubtitle({
-    goldenJsonPath: experiment.goldenJsonPath,
+    goldenJsonPath: caseInput.goldenJsonPath,
     goldenSubtitlePath: experiment.goldenSubtitlePath,
   });
 
@@ -1159,9 +1642,28 @@ export async function runLlmAlignerExperiment(
         fallbackRatio,
       })
     : undefined;
+  const qualityGateResult = experiment.qualityGate
+    ? evaluateQualityGate(experiment.qualityGate, quality)
+    : undefined;
   const subtitleJsonPath = path.join(outputDir, 'subtitle.json');
   const subtitleTextPath = path.join(outputDir, 'subtitle.txt');
   const metricsPath = path.join(outputDir, 'metrics.json');
+  const runPath = path.join(outputDir, 'run.json');
+  const alignmentPath = golden ? path.join(outputDir, 'alignment.json') : null;
+  const totalDurationMs = Date.now() - startedMs;
+  const phaseTiming: LlmAlignerEvalPhaseTiming = {
+    totalDurationMs,
+    audioPrepareDurationMs,
+    chunkWallDurationMs,
+    transcribeDurationMs: chunkWork.reduce(
+      (sum, entry) => sum + (entry.record.transcribeDurationMs || 0),
+      0,
+    ),
+    alignerDurationMs: chunkWork.reduce(
+      (sum, entry) => sum + (entry.record.alignerDurationMs || 0),
+      0,
+    ),
+  };
   writeJson(subtitleJsonPath, {
     status: 'completed',
     sourceMethod: 'llm-aligner-eval',
@@ -1169,9 +1671,28 @@ export async function runLlmAlignerExperiment(
     segmentStyle: 'fine',
     text: subtitleText,
     segments,
-    metadata: { ...summary, ...(quality ? { quality } : {}) },
+    metadata: {
+      ...summary,
+      phaseTiming,
+      ...(quality ? { quality } : {}),
+      ...(experiment.qualityGate
+        ? {
+            qualityGate: experiment.qualityGate,
+            qualityGateResult,
+          }
+        : {}),
+    },
   });
   fs.writeFileSync(subtitleTextPath, `${subtitleText}\n`, 'utf8');
+  const alignment = golden
+    ? buildAlignmentArtifact({
+        caseId: caseInput.caseId,
+        golden,
+        generatedSubtitlePath: subtitleJsonPath,
+        generatedSegments: segments,
+      })
+    : undefined;
+  if (alignment && alignmentPath) writeJson(alignmentPath, alignment);
 
   if (!experiment.keepAudioChunks) {
     await fs.promises.rm(chunkDir, { recursive: true, force: true });
@@ -1184,7 +1705,7 @@ export async function runLlmAlignerExperiment(
     startedAt,
     completedAt,
     durationMs: Date.now() - startedMs,
-    audioPath: path.resolve(experiment.audioPath),
+    audioPath: path.resolve(caseInput.audioPath),
     normalizedAudioPath,
     model: {
       id: model.id,
@@ -1198,16 +1719,62 @@ export async function runLlmAlignerExperiment(
       aligner: alignerConfig,
       llm: llmConfig,
     },
+    ...(caseInput.caseDir
+      ? {
+          case: {
+            id: caseInput.caseId || id,
+            dir: caseInput.caseDir,
+            ...(caseInput.metadataPath
+              ? { metadataPath: caseInput.metadataPath }
+              : {}),
+          },
+        }
+      : {}),
     summary,
     ...(quality ? { quality } : {}),
+    ...(experiment.qualityGate
+      ? {
+          qualityGate: experiment.qualityGate,
+          qualityGateResult,
+        }
+      : {}),
+    ...(experiment.configSource
+      ? { configSource: experiment.configSource }
+      : {}),
+    ...(experiment.configSnapshot
+      ? { configSnapshot: experiment.configSnapshot }
+      : {}),
+    phaseTiming,
     chunks: chunkWork.map((entry) => entry.record),
     files: {
+      run: runPath,
       subtitleJson: subtitleJsonPath,
       subtitleText: subtitleTextPath,
       metrics: metricsPath,
+      ...(alignmentPath ? { alignment: alignmentPath } : {}),
     },
   };
   writeJson(metricsPath, result);
+  writeJson(runPath, {
+    version: 1,
+    status: 'completed',
+    pipeline: 'llm-aligner',
+    id: result.id,
+    case: result.case || null,
+    startedAt: result.startedAt,
+    completedAt: result.completedAt,
+    durationMs: result.durationMs,
+    model: result.model,
+    config: result.config,
+    configSource: result.configSource || null,
+    configSnapshot: result.configSnapshot || null,
+    summary: result.summary,
+    quality: result.quality || null,
+    qualityGate: result.qualityGate || null,
+    qualityGateResult: result.qualityGateResult || null,
+    phaseTiming: result.phaseTiming,
+    files: result.files,
+  });
   return result;
 }
 
@@ -1233,8 +1800,26 @@ export async function runLlmAlignerManifest(input: {
     experiments,
     clampInteger(input.concurrency, 1, 1, Math.max(1, os.cpus().length)),
     async (experiment) => {
+      const fallbackId = sanitizeFileName(
+        experiment.id ||
+          experiment.caseId ||
+          (experiment.audioPath
+            ? path.basename(
+                experiment.audioPath,
+                path.extname(experiment.audioPath),
+              )
+            : 'llm-aligner-eval'),
+      );
+      const outputDir = path.resolve(
+        experiment.outputDir ||
+          path.join(
+            outputRoot,
+            `${new Date().toISOString().replace(/[:.]/g, '-')}-${fallbackId}`,
+          ),
+      );
+      const preparedExperiment = { ...experiment, outputDir };
       try {
-        const result = await runLlmAlignerExperiment(experiment, {
+        const result = await runLlmAlignerExperiment(preparedExperiment, {
           outputRoot,
           chunkConcurrency: input.chunkConcurrency,
           signal: input.signal,
@@ -1242,19 +1827,42 @@ export async function runLlmAlignerManifest(input: {
         return { ok: true as const, result };
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        const outputDir = experiment.outputDir
-          ? path.resolve(experiment.outputDir)
-          : undefined;
-        if (outputDir) {
-          writeJson(path.join(outputDir, 'error.json'), {
-            id: experiment.id,
-            error: message,
-            failedAt: new Date().toISOString(),
-          });
-        }
+        const failedAt = new Date().toISOString();
+        writeJson(path.join(outputDir, 'error.json'), {
+          id: fallbackId,
+          error: message,
+          failedAt,
+          configSource: experiment.configSource || null,
+          configSnapshot: experiment.configSnapshot || null,
+        });
+        writeJson(path.join(outputDir, 'run.json'), {
+          version: 1,
+          status: 'failed',
+          pipeline: 'llm-aligner',
+          id: fallbackId,
+          case: experiment.caseId ? { id: experiment.caseId } : null,
+          startedAt: null,
+          completedAt: failedAt,
+          durationMs: null,
+          error: message,
+          configSource: experiment.configSource || null,
+          configSnapshot: experiment.configSnapshot || null,
+          qualityGate: experiment.qualityGate || null,
+          qualityGateResult: experiment.qualityGate
+            ? {
+                passed: false,
+                checks: [],
+                reason: 'run failed before quality metrics were available',
+              }
+            : null,
+          files: {
+            run: path.join(outputDir, 'run.json'),
+            error: path.join(outputDir, 'error.json'),
+          },
+        });
         return {
           ok: false as const,
-          id: experiment.id,
+          id: fallbackId,
           error: message,
           outputDir,
         };

@@ -1,0 +1,78 @@
+[00:00-00:03] GPT, or Generative Pre-trained Transformer,
+[00:03-00:07] is a large language model, or an LLM,
+[00:08-00:10] that can generate human-like text.
+[00:10-00:14] And I've been using GPT in its various forms for years.
+[00:15-00:18] In this video we are going to number 1,
+[00:18-00:22] ask "what is an LLM?"
+[00:22-00:26] Number 2, we are going to describe how they work.
+[00:26-00:28] And then number 3,
+[00:28-00:32] we're going to ask, "what are the business applications of LLMs?"
+[00:32-00:36] So let's start with number 1, "what is a large language model?"
+[00:36-00:39] Well, a large language model
+[00:40-00:47] is an instance of something else called a foundation model.
+[00:49-00:55] Now foundation models are pre-trained on large amounts of unlabeled and self-supervised data,
+[00:55-01:01] meaning the model learns from patterns in the data in a way that produces generalizable and adaptable output.
+[01:01-01:09] And large language models are instances of foundation models applied specifically to text and text-like things.
+[01:09-01:11] I'm talking about things like code.
+[01:11-01:18] Now, large language models are trained on large datasets of text, such as books, articles and conversations.
+[01:18-01:21] And look, when we say "large",
+[01:21-01:24] these models can be tens of gigabytes in size
+[01:24-01:27] and trained on enormous amounts of text data.
+[01:27-01:30] We're talking potentially petabytes of data here.
+[01:31-01:33] So to put that into perspective,
+[01:33-01:38] a text file that is, let's say, one gigabyte in size,
+[01:38-01:44] that can store about 178 million words.
+[01:44-01:47] A lot of words just in one Gb.
+[01:47-01:51] And how many gigabytes are in a petabyte?
+[01:51-01:56] Well, it's about 1 million.
+[01:57-01:59] Yeah, that's truly a lot of text.
+[01:59-02:04] And LLMs are also among the biggest models when it comes to parameter count.
+[02:04-02:08] A parameter is a value the model can change independently as it learns,
+[02:08-02:11] and the more parameters a model has, the more complex it can be.
+[02:11-02:20] GPT-3, for example, is pre-trained on a corpus of actually 45 terabytes of data,
+[02:20-02:25] and it uses 175 billion ML parameters.
+[02:25-02:28] All right, so how do they work?
+[02:28-02:30] Well, we can think of it like this.
+[02:30-02:34] LLM equals three things:
+[02:34-02:44] data, architecture, and lastly, we can think of it as training.
+[02:44-02:47] Those three things are really the components of an LLM.
+[02:47-02:53] Now, we've already discussed the enormous amounts of text data that goes into these things.
+[02:53-02:55] As for the architecture,
+[02:55-03:01] this is a neural network and for GPT that is a transformer.
+[03:03-03:07] And the transformer architecture enables the model to handle sequences of data
+[03:07-03:09] like sentences or lines of code.
+[03:09-03:13] And transformers are designed to understand the context of each word in a sentence
+[03:13-03:17] by considering it in relation to every other word.
+[03:17-03:21] This allows the model to build a comprehensive understanding of the sentence structure
+[03:21-03:22] and the meaning of the words within it.
+[03:23-03:25] And then this architecture is trained
+[03:25-03:29] on all of this large amount of data.
+[03:29-03:33] Now, during training, the model learns to predict the next word in a sentence.
+[03:33-03:40] So, "the sky is..." it starts off with a with a random guess, "the sky is bug".
+[03:41-03:45] But with each iteration, the model adjusts its internal parameters
+[03:45-03:50] to reduce the difference between its predictions and the actual outcomes.
+[03:50-03:53] And the model keeps doing this gradually improving its word predictions
+[03:53-03:57] until it can reliably generate coherent sentences.
+[03:57-04:02] Forget about "bug", it can figure out it's "blue".
+[04:02-04:07] Now, the model can be fine tuned on a smaller, more specific dataset
+[04:07-04:13] Here the model refines its understanding to be able to perform this specific task more accurately.
+[04:13-04:16] Fine tuning is what allows a general language model
+[04:16-04:18] to become an expert at a specific task.
+[04:18-04:22] OK, so how does this all fit into number 3, business applications?
+[04:23-04:27] Well, for customer service applications,
+[04:27-04:32] businesses can use LLMs to create intelligent chatbots that can handle a variety of customer queries,
+[04:33-04:36] freeing up human agents for more complex issues.
+[04:37-04:40] Another good field, content creation.
+[04:40-04:44] That can benefit from LLMs which can help generate articles,
+[04:44-04:49] emails, social media posts, and even YouTube video scripts.
+[04:49-04:51] Hmm, there's an idea.
+[04:51-04:56] Now, LLMs can even contribute to software development.
+[04:57-05:00] And they can do that by helping to generate and review code.
+[05:00-05:03] And look, that's just scratching the surface.
+[05:03-05:05] As large language models continue to evolve,
+[05:05-05:08] we're bound to discover more innovative applications.
+[05:09-05:13] And that's why I'm so enamored with large language models.
+[05:14-05:17] If you have any questions, please drop us a line below.
+[05:17-05:20] And if you want to see more videos like this in the future,
+[05:20-05:22] please like and subscribe.
+[05:22-05:23] Thanks for watching.

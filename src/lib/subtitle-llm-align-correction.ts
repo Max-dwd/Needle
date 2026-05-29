@@ -67,6 +67,8 @@ export interface AlignedChunkResult {
   transcribeFailed: boolean;
   avgProb: number | null;
   wordCount: number;
+  transcribeDurationMs?: number;
+  alignerDurationMs?: number;
   missingTimingUtteranceCount?: number;
   collapsedTimingUtteranceCount?: number;
   localInterpolatedUtteranceCount?: number;
@@ -650,6 +652,7 @@ export function buildTranscribeFailedChunk(input: {
   maxSegmentSeconds?: number;
   speaker?: string;
   text?: string;
+  transcribeDurationMs?: number;
 }): AlignedChunkResult {
   const speaker = input.speaker?.trim() || 'S1';
   const text = input.text?.trim() || '[转写失败]';
@@ -680,6 +683,9 @@ export function buildTranscribeFailedChunk(input: {
     transcribeFailed: true,
     avgProb: null,
     wordCount: 0,
+    ...(typeof input.transcribeDurationMs === 'number'
+      ? { transcribeDurationMs: input.transcribeDurationMs }
+      : {}),
   };
 }
 
@@ -734,6 +740,8 @@ export async function alignChunk(
   write(transcriptWritePath, text);
 
   let alignerResult: AlignerResult | null = null;
+  const alignerStartedMs = Date.now();
+  let alignerDurationMs = 0;
   try {
     alignerResult = await aligner(chunk.audioPath, transcriptWritePath, {
       modelId: alignerConfig.modelId,
@@ -741,9 +749,12 @@ export async function alignChunk(
       audioDurationSeconds: chunk.durationSec,
       signal,
     });
+    alignerDurationMs = Date.now() - alignerStartedMs;
   } catch (error) {
+    alignerDurationMs = Date.now() - alignerStartedMs;
     log.warn('subtitle', 'llm_aligner_chunk_failed', {
       chunk_index: chunk.chunkIndex,
+      aligner_duration_ms: alignerDurationMs,
       error: error instanceof Error ? error.message : String(error),
     });
   }
@@ -756,7 +767,14 @@ export async function alignChunk(
     : MIN_WORD_RATIO_DEFAULT;
 
   if (!alignerResult) {
-    return buildInterpolatedChunk(chunk, utterances, 'aligner-error');
+    return buildInterpolatedChunk(
+      chunk,
+      utterances,
+      'aligner-error',
+      null,
+      0,
+      alignerDurationMs,
+    );
   }
 
   const mapping = mapAlignedWordsToUtterances(
@@ -766,9 +784,7 @@ export async function alignChunk(
   );
 
   const wordCharRatio =
-    mapping.sourceChars === 0
-      ? 0
-      : mapping.matchedChars / mapping.sourceChars;
+    mapping.sourceChars === 0 ? 0 : mapping.matchedChars / mapping.sourceChars;
   const matchedCharRatio = Number(wordCharRatio.toFixed(4));
 
   if (mapping.avgProb !== null && mapping.avgProb < minAvgProb) {
@@ -778,6 +794,7 @@ export async function alignChunk(
       'low-prob',
       mapping.avgProb,
       mapping.matchedChars,
+      alignerDurationMs,
     );
   }
 
@@ -788,6 +805,7 @@ export async function alignChunk(
       'low-word-ratio',
       mapping.avgProb,
       mapping.matchedChars,
+      alignerDurationMs,
     );
   }
 
@@ -804,6 +822,7 @@ export async function alignChunk(
       'no-utterance-timings',
       mapping.avgProb,
       mapping.matchedChars,
+      alignerDurationMs,
     );
   }
 
@@ -815,6 +834,7 @@ export async function alignChunk(
     transcribeFailed: false,
     avgProb: mapping.avgProb,
     wordCount: alignerResult.words.length,
+    alignerDurationMs,
     missingTimingUtteranceCount: aligned.missingTimingCount,
     collapsedTimingUtteranceCount: aligned.collapsedTimingCount,
     localInterpolatedUtteranceCount: aligned.localInterpolatedCount,
@@ -965,8 +985,8 @@ function interpolateUtteranceRun(
   return utterances.map((utterance, index) => {
     const isLast = index === utterances.length - 1;
     const share =
-      ((Math.max(1, Array.from(utterance.text).length) / totalChars) *
-        (safeEnd - startSec));
+      (Math.max(1, Array.from(utterance.text).length) / totalChars) *
+      (safeEnd - startSec);
     const end = isLast ? safeEnd : cursor + share;
     const aligned = {
       speaker: utterance.speaker,
@@ -986,6 +1006,7 @@ function buildInterpolatedChunk(
   reason: string,
   avgProb: number | null = null,
   matchedChars = 0,
+  alignerDurationMs?: number,
 ): AlignedChunkResult {
   const interpolated = interpolateUtterances(utterances, chunk.durationSec);
   log.info('subtitle', 'llm_aligner_chunk_interpolated', {
@@ -1003,6 +1024,7 @@ function buildInterpolatedChunk(
     transcribeFailed: false,
     avgProb,
     wordCount: 0,
+    alignerDurationMs,
   };
 }
 
@@ -1117,6 +1139,10 @@ export interface LlmAlignerChunkSummary {
   localInterpolatedUtteranceCount: number;
   avgMatchedCharRatio: number | null;
   avgProb: number | null;
+  totalTranscribeDurationMs: number | undefined;
+  totalAlignerDurationMs: number | undefined;
+  avgTranscribeDurationMs: number | undefined;
+  avgAlignerDurationMs: number | undefined;
   totalTokens: number | undefined;
   firstChunkTtft: number | undefined;
   allInterpolated: boolean;
@@ -1144,6 +1170,20 @@ export function summarizeChunkResults(
     (sum, chunk) => sum + chunk.wordCount,
     0,
   );
+  const transcribeDurations = chunks
+    .map((chunk) => chunk.transcribeDurationMs)
+    .filter((value): value is number => typeof value === 'number');
+  const alignerDurations = chunks
+    .map((chunk) => chunk.alignerDurationMs)
+    .filter((value): value is number => typeof value === 'number');
+  const totalTranscribeDurationMs =
+    transcribeDurations.length === 0
+      ? undefined
+      : transcribeDurations.reduce((sum, value) => sum + value, 0);
+  const totalAlignerDurationMs =
+    alignerDurations.length === 0
+      ? undefined
+      : alignerDurations.reduce((sum, value) => sum + value, 0);
   const totalUtteranceCount = chunks.reduce(
     (sum, chunk) => sum + chunk.utterances.length,
     0,
@@ -1182,6 +1222,16 @@ export function summarizeChunkResults(
     localInterpolatedUtteranceCount,
     avgMatchedCharRatio,
     avgProb,
+    totalTranscribeDurationMs,
+    totalAlignerDurationMs,
+    avgTranscribeDurationMs:
+      totalTranscribeDurationMs === undefined
+        ? undefined
+        : totalTranscribeDurationMs / transcribeDurations.length,
+    avgAlignerDurationMs:
+      totalAlignerDurationMs === undefined
+        ? undefined
+        : totalAlignerDurationMs / alignerDurations.length,
     totalTokens: options.totalTokens,
     firstChunkTtft: options.firstChunkTtft,
     allInterpolated,

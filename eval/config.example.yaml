@@ -1,0 +1,146 @@
+# Needle eval config v1.
+# Copy this file to eval/config.local.yaml, then edit targets/model/env values.
+
+dataset:
+  outputDir: eval/data
+  expectedLanguage: en
+  requireManualCaptions: true
+  live:
+    metadata: true
+    subtitles: true
+    audio: true
+  targets:
+    - id: short-youtube-llm-ibm
+      tier: short
+      difficulty: normal
+      platform: youtube
+      videoId: 5sLYAQS9sWQ
+      url: https://www.youtube.com/watch?v=5sLYAQS9sWQ
+      note: English short LLM explainer from IBM Technology
+
+    - id: short-english-ted-ai-century
+      tier: short
+      difficulty: normal
+      platform: youtube
+      videoId: '-T__YWoq45I'
+      url: https://www.youtube.com/watch?v=-T__YWoq45I
+      note: English short TED-Ed explainer about AI as a century-scale technology
+
+    - id: short-chinese-chloe-remember
+      tier: short
+      difficulty: normal
+      platform: youtube
+      videoId: s2a7Ejc552A
+      url: https://www.youtube.com/watch?v=s2a7Ejc552A
+      expectedLanguage: zh
+      note: Chinese short natural conversation lesson about remembering and daily language
+
+    - id: medium-youtube-transformers-3b1b
+      tier: medium
+      difficulty: normal
+      platform: youtube
+      videoId: wjZofJX0v4M
+      url: https://www.youtube.com/watch?v=wjZofJX0v4M
+      note: English medium visual transformer explainer from 3Blue1Brown
+
+    - id: medium-english-ted-climate-talk
+      tier: medium
+      difficulty: normal
+      platform: youtube
+      videoId: '-BvcToPZCLI'
+      url: https://www.youtube.com/watch?v=-BvcToPZCLI
+      note: English medium TED talk about climate communication
+
+    - id: medium-chinese-chloe-why
+      tier: medium
+      difficulty: normal
+      platform: youtube
+      videoId: 9rwKFTBbopM
+      url: https://www.youtube.com/watch?v=9rwKFTBbopM
+      expectedLanguage: zh
+      note: Chinese medium podcast-style lesson about why-questions and natural phrasing
+
+    - id: long-youtube-state-of-gpt
+      tier: long
+      difficulty: normal
+      platform: youtube
+      videoId: bZQun8Y4L2A
+      url: https://www.youtube.com/watch?v=bZQun8Y4L2A
+      note: English long technical talk, single primary speaker
+
+    - id: long-english-ted-climate-realism
+      tier: long
+      difficulty: normal
+      platform: youtube
+      videoId: Ztx0Bch3h9s
+      url: https://www.youtube.com/watch?v=Ztx0Bch3h9s
+      note: English long TED climate policy talk with dense argument structure
+
+    - id: long-chinese-chloe-beijing-spring
+      tier: long
+      difficulty: normal
+      platform: youtube
+      videoId: SihlSCDkKas
+      url: https://www.youtube.com/watch?v=SihlSCDkKas
+      expectedLanguage: zh
+      note: Chinese long listening practice about Beijing spring, food, music, and city life
+
+    - id: long-hard-youtube-openai-devday
+      tier: long
+      difficulty: hard
+      platform: youtube
+      videoId: U9mJuUkhUzk
+      url: https://www.youtube.com/watch?v=U9mJuUkhUzk
+      note: English long-hard keynote with live pacing, demos, audience audio, and speaker transitions
+
+    - id: long-hard-english-android-io-show
+      tier: long
+      difficulty: hard
+      platform: youtube
+      videoId: dXCCleAddEA
+      url: https://www.youtube.com/watch?v=dXCCleAddEA
+      note: English long-hard Android I/O edition show with product demos and speaker changes
+
+    - id: long-hard-chinese-chloe-xinjiang
+      tier: long
+      difficulty: hard
+      platform: youtube
+      videoId: ea3mvITEDlU
+      url: https://www.youtube.com/watch?v=ea3mvITEDlU
+      expectedLanguage: zh
+      note: Chinese long-hard multi-topic travel conversation about Xinjiang memories
+
+model:
+  id: eval-gemini
+  name: Eval Gemini
+  protocol: gemini
+  endpoint: https://generativelanguage.googleapis.com/v1beta
+  model: gemini-3.1-flash-lite
+  apiKeyEnv: NEEDLE_EVAL_API_KEY
+  isMultimodal: true
+
+pipeline:
+  llmAligner:
+    chunkSeconds: 300
+    chunkConcurrency: 1
+    maxSegmentSeconds: 3
+    expectSpeakerLabels: true
+    verbatimCoveragePrompt: false
+
+aligner:
+  modelId: mlx-community/Qwen3-ForcedAligner-0.6B-8bit
+  minAvgProb: 0.3
+  minWordRatio: 0.3
+
+run:
+  outputRoot: eval/runs
+  concurrency: 1
+  keepAudioChunks: false
+
+qualityGate:
+  minCoverage: 0.9
+  maxNormalizedCharErrorRate: 0.25
+  maxStartMaeSeconds: 2
+  maxStartP95Seconds: 8
+  maxEndMaeSeconds: 2
+  maxEndP95Seconds: 8

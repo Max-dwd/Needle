@@ -10,6 +10,9 @@ import type {
   TranscribeUsage,
 } from './types';
 
+const GEMINI_RETRY_ATTEMPTS = 3;
+const GEMINI_RETRY_BASE_DELAY_MS = 800;
+
 function deriveGeminiApiBase(endpoint: string): {
   apiBase: string;
   uploadBase: string;
@@ -25,6 +28,73 @@ function deriveGeminiApiBase(endpoint: string): {
 
 function normalizeGeminiModelName(model: string): string {
   return model.replace(/^models\//, '').trim();
+}
+
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new DOMException('Aborted', 'AbortError'));
+      return;
+    }
+    const timer = setTimeout(resolve, ms);
+    signal?.addEventListener(
+      'abort',
+      () => {
+        clearTimeout(timer);
+        reject(new DOMException('Aborted', 'AbortError'));
+      },
+      { once: true },
+    );
+  });
+}
+
+function isRetryableGeminiError(error: unknown): boolean {
+  if (error instanceof DOMException && error.name === 'AbortError') {
+    return false;
+  }
+  if (error instanceof TypeError) return true;
+  if (!(error instanceof Error)) return false;
+  return /fetch failed|network|ECONNRESET|ETIMEDOUT|EAI_AGAIN|HTTP (408|409|429|5\d\d)/i.test(
+    error.message,
+  );
+}
+
+function describeGeminiError(error: unknown): string {
+  if (!(error instanceof Error)) return String(error);
+  const cause = error.cause;
+  const causeMessage =
+    cause && typeof cause === 'object' && 'message' in cause
+      ? String((cause as { message?: unknown }).message || '')
+      : '';
+  const causeCode =
+    cause && typeof cause === 'object' && 'code' in cause
+      ? String((cause as { code?: unknown }).code || '')
+      : '';
+  return [error.message, causeCode, causeMessage].filter(Boolean).join(' / ');
+}
+
+async function withGeminiRetry<T>(
+  stage: string,
+  signal: AbortSignal | undefined,
+  operation: (attempt: number) => Promise<T>,
+): Promise<T> {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= GEMINI_RETRY_ATTEMPTS; attempt += 1) {
+    try {
+      return await operation(attempt);
+    } catch (error) {
+      lastError = error;
+      if (attempt >= GEMINI_RETRY_ATTEMPTS || !isRetryableGeminiError(error)) {
+        break;
+      }
+      await sleep(GEMINI_RETRY_BASE_DELAY_MS * 2 ** (attempt - 1), signal);
+    }
+  }
+
+  throw new Error(
+    `Gemini ${stage} failed after ${GEMINI_RETRY_ATTEMPTS} attempts: ${describeGeminiError(lastError)}`,
+    lastError instanceof Error ? { cause: lastError } : undefined,
+  );
 }
 
 function extractGeminiText(payload: unknown): string {
@@ -59,60 +129,76 @@ async function uploadGeminiFile(
   signal?: AbortSignal,
 ): Promise<{ uri: string; mimeType: string }> {
   const data = fs.readFileSync(filePath);
-  const startRes = await fetch(
-    `${uploadBase}/files?key=${encodeURIComponent(apiKey)}`,
-    {
+  return withGeminiRetry('file upload', signal, async (attempt) => {
+    const startRes = await fetch(
+      `${uploadBase}/files?key=${encodeURIComponent(apiKey)}`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Goog-Upload-Protocol': 'resumable',
+          'X-Goog-Upload-Command': 'start',
+          'X-Goog-Upload-Header-Content-Length': String(data.byteLength),
+          'X-Goog-Upload-Header-Content-Type': mimeType,
+        },
+        body: JSON.stringify({
+          file: {
+            display_name: path.basename(filePath),
+          },
+        }),
+        signal,
+      },
+    );
+    if (!startRes.ok) {
+      if (attempt < GEMINI_RETRY_ATTEMPTS) {
+        throw new Error(
+          `Gemini file upload start failed: HTTP ${startRes.status}`,
+        );
+      }
+      const body = await startRes.text().catch(() => '');
+      throw new Error(
+        `Gemini file upload start failed: HTTP ${startRes.status}${body ? ` ${body.slice(0, 200)}` : ''}`,
+      );
+    }
+
+    const uploadUrl = startRes.headers.get('x-goog-upload-url');
+    if (!uploadUrl) {
+      throw new Error('Gemini file upload did not return upload URL');
+    }
+
+    const finalizeRes = await fetch(uploadUrl, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
-        'X-Goog-Upload-Protocol': 'resumable',
-        'X-Goog-Upload-Command': 'start',
-        'X-Goog-Upload-Header-Content-Length': String(data.byteLength),
-        'X-Goog-Upload-Header-Content-Type': mimeType,
+        'Content-Length': String(data.byteLength),
+        'X-Goog-Upload-Offset': '0',
+        'X-Goog-Upload-Command': 'upload, finalize',
       },
-      body: JSON.stringify({
-        file: {
-          display_name: path.basename(filePath),
-        },
-      }),
+      body: data,
       signal,
-    },
-  );
-  if (!startRes.ok) {
-    throw new Error(`Gemini file upload start failed: HTTP ${startRes.status}`);
-  }
+    });
+    if (!finalizeRes.ok) {
+      if (attempt < GEMINI_RETRY_ATTEMPTS) {
+        throw new Error(
+          `Gemini file upload finalize failed: HTTP ${finalizeRes.status}`,
+        );
+      }
+      const body = await finalizeRes.text().catch(() => '');
+      throw new Error(
+        `Gemini file upload finalize failed: HTTP ${finalizeRes.status}${body ? ` ${body.slice(0, 200)}` : ''}`,
+      );
+    }
 
-  const uploadUrl = startRes.headers.get('x-goog-upload-url');
-  if (!uploadUrl) {
-    throw new Error('Gemini file upload did not return upload URL');
-  }
-
-  const finalizeRes = await fetch(uploadUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Length': String(data.byteLength),
-      'X-Goog-Upload-Offset': '0',
-      'X-Goog-Upload-Command': 'upload, finalize',
-    },
-    body: data,
-    signal,
+    const uploaded = (await finalizeRes.json()) as {
+      file?: { uri?: string; mimeType?: string };
+    };
+    if (!uploaded.file?.uri) {
+      throw new Error('Gemini file upload response missing file URI');
+    }
+    return {
+      uri: uploaded.file.uri,
+      mimeType: uploaded.file.mimeType || mimeType,
+    };
   });
-  if (!finalizeRes.ok) {
-    throw new Error(
-      `Gemini file upload finalize failed: HTTP ${finalizeRes.status}`,
-    );
-  }
-
-  const uploaded = (await finalizeRes.json()) as {
-    file?: { uri?: string; mimeType?: string };
-  };
-  if (!uploaded.file?.uri) {
-    throw new Error('Gemini file upload response missing file URI');
-  }
-  return {
-    uri: uploaded.file.uri,
-    mimeType: uploaded.file.mimeType || mimeType,
-  };
 }
 
 async function generateGeminiContent(
@@ -140,36 +226,50 @@ async function generateGeminiContent(
 
   let totalTokens: number | undefined;
   try {
-    const requestStartTime = Date.now();
-    const res = await fetch(
-      `${apiBase}/models/${encodeURIComponent(modelName)}:generateContent?key=${encodeURIComponent(selectedModel.apiKey)}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...(options.systemPrompt
-            ? {
-                systemInstruction: {
-                  parts: [{ text: options.systemPrompt }],
+    let requestStartTime = Date.now();
+    const res = await withGeminiRetry(
+      'generateContent',
+      options.signal,
+      async () => {
+        requestStartTime = Date.now();
+        const response = await fetch(
+          `${apiBase}/models/${encodeURIComponent(modelName)}:generateContent?key=${encodeURIComponent(selectedModel.apiKey)}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              ...(options.systemPrompt
+                ? {
+                    systemInstruction: {
+                      parts: [{ text: options.systemPrompt }],
+                    },
+                  }
+                : {}),
+              ...(options.responseSchema
+                ? {
+                    generationConfig: {
+                      responseMimeType: 'application/json',
+                      responseSchema: options.responseSchema,
+                    },
+                  }
+                : {}),
+              contents: [
+                {
+                  role: 'user',
+                  parts,
                 },
-              }
-            : {}),
-          ...(options.responseSchema
-            ? {
-                generationConfig: {
-                  responseMimeType: 'application/json',
-                  responseSchema: options.responseSchema,
-                },
-              }
-            : {}),
-          contents: [
-            {
-              role: 'user',
-              parts,
-            },
-          ],
-        }),
-        signal: options.signal,
+              ],
+            }),
+            signal: options.signal,
+          },
+        );
+        if (
+          !response.ok &&
+          ([408, 409, 429].includes(response.status) || response.status >= 500)
+        ) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        return response;
       },
     );
     const ttftSeconds = (Date.now() - requestStartTime) / 1000;
