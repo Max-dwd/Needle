@@ -58,6 +58,7 @@ test/outputs/
 .tmp/biliscope/
 biliscope-repo/
 eval/runs/
+eval/data/cases/*/audio.*
 
 # python cache
 .venv/

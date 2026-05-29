@@ -1,0 +1,672 @@
+[00:00-00:01] Yeah.
+[00:25-00:26] Hi, everyone.
+[00:26-00:31] We are so glad you could join us today for The Android Show I/O Edition.
+[00:31-00:36] Android is close to my heart, so it's been exciting to see the ecosystem evolve into
+[00:36-00:38] something much bigger than we could have imagined.
+[00:39-00:41] We owe so much of that to you, the Android community.
+[00:42-00:45] Thank you to the millions of developers and billions
+[00:45-00:48] of users for making Android what it is today.
+[00:48-00:51] Android is a vital part of Google's mission, powering the
+[00:51-00:55] devices people turn to most for information and answers.
+[00:56-00:59] In our agentic Gemini era, devices can do so much more for you.
+[01:00-01:02] We are bringing a new level of intelligence,
+[01:02-01:04] and you'll hear a lot more about that today.
+[01:04-01:07] So, let me turn it over to the president of the
+[01:07-01:09] Android ecosystem, Sameer Samat, to kick things off.
+[01:10-01:13] We'll look forward to seeing you all again at I/O next week.
+[01:14-01:15] It's going to be nuts.
+[01:15-01:16] It's going to be nuts.
+[01:18-01:19] Okay, let's do it.
+[01:21-01:22] Thanks, Sundar.
+[01:23-01:24] Hi, everyone.
+[01:24-01:27] Welcome to The Android Show I/O Edition, your front-row seat
+[01:27-01:30] to all the innovations and breakthroughs coming to Android.
+[01:31-01:35] The momentum we've seen recently has been absolutely incredible.
+[01:35-01:40] Gemini is now available everywhere you need it, across phones, TVs, cars, and more.
+[01:41-01:44] I'm also thrilled about the progress with Google Messages.
+[01:45-01:49] There are now 2.5 billion RCS messages sent every single day.
+[01:50-01:55] And as you might have heard, messages across Android and iOS are more secure
+[01:55-01:58] than ever, with industry-leading end-to-end encryption rolling out.
+[01:59-02:04] But what's most exciting is the number of group chats across platforms has increased
+[02:04-02:09] 116%, because it's 2026, and it shouldn't matter what
+[02:09-02:13] kind of phone you have to text your family and friends.
+[02:13-02:16] And features like Circle to Search are a massive hit.
+[02:16-02:20] Billions of times every month, people are finding their perfect outfit,
+[02:20-02:24] translating content, and discovering new places to travel.
+[02:25-02:27] Circle to Search makes it so easy to get things done.
+[02:28-02:30] It really feels like our phones give us superpowers.
+[02:31-02:35] But the best part is how the technology just fades into the background.
+[02:36-02:38] And that's the theme for our updates this year.
+[02:38-02:42] We're completely upgrading the experience to make your phone more helpful,
+[02:43-02:48] so that you can, well, spend less time looking at it, and spend more time sharing
+[02:48-02:51] your adventures, connecting with friends, and living your life.
+[02:52-02:54] To make this happen, there are three big things we're focused on.
+[02:55-02:58] First, we're transforming Android from an
+[02:58-03:01] operating system into an intelligence system.
+[03:01-03:05] This means deeply understanding the context, anticipating your needs,
+[03:06-03:08] and getting things done on your behalf.
+[03:08-03:13] Second, we're elevating the core Android experience, upgrading things you use every
+[03:13-03:18] day, whether it's expressing yourself or connecting with loved ones, while also
+[03:18-03:21] giving you new ways to manage your screen time.
+[03:22-03:26] And third, we have amazing Android updates beyond the phone.
+[03:26-03:28] Android Auto is getting a whole new look.
+[03:29-03:34] And we're unveiling a bit of a surprise. [Bleep]
+[03:34-03:38] A brand new [censored] category that I cannot wait for you to see.
+[03:39-03:43] Wait, did I just give away the surprise? [Bleep]
+[03:44-03:46] Okay, you can bleep that out though in post, right?
+[03:47-03:52] I mean, stick around until the end for a really nice surprise.
+[03:52-03:54] Mindy, take it away.
+[03:55-03:56] Was that good?
+[03:56-03:58] I feel like it was okay until the end, right?
+[03:59-04:00] Gemini.
+[04:00-04:01] Gemini.
+[04:01-04:02] Gemini.
+[04:02-04:03] I'm supposed to say something funny?
+[04:04-04:05] All right, give it a go.
+[04:06-04:07] Thanks, Sameer.
+[04:07-04:10] Today's devices are packed with incredible tools,
+[04:10-04:13] but they often leave us doing the heavy lifting.
+[04:14-04:17] Between bouncing across apps, digging through emails, and
+[04:17-04:21] constantly managing our technology, we lose precious time.
+[04:22-04:27] We believe our devices should empower a bigger life, not just a busier one.
+[04:27-04:30] So today, we're taking a big leap forward,
+[04:30-04:33] and I'm excited to introduce Gemini Intelligence.
+[04:34-04:39] Gemini Intelligence brings the best of Gemini to our most advanced Android devices.
+[04:40-04:43] By integrating premium hardware and innovative
+[04:43-04:46] software, we've created a new kind of magic.
+[04:46-04:51] An intelligence system that knows what matters to you, helps you stay a step
+[04:51-04:55] ahead, and works proactively to get things done throughout your day.
+[04:55-04:59] It puts real intelligence to work while keeping you in control.
+[04:59-05:02] And it's only available on Android.
+[05:02-05:05] We are bringing Gemini intelligence across the Android ecosystem,
+[05:05-05:09] starting with Samsung Galaxy and Google Pixel later this summer.
+[05:09-05:14] It's one seamless, Gemini Intelligence experience across your phone, your watch,
+[05:14-05:16] your car, and glasses too.
+[05:16-05:17] Let's take a look.
+[05:17-05:19] [music playing]
+[05:25-05:26] [music playing]
+[05:26-05:27] [music playing]
+[05:27-05:29] [music playing]
+[05:29-05:31] [music playing]
+[05:31-05:33] [music playing]
+[05:33-05:37] [music playing]
+[05:51-05:54] [music playing]
+[06:17-06:20] To truly bring this intelligence to life,
+[06:20-06:23] we had to reimagine how it looks and feels.
+[06:23-06:26] Material expressive is now infused with Gemini
+[06:26-06:30] intelligence, and it's not just beautiful, it's functional.
+[06:32-06:35] Gemini intelligence animates with purpose, signaling
+[06:35-06:39] a transition from listening to thinking to creating.
+[06:40-06:45] It's a purposeful evolution designed to guide your focus, not distract from it.
+[06:45-06:47] Let's tell you a little bit more about the product.
+[06:47-06:52] Gemini intelligence is here to automate the tedious stuff, so you don't have to.
+[06:52-06:56] Nailing this kind of seamless automation takes time and care.
+[06:56-06:59] That's why we've spent the past few months fine-tuning
+[06:59-07:04] these capabilities on Galaxy S26 and Pixel 10 devices.
+[07:04-07:09] We've been gathering feedback through a hand selected food and ride share apps.
+[07:09-07:14] Soon, devices with Gemini Intelligence will expand these capabilities,
+[07:14-07:18] helping you get more done across more of your favorite apps.
+[07:18-07:22] Like, take your class syllabus and put the books you'll need in your cart.
+[07:22-07:26] Or snag that front row bike in your favorite spin class.
+[07:26-07:31] Or find floor seats to an upcoming show. And here is where things get really exciting.
+[07:31-07:34] Gemini has multimodal capabilities.
+[07:34-07:38] So I can snap a picture of an interesting brochure, like this one, for a coffee
+[07:38-07:44] tasting tour in Costa Rica, and ask Gemini, find a tour like this on Expedia,
+[07:44-07:46] but make it for a group of six.
+[07:46-07:49] While Gemini is finding the perfect option, I
+[07:49-07:52] can see the progress live from my notifications.
+[07:52-07:58] Gemini will get to work only when I say so, and stops as soon as the task is done.
+[07:58-08:01] Now, sometimes you don't have an app installed on your device.
+[08:02-08:06] But with Gemini and Chrome, you can easily automate tasks
+[08:06-08:09] on the web, expanding what your phone can do for you.
+[08:09-08:13] We're bringing the automation capabilities that we announced earlier this year for
+[08:13-08:18] Chrome Desktop to Android, to help you with things like finding a parking spot,
+[08:18-08:22] updating shipping details, or finding an in-stock item.
+[08:23-08:28] Whether it's in an app or on the web with Chrome, Gemini's powerful automation
+[08:28-08:32] capabilities will help you spend your time on what you really care about.
+[08:33-08:37] And getting stuff done is just one of the ways Gemini Intelligence will simplify
+[08:37-08:41] dozens of daily moments when you turn to your device for help.
+[08:42-08:43] Here's Dieter to tell you some more.
+[08:49-08:51] Mindy just showed how Gemini Intelligence can tackle
+[08:51-08:54] tasks across your apps and the web with Chrome.
+[08:54-08:59] But now let's talk about a universal hassle that we all face, filling out forms.
+[08:59-09:02] And I don't just mean checking out on a store.
+[09:02-09:05] I mean the DMV or insurance forms, the kind of stuff
+[09:05-09:08] that I usually never want to do on a mobile screen.
+[09:08-09:13] So we are evolving the mobile experience with a more intelligent autofill,
+[09:13-09:17] one that can leverage Gemini's personal intelligence to automatically fill in
+[09:17-09:20] those tiny text boxes on your Android apps, including Chrome.
+[09:21-09:22] Here's one that gets me sometimes.
+[09:22-09:26] Filling out information when I book a flight on a new airline.
+[09:26-09:28] I've got my legal name and date of birth memorized
+[09:28-09:31] pretty well, but my passport information?
+[09:31-09:32] Not so much.
+[09:32-09:34] But here's the cool thing.
+[09:34-09:37] That info already exists on my phone.
+[09:37-09:39] I have a picture of my passport in photos.
+[09:40-09:44] And now I don't have to switch apps and dig around to search for it.
+[09:44-09:47] My phone can securely pull that information right into
+[09:47-09:51] the app to fill out the whole form with a single tap.
+[09:51-09:53] It works across the Google ecosystem.
+[09:53-09:56] With Wallet, Gmail, Photos, and more.
+[09:56-10:00] Proactive features that do things like filling out forms for you are amazing.
+[10:00-10:04] But there are times you're going to need to input the text yourself.
+[10:04-10:09] Now Gboard on Android is already an incredibly great keyboard.
+[10:09-10:12] With amazing auto correction and customizability.
+[10:12-10:15] And the fastest and most accurate voice input.
+[10:16-10:20] But the way that we talk isn't the same as what we say when we type.
+[10:20-10:21] At least not for me.
+[10:22-10:27] I tend to go on... with the ums and the ahs and the likes and I repeat myself.
+[10:27-10:31] So here is a new Gemini Intelligence feature to help with that.
+[10:31-10:33] We've been calling it Rambler.
+[10:33-10:37] Which is perfect for me because, you know, I ramble with the ums and the repeating.
+[10:37-10:41] With Rambler, you don't have to worry about getting the words exactly right.
+[10:41-10:44] You can just speak naturally off the top of your head.
+[10:44-10:47] And it takes the important parts and it fits it all together.
+[10:47-10:48] Here, let me show you.
+[10:49-10:52] Let's take this here and I will say...
+[10:53-10:55] Hey, um, do you want to get lunch tomorrow?
+[10:55-10:57] Nah, wait, shoot, I have a thing.
+[10:58-10:59] Let's do Wednesday at Mario's.
+[10:59-11:02] No, actually, um, let's do Amy's Pizza.
+[11:02-11:06] And, yeah, I will let you order the pineapple.
+[11:07-11:09] And Rambler can follow what I'm saying, organize
+[11:09-11:11] it, and turn it into what I wanted to write.
+[11:12-11:15] And this is way cleaner and, dang, it's also really fast.
+[11:15-11:18] I think this is great, but it needs just a little more.
+[11:18-11:20] So I can push this button again and revise it.
+[11:20-11:22] Add a couple of emoji to that.
+[11:23-11:24] Perfect.
+[11:24-11:28] Rambler is also great for people who speak multiple languages.
+[11:28-11:29] And it works in the way that people speak.
+[11:30-11:32] Switching between them in a single conversation.
+[11:32-11:35] Gemini's multilingual model can code switch between
+[11:35-11:37] many languages so you can get that text just right.
+[11:37-11:38] Wait, Dieter, that sounds amazing.
+[11:39-11:40] Can I try?
+[11:39-11:41] Hey, Ruchi, sure, give it a shot.
+[11:41-11:44] Okay, this is a message I'd send my cousins to complain about bedtime.
+[11:44-11:45] Okay.
+[11:46-11:49] My bedtime routine vaise toh kaafi intense hota hai-
+[11:49-11:50] 7.30 p.m.
+[11:50-11:52] sharp, except for Fridays and Saturdays.
+[11:52-11:55] kyunki tab boys ko pata hai ki Mumma thodi chill ho gi.
+[11:56-11:58] Aur phir shuru hoti hain asli masti.
+[11:59-12:00] Wow, that's amazing.
+[12:00-12:02] And really fast, too.
+[12:02-12:03] Can I keep this for a little bit longer?
+[12:04-12:05] Sure.
+[12:04-12:05] Okay, thanks, Dieter.
+[12:06-12:09] Well, I guess it's a good thing I brought a backup demo phone.
+[12:09-12:13] Okay, now let's talk about something that Android has always been really good at.
+[12:13-12:14] Personalization.
+[12:14-12:19] With colors and themes, you have so many ways to make your device truly yours.
+[12:19-12:23] But what if the UI itself could adapt to you?
+[12:23-12:27] With Gemini Intelligence, we're working towards that future with generative UI.
+[12:27-12:30] We're early on, but I wanted to show you just the first piece
+[12:30-12:34] of it, starting with a hallmark of Android personalization.
+[12:34-12:35] Widgets.
+[12:35-12:38] There are so many incredible widgets out there, but the
+[12:38-12:41] team thought, what if people could just make their own?
+[12:41-12:45] So if you ever thought, I wish I had a widget that had this specific bit of info,
+[12:45-12:49] or I wish I could combine this widget and this widget and this widget into one super
+[12:49-12:54] widget, then I think you're going to like this next Gemini Intelligence experience.
+[12:54-12:55] Create my widget.
+[12:55-12:56] Let me show you how to make one.
+[12:57-13:00] I can just describe what I want using natural language.
+[13:00-13:07] So I will go, suggest three meal prep recipes every week that are high in protein.
+[13:07-13:11] And here it goes off to work creating that widget just for me.
+[13:11-13:13] Now, these widgets aren't just for your phone.
+[13:13-13:17] So for example, when I go out on my bike, the only weather
+[13:17-13:22] things that I actually care about are wind speed and rain.
+[13:22-13:23] So I made a widget.
+[13:23-13:24] That shows me just that.
+[13:24-13:27] So I don't have to go digging into a weather app to find it.
+[13:27-13:28] Here, check it out.
+[13:27-13:29] I put it right here on my watch.
+[13:32-13:35] And the custom widget on my phone is now ready to roll.
+[13:35-13:37] So let me just add this to my home screen.
+[13:37-13:40] And then I'm going to resize it so I can see all three recipes.
+[13:40-13:42] And voila, perfect.
+[13:43-13:47] Now here on my home screen, these are just some of the widgets that work for me.
+[13:47-13:49] But what's great about Create My Widget is you're
+[13:49-13:51] going to be able to make the ones that work for you.
+[13:52-13:57] From handling your digital laundry to form-filling superpowers and even building
+[13:57-13:59] personalized UI for you.
+[13:59-14:01] This is just the beginning of how Gemini Intelligence
+[14:01-14:04] is transforming the way that you use your devices.
+[14:04-14:08] And with even more features rolling out later this year, your experience will
+[14:08-14:11] continue to bring more intelligence over time.
+[14:11-14:15] Of course, there is so much more happening on the Android platform.
+[14:15-14:19] We're also rolling out massive updates to the foundational features that you rely on
+[14:19-14:21] every single day.
+[14:21-14:22] Here's Gabby to tell you more.
+[14:28-14:32] Every day, billions of people turn to Android to express themselves,
+[14:32-14:35] find balance, and stay connected.
+[14:35-14:38] With Android 17, we're improving these core
+[14:38-14:41] experiences with new features and upgrades.
+[14:41-14:42] Let's start with expression.
+[14:43-14:45] Now, if you're anything like me, you're always
+[14:45-14:48] the designated photographer for the group.
+[14:48-14:49] And let's be honest.
+[14:49-14:53] It's because Android phones consistently have the best cameras.
+[14:53-14:57] But we know that capturing the photos is is only half the fun.
+[14:57-15:02] World-class devices should deliver world-class experiences that extend all
+[15:02-15:06] the way from that initial snap right through to editing and posting.
+[15:07-15:09] So we've teamed up with Meta to bring the best of
+[15:09-15:13] Instagram to our most advanced Android devices.
+[15:13-15:18] This means you get Ultra HDR capture and playback for colors that pop, built-in
+[15:18-15:22] stabilization for smooth video, and Night Mode
+[15:22-15:25] to get that perfect shot of that dark concert.
+[15:26-15:29] But the biggest upgrade is what happens when you actually hit post.
+[15:29-15:32] Together, we completely optimized how you share.
+[15:32-15:35] Photos and videos are stunningly sharp.
+[15:35-15:38] And your reels and stories load the second you tap them.
+[15:38-15:44] In fact, side-by-side tests confirm that video captured and uploaded from Android
+[15:44-15:50] flagship devices now score the same or better than the leading competitor.
+[15:50-15:53] And for when you need a larger canvas to edit your reels and
+[15:53-15:58] photos, Instagram is now fully optimized for Android tablets.
+[15:58-16:01] When it comes to capturing yourself in the moment,
+[16:01-16:04] we're making it super easy with Screen Reactions.
+[16:04-16:09] Now you can drop your authentic reaction right in front of trending clips,
+[16:09-16:14] that spicy comment section, or even your latest shopping haul.
+[16:14-16:17] Now capturing the moment is only the beginning.
+[16:17-16:21] To make the final edit as effortless as the first shot,
+[16:21-16:24] we're bringing new magic to Instagram's Edits app.
+[16:24-16:26] Exclusively on Android.
+[16:26-16:29] First, we're making it a breeze to improve the quality
+[16:29-16:33] of your old photos and videos with Smart Enhance.
+[16:33-16:36] A single tap reveals breathtaking detail and
+[16:36-16:38] clarity you didn't even know could be there.
+[16:38-16:41] So images go from this...
+[16:42-16:43] to this.
+[16:43-16:46] Now that's officially feedworthy.
+[16:46-16:51] And we're bringing a massive upgrade to the audio experience with sound separation.
+[16:52-16:53] It...
+[16:52-16:57] basically recognizes and separates audio layers like wind, noise, and music.
+[16:57-17:02] So you can boost the sounds you want and strip away the distractions you don't.
+[17:02-17:04] We've been putting these new capabilities to the
+[17:04-17:07] test with one of our own Android friends, Ananya.
+[17:07-17:09] Let's take a look.
+[17:13-17:17] So the shoot was giving, and I feel so lucky to do what I do.
+[17:17-17:20] But honestly, I look forward to really just coming home, getting comfy,
+[17:20-17:24] and catching up with you guys on social media.
+[17:25-17:28] But I've been gatekeeping something.
+[17:28-17:30] I've been working behind the scenes with the
+[17:30-17:32] Android team on testing some creator tools.
+[17:32-17:36] And I have early access.
+[17:36-17:38] And guys, it's a game changer.
+[17:38-17:41] You guys know I love posting throwback photos.
+[17:41-17:42] This?
+[17:42-17:43] This is special.
+[17:43-17:46] And I just love how cute and tiny she looks.
+[17:46-17:50] But I feel like core memories shouldn't be blurry.
+[17:50-17:53] It's like it finds the details.
+[17:53-17:56] The phone remembers the day better than I do.
+[17:56-17:59] Pixel perfect and post.
+[18:01-18:04] You guys keep commenting on my posts saying, where's this Annie?
+[18:04-18:05] Where's this picture taken?
+[18:05-18:09] So today, I'm going to spill the beans on how Annie gets the stand.
+[18:09-18:13] A new Android feature that's coming to Pixel this summer.
+[18:13-18:15] This one is from Goa.
+[18:16-18:19] This is just me chilling with my furry friend.
+[18:19-18:21] And this one is peak 2016.
+[18:21-18:23] Ann-chu Ann-chu, dinner is ready.
+[18:23-18:26] Dad, I'm recording.
+[18:26-18:27] Hello, recording.
+[18:27-18:29] I am Ananya's out-of-this-world-father Chunky.
+[18:29-18:31] See what I have to deal with?
+[18:31-18:32] Bye, Dad.
+[18:33-18:34] Come soon.
+[18:34-18:37] I love sharing my perfectly imperfect life with all of you.
+[18:38-18:40] With a little help from my Android.
+[18:42-18:43] Thanks, Ananya.
+[18:43-18:47] Now, let's talk about another big way we express ourselves on our phone.
+[18:47-18:48] Emoji.
+[18:48-18:50] We send billions of them every day.
+[18:50-18:53] And that includes my favorite, Carl the Turtle.
+[18:53-18:55] Who I will protect with my life.
+[18:56-18:58] But the way we use emoji keeps evolving.
+[18:58-19:03] So, we thought it was time to give Carl and all his friends an upgrade.
+[19:03-19:08] We've hand-refined nearly 4,000 emoji to be richer, more
+[19:08-19:11] delightful, and more true to how you actually express yourself.
+[19:11-19:13] Just look at the difference.
+[19:13-19:18] And they are coming your way later this year on Android devices.
+[19:18-19:19] Starting with Pixel.
+[19:19-19:22] Across popular apps like Gboard, YouTube.
+[19:22-19:23] And Gmail.
+[19:23-19:26] Now, over to Alanna. [Music playing]
+[19:34-19:37] We are so excited about how Android is becoming
+[19:37-19:40] an even better platform for self-expression.
+[19:40-19:41] But we get it.
+[19:41-19:44] Sometimes, our phones can be a lot.
+[19:44-19:45] We've all been there.
+[19:45-19:48] You open your phone just to check the weather.
+[19:48-19:53] And 45 minutes later, you're scrolling with no clue how you got there.
+[19:53-19:57] If you're like me, you've already tried setting app time limits.
+[19:57-19:58] But here's the thing.
+[19:58-20:02] They're just as easy to snooze as they are to set.
+[20:02-20:05] And on the other hand, extreme measures that completely
+[20:05-20:08] lock you out of apps are simply not practical.
+[20:08-20:13] What I need is something in the middle that can stop me from opening apps on
+[20:13-20:17] autopilot and start using them with intention.
+[20:17-20:20] That's why we're introducing Pause Point.
+[20:20-20:23] When I open an app, I've marked as distracting.
+[20:23-20:28] Pause Point gives me a moment of pause for 10 seconds, giving me the time to ask,
+[20:28-20:30] why am I really here?
+[20:30-20:32] During that time, you can take a breath.
+[20:32-20:37] You can pick photos to swipe through that remind you what you'd rather be doing.
+[20:37-20:42] I have photos of my dogs reminding me to get going on our walk.
+[20:42-20:47] You can also set up alternative app suggestions, like an exercise tracker or
+[20:47-20:53] audiobooks, to catch you when boredom triggers those pesky scrolling habits.
+[20:53-20:57] Many of our users say they want stronger controls that help stop them from turning
+[20:57-21:01] off Pause Point so they can better stick to their goals.
+[21:01-21:03] So if you choose, you can have your phone
+[21:03-21:06] set to restart before turning off Pause Point.
+[21:06-21:09] We've learned that a one-size-fits-all solution
+[21:09-21:12] doesn't actually create healthy habits.
+[21:12-21:14] That's why Pause Point gives you options so
+[21:14-21:18] you get to decide what works best for you.
+[21:18-21:20] And that makes a difference.
+[21:20-21:26] We've seen that tools like PausePoint can help people reclaim time every single day.
+[21:26-21:31] And that time, it can add up to a new hobby or an extra brunch with my friends.
+[21:31-21:36] This is just the start, with more digital well-being tools coming later this year.
+[21:36-21:38] Now let's talk about choice.
+[21:38-21:43] Android has always been about choosing what device works best for you.
+[21:43-21:45] Choice is kind of our thing.
+[21:45-21:50] So we're unlocking more ways for you to stay connected with those you care about.
+[21:50-21:55] If you're like me, you've been at family gatherings where you just had to get that
+[21:55-21:59] wedding dance video from your phone to everyone.
+[21:59-22:03] But sharing gets hard when not everybody has the same phone as you.
+[22:03-22:08] That's why we made QuickShare compatible with AirDrop
+[22:08-22:11] for Android phones that have the supporting hardware.
+[22:11-22:14] And we're expanding to more and more this year.
+[22:15-22:19] And if you don't have one of those devices, or maybe grandma doesn't,
+[22:19-22:21] and still want to stay in the loop, WhatsApp
+[22:21-22:25] will be able to share instantly using QuickShare.
+[22:25-22:28] We're also making the choice to switch to Android easier.
+[22:28-22:32] We've overhauled the iOS to Android transfer process.
+[22:32-22:34] So the important stuff moves with you.
+[22:34-22:40] Your passwords, photos, favorite apps, contacts, and even the layout of your home
+[22:40-22:45] screen are all sent wirelessly from your old phone to your new phone.
+[22:45-22:50] This will launch first on Samsung Galaxy and Google Pixel devices later this year.
+[22:50-22:54] So you've been waiting for that perfect moment to switch to Android.
+[22:54-22:55] It's finally here.
+[22:55-22:59] OK, we just covered a lot of ground on how
+[22:59-23:02] we're elevating the core Android experience.
+[23:02-23:05] Powerful new tools for creators, an emoji glow up, and
+[23:05-23:09] digital well-being tools that put you back in control.
+[23:09-23:14] And of course, instant file sharing experiences across phone platforms.
+[23:15-23:19] Plus, there's even more coming to Android 17.
+[23:19-23:22] But Android is so much more than just the phone.
+[23:22-23:27] Here's Guemmy to get you up to speed with everything new in the car. 00:23:27,270 --> 00:23:33,170 [music playing]
+[23:34-23:39] From the very beginning, our mission for Auto has been simple but powerful.
+[23:39-23:43] To make every journey more seamless, safe, and connected.
+[23:43-23:48] In 2026, we're stepping on the gas with the next generation of Android Auto.
+[23:49-23:52] It comes with a stunning new experience, premium
+[23:52-23:54] entertainment, and a more helpful Gemini.
+[23:55-23:58] Modern cars have screens that come in all shapes and sizes.
+[23:58-24:02] Our new experience is tailored to fit any screen.
+[24:02-24:05] It adapts seamlessly to this BMW.
+[24:05-24:07] And just as easily to this MINI.
+[24:08-24:09] This Lucid.
+[24:10-24:11] And to your car too.
+[24:12-24:15] But we didn't just want the experience to fit your car.
+[24:15-24:17] We wanted it to feel like yours.
+[24:17-24:22] Android Auto brings the fluid and personalized design from your phone to your car.
+[24:22-24:25] With expressive fonts, smooth animations, and
+[24:25-24:28] wallpapers that make your dash unique to you.
+[24:28-24:30] We're also introducing Widgets.
+[24:30-24:33] So you have the glanceable information that matters to you.
+[24:33-24:34] Even while actively navigating.
+[24:35-24:38] Personalize your dash with a shortcut to your favorite contacts.
+[24:38-24:40] A one-tap garage door opener.
+[24:40-24:42] A weather overview.
+[24:43-24:44] And more.
+[24:44-24:48] And at the core of the experience, is Immersive Navigation.
+[24:48-24:51] Our biggest update to Google Maps in over a decade.
+[24:51-24:54] Featuring redesigned visuals and more intuitive guidance.
+[24:55-24:58] Your map now comes to life with a vivid 3D view.
+[24:58-25:02] That reflects the buildings, overpasses, and terrain around you.
+[25:03-25:05] It highlights critical road details.
+[25:05-25:06] Like lanes and stop signs.
+[25:06-25:10] Helping you make tricky turns or merges confidently.
+[25:10-25:13] In addition to big, high-definition screens.
+[25:13-25:15] Cars now have comfortable heated seats.
+[25:15-25:18] And the best stereo systems that most of us own.
+[25:18-25:20] They're kind of the perfect personal movie theaters.
+[25:20-25:23] When you're parked or charging.
+[25:23-25:26] That's why we're introducing a premium entertainment experience.
+[25:27-25:29] For the first time, you'll be able to watch
+[25:29-25:31] videos in Android Auto from your favorite apps.
+[25:31-25:32] Like YouTube.
+[25:33-25:36] In crisp 60 frames per second HD video.
+[25:40-25:42] Look for it in supported cars later this year.
+[25:42-25:44] And when it's time to drive.
+[25:44-25:46] Videos don't abruptly stop.
+[25:46-25:49] They seamlessly and safely transition to audio.
+[25:49-25:54] Where you are called from the bench and you step up to the plate of life.
+[25:54-25:56] You better be ready.
+[25:56-26:00] Perfect for continuing to listen to the video podcast you were watching.
+[26:00-26:02] Speaking of audio.
+[26:02-26:04] Android Auto will put you at the center of the music.
+[26:04-26:07] With Dolby Atmos in supported apps and cars.
+[26:07-26:11] In fact, media apps are getting an across-the-board tune-up.
+[26:11-26:14] With sleek visual upgrades coming to many apps.
+[26:14-26:16] Like YouTube Music and Spotify.
+[26:17-26:22] Android Auto's next generation experience doesn't just look and sound incredible.
+[26:22-26:24] It has a more helpful Gemini.
+[26:24-26:28] Gemini is now available in more than 250 million cars that support Android Auto.
+[26:28-26:30] Helping users get more done.
+[26:30-26:32] Brainstorm ideas.
+[26:32-26:34] And learn something new while they're driving.
+[26:34-26:36] And if your phone has Gemini Intelligence.
+[26:36-26:38] It's coming to Android Auto too.
+[26:38-26:42] Let's say I'm on my way to meet my friend Chloe at a new hiking trail.
+[26:42-26:43] I get a message from her
+[26:43-26:45] asking for the address of the trailhead.
+[26:45-26:47] My phone has Magic Queue
+[26:47-26:50] so it can understand the context of her question,
+[26:50-26:52] find the right details in my email and calendar,
+[26:52-26:54] and offer to send her the address.
+[26:54-26:55] All in one tap.
+[26:56-26:57] During the hike
+[26:57-26:59] Chloe and I worked up quite an appetite
+[26:59-27:02] and decided to treat ourselves to fish tacos.
+[27:02-27:03] I can ask Gemini.
+[27:03-27:06] Order my usual tacos on DoorDash for pickup.
+[27:06-27:07] But double it.
+[27:07-27:10] And my favorite dinner will be ready when we arrive.
+[27:11-27:14] And if we choose to enjoy dinner and a show.
+[27:14-27:15] In the parking lot.
+[27:15-27:16] Don't judge us.
+[27:17-27:19] That's the latest for Android Auto.
+[27:19-27:21] Which brings the best of your phone into your car.
+[27:22-27:24] But what if your car were the smart device?
+[27:24-27:26] Cars with Google built in are exactly that.
+[27:27-27:30] Google built in is available in over 100 car models.
+[27:30-27:31] From 16 brands.
+[27:31-27:32] Bringing the best of Google.
+[27:32-27:35] And a massive ecosystem of your favorite apps.
+[27:35-27:37] To run directly on your car screen.
+[27:37-27:38] Like Spotify.
+[27:39-27:40] HBO Max.
+[27:40-27:41] And coming soon.
+[27:41-27:42] Zoom.
+[27:43-27:47] Deep hardware integration in these cars super charges the experience.
+[27:47-27:50] For example, Gemini has started to roll out.
+[27:50-27:53] And can give me answers tailored to my actual car.
+[27:53-27:56] Like what that mysterious symbol is on my dashboard.
+[27:56-28:00] Or whether this big TV box will actually fit in my trunk.
+[28:00-28:02] Because it knows my car's dimensions.
+[28:02-28:05] The box for that 65 inch TV is about 60 inches long.
+[28:05-28:08] With the seats down in the back that should fit nicely.
+[28:10-28:14] And immersive navigation in Google Maps will get even more precise.
+[28:14-28:16] With live lane guidance.
+[28:16-28:18] Working entirely in the car.
+[28:18-28:22] It analyzes the road through your car's front facing camera.
+[28:22-28:23] Showing your exact lane.
+[28:23-28:25] And guiding your next move.
+[28:25-28:29] With Google built in, your favorite apps work in harmony with the car.
+[28:29-28:33] Shifting the entire experience into a higher gear.
+[28:33-28:36] So whether you're parked or on route.
+[28:36-28:38] Running late or running errands.
+[28:38-28:41] Android in your car is transforming every journey.
+[28:41-28:44] Into one that's safer, more connected and a whole lot more fun.
+[28:45-28:47] And when it comes to having fun with Android Auto.
+[28:47-28:51] Whoever that is over there is definitely having a blast.
+[28:51-28:53] Wait, is that?
+[28:54-28:56] I need everything to just work.
+[28:57-28:59] Especially when a million things are going on in my life.
+[28:59-29:01] Which is all the time.
+[29:01-29:04] That's why Android Auto is my get it done partner.
+[29:04-29:06] And it looks fabulous doing it.
+[29:06-29:09] Let me show you a sneak peek of what's coming.
+[29:09-29:11] Technology should feel personal.
+[29:11-29:13] I love being able to customize this beautiful
+[29:13-29:16] dashboard to make it feel like my own space.
+[29:16-29:19] Look, I even made a photo widget of Iconic.
+[29:20-29:24] Everything on the screen, especially the new Google Maps experience is so helpful.
+[29:24-29:26] And gorgeous inside and out.
+[29:26-29:27] Just like me.
+[29:28-29:29] Loves it.
+[29:29-29:31] When I'm between takes, I'm never bored.
+[29:31-29:35] My car can transform into my own private movie theater.
+[29:37-29:41] Checking out Infinite Icon in full HD here in the front seat.
+[29:41-29:42] Now that's hot.
+[29:43-29:44] Oh, it's Carter.
+[29:45-29:47] Text message from Carter.
+[29:47-29:49] Hey babe, excited for date night on Thursday.
+[29:49-29:50] You pick where?
+[29:50-29:53] Handling my schedule so I don't have to.
+[29:53-29:54] Sliving.
+[29:54-29:58] Hey Google, what was that Greek place that my mom texted me a few weeks ago?
+[29:58-30:00] Can you send a message to Carter saying let's go there?
+[30:00-30:01] Sure.
+[30:01-30:03] That message says it's Coastal Taverna.
+[30:03-30:06] Text to Carter saying let's go to Coastal Taverna.
+[30:06-30:07] Should I send it?
+[30:07-30:08] Perf.
+[30:07-30:08] Send it.
+[30:08-30:10] Android Auto does it all.
+[30:10-30:12] So I can get back to my life.
+[30:12-30:15] Now if only Gemini could make the car sparkle.
+[30:16-30:19] Can we make this car more me with pink sparkles?
+[30:19-30:20] Happy to do that for you.
+[30:20-30:22] Here's what I have.
+[30:23-30:26] Loves it. [music playing]
+[30:33-30:37] I feel a little bit like I'm delivering the German even in here.
+[30:39-30:42] So, we promised we'd end the show with a surprise.
+[30:42-30:45] And Paris was a pretty good one.
+[30:45-30:47] But we've got one more for you.
+[30:47-30:51] Over 15 years ago, Google reinvented laptops
+[30:51-30:53] for the cloud-first world with the Chromebook.
+[30:53-30:58] With the shift from operating system to intelligence system,
+[30:58-31:01] we thought it was time for another fundamental reinvention.
+[31:02-31:08] This year, we are taking the best of Android, a modern OS with powerful apps on
+[31:08-31:12] Google Play, and the best of Chrome OS, which comes with the world's most popular
+[31:12-31:15] browser and the biggest library of extensions.
+[31:15-31:20] And they're now bringing them together, creating a new category of laptops that
+[31:20-31:23] are built with Gemini at the core, work seamlessly with the
+[31:23-31:28] devices in your life, and are powered by premium hardware.
+[31:28-31:30] Meet Googlebook.
+[31:30-31:34] Googlebooks are the first laptops designed for Gemini Intelligence from the
+[31:34-31:38] ground up, delivering personal and proactive help at
+[31:38-31:39] Every turn.
+[31:39-31:42] Let me show you what they can do that you
+[31:42-31:44] can't already do with your existing laptop.
+[31:44-31:49] When you open up a Googlebook, you'll see one of the hallmarks of any laptop.
+[31:49-31:51] The good old cursor.
+[31:51-31:55] For something that's everywhere on your laptop, it's surprising that it's really
+[31:55-32:00] gone nowhere since this last big innovation, the right click.
+[32:00-32:05] With Gemini Intelligence, we thought the cursor could be so much more.
+[32:05-32:08] With just a wiggle, you'll see the cursor come alive.
+[32:09-32:13] Now, as I point at things, I get quick, contextual suggestions.
+[32:13-32:15] Check this out.
+[32:15-32:17] Point at a date in this email.
+[32:17-32:20] I can set up some time with my friends,
+[32:20-32:23] draft a reply, or find good spots to meet up.
+[32:23-32:25] Quick, easy, contextual.
+[32:25-32:29] Because this is built with Gemini, it's fully multimodal.
+[32:29-32:32] For example, as I look at a photo of our new
+[32:32-32:36] nursery, I realize the wall looks a tad empty.
+[32:36-32:38] And I want to add a pop of color.
+[32:38-32:41] So let me select this picture of the nursery, and
+[32:41-32:44] then select another image of a wallpaper I like.
+[32:44-32:47] And let's throw in a new crib, too.
+[32:47-32:50] I now have the option to visualize them all together.
+[32:51-32:56] In order to do this on today's laptops, you'd have to right click, save to images,
+[32:56-32:59] upload to a chatbot, and then prompt.
+[32:59-33:04] Instead, your Googlebook can understand the context and immediately get to work.
+[33:04-33:06] That looks like a perfect little nest.
+[33:07-33:08] It's like magic.
+[33:08-33:10] That's why we call it Magic Pointer.
+[33:10-33:14] This is a new, transformative way to bring Gemini's help to your fingertips.
+[33:15-33:16] Quite literally.
+[33:16-33:19] And because you can access it by just wiggling your cursor,
+[33:19-33:24] it's easy to go from idea to I'm done in an instant.
+[33:24-33:27] Speaking of reinventing things, we're also
+[33:27-33:30] bringing Create My Widget to Googlebooks.
+[33:31-33:33] Gemini Intelligence can pull everything I need
+[33:33-33:36] into a single, completely custom-built widget.
+[33:36-33:38] Making the desktop?
+[33:38-33:40] My truly personalized home.
+[33:40-33:41] Let me show you how.
+[33:42-33:46] I'm planning a family reunion in Berlin later this year.
+[33:46-33:52] Now, I can just prompt Gemini to create a widget to keep track of everything for me.
+[33:52-33:56] And in a single click, you'll see it all come together.
+[33:56-34:00] Here's my flight, my hotel information, restaurant
+[34:00-34:03] reservations, and even a countdown so I don't miss it this year.
+[34:03-34:08] Now, Googlebooks can run the most powerful apps on their own.
+[34:08-34:10] But they're also designed from the get-go to
+[34:10-34:13] be the perfect partner to your Android phone.
+[34:13-34:14] We all know this moment.
+[34:14-34:18] You're on your laptop but need to do something quick on your phone.
+[34:18-34:21] Like ordering some food or checking your baby monitor.
+[34:22-34:23] And there goes your focus.
+[34:24-34:26] That's why we've made it possible to access
+[34:26-34:28] your phone apps right on your Googlebook.
+[34:28-34:30] Without ever picking up your phone.
+[34:30-34:33] I've been taking Portuguese lessons on Duolingo.
+[34:33-34:36] And my streak is precious to me.
+[34:37-34:39] So let's make sure I get my daily lesson in.
+[34:39-34:44] I can pop over here and without ever leaving my screen, start it.
+[34:44-34:47] No downloading, no awkward emulated touchscreen controls,
+[34:47-34:50] no digging out my phone from the bottom of my bag.
+[34:50-34:51] It just works.
+[34:51-34:56] This wouldn't be a true laptop demo without pulling up a file browser.
+[34:56-35:00] With Googlebook, we've built in a feature called Quick Access.
+[35:00-35:04] Because my phone is connected to my laptop, I can easily access the files on
+[35:04-35:07] it right from the Googlebook's file browser.
+[35:07-35:11] For those moments when someone sends you a picture or
+[35:11-35:13] in a chat app and you need to attach it to an email.
+[35:13-35:15] These files are just here.
+[35:15-35:16] Alright.
+[35:16-35:21] Our partners at HP, our partners at Dell, at Lenovo, Acer
+[35:21-35:25] and Asus are just as excited as we are about Googlebooks.
+[35:25-35:30] Every Googlebook will be built with premium craftsmanship and materials.
+[35:30-35:33] And they'll come in a variety of shapes and sizes.
+[35:33-35:36] And you'll know it's a Googlebook by the unique Globar.
+[35:36-35:40] A statement both functional and beautiful.
+[35:40-35:41] Let's give you a closer look.
+[35:42-36:42] [Music]
+[36:44-36:48] We can't wait for you to get a chance to try Googlebooks.
+[36:48-36:53] They will be available later this year, so stay tuned for more from us.
+[36:53-36:55] And with that, back to Sameer.
+[36:55-36:56] Thanks, Alex.
+[36:57-36:59] Wow, what a huge day for Android.
+[37:00-37:03] I couldn't be more excited about the launch of Googlebooks.
+[37:03-37:07] It's an amazing opportunity to bring innovation back to laptops.
+[37:07-37:11] Today, we covered so many awesome features that are designed to help you get things
+[37:11-37:15] done, so you can spend time on all the other things you care about.
+[37:16-37:19] With Gemini Intelligence, technology is helping do your digital laundry.
+[37:19-37:24] And new tools like PausePoint make it easier to manage your screen time.
+[37:24-37:28] And Android Auto is getting a major tune-up with a beautiful
+[37:28-37:32] redesigned UI and a whole new entertainment center.
+[37:32-37:36] These updates are coming to devices with Android 17
+[37:36-37:39] this summer, starting with Samsung and Google Pixel.
+[37:39-37:44] Oh, and for all the developers watching, stick around.
+[37:44-37:46] We have a special developer's cut of the
+[37:46-37:50] The Android Show coming up right now, just for you.
+[37:50-37:54] And make sure you join us for even more Android news next week at Google I/O.
+[37:54-37:56] We'll see you then.

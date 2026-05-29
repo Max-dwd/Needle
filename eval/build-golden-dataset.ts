@@ -1,102 +1,74 @@
 #!/usr/bin/env tsx
 import fs from 'fs';
 import path from 'path';
-import Database from 'better-sqlite3';
+import type { EvalSubtitleVideo, SubtitlePayload } from '@/lib/subtitles';
+import {
+  loadEvalConfig,
+  loadRepoEnv,
+  type EvalConfigDataset,
+  type EvalConfigTargetVideo,
+} from './config';
 
-type Platform = 'youtube' | 'bilibili';
-
-interface TargetVideo {
-  id: string;
-  tier: 'short' | 'medium' | 'long';
-  difficulty: 'normal' | 'hard';
-  platform: Platform;
-  videoId: string;
-  url: string;
-  note: string;
-}
-
-interface VideoRow {
-  platform: Platform;
-  video_id: string;
-  title: string | null;
-  duration: string | null;
-  published_at: string | null;
-  channel_name: string | null;
-  subtitle_status: string | null;
-  subtitle_path: string | null;
-  subtitle_language: string | null;
-  subtitle_format: string | null;
-}
-
-interface SubtitlePayload {
-  language?: string;
-  format?: string;
-  text?: string;
-  raw_path?: string;
-  sourceMethod?: string;
-  segmentStyle?: 'coarse' | 'fine';
-  metadata?: Record<string, string | number>;
-  segments?: Array<{
-    start?: number;
-    end?: number;
-    text?: string;
-    speaker?: string;
-  }>;
+interface LiveVideoDetail {
+  title?: string;
+  duration?: string;
+  published_at?: string;
+  channel_name?: string;
+  thumbnail_url?: string;
 }
 
 const DATASET_ID = 'llm-aligner-golden-v1';
 const DATASET_VERSION = 1;
-const DEFAULT_DATA_ROOT = path.resolve(process.cwd(), 'data');
 const DEFAULT_OUTPUT_DIR = path.resolve(process.cwd(), 'eval', 'data');
 
-const TARGETS: TargetVideo[] = [
+const TARGETS: EvalConfigTargetVideo[] = [
   {
-    id: 'short-bilibili-ai-news',
+    id: 'short-youtube-llm-ibm',
     tier: 'short',
     difficulty: 'normal',
-    platform: 'bilibili',
-    videoId: 'BV1HpdBB7ETU',
-    url: 'https://www.bilibili.com/video/BV1HpdBB7ETU',
-    note: '短视频',
+    platform: 'youtube',
+    videoId: '5sLYAQS9sWQ',
+    url: 'https://www.youtube.com/watch?v=5sLYAQS9sWQ',
+    note: 'English short LLM explainer from IBM Technology',
   },
   {
-    id: 'medium-youtube-google-next',
+    id: 'medium-youtube-transformers-3b1b',
     tier: 'medium',
     difficulty: 'normal',
     platform: 'youtube',
-    videoId: 'ouSb6UoJqyc',
-    url: 'https://www.youtube.com/watch?v=ouSb6UoJqyc',
-    note: '中视频',
+    videoId: 'wjZofJX0v4M',
+    url: 'https://www.youtube.com/watch?v=wjZofJX0v4M',
+    note: 'English medium visual transformer explainer from 3Blue1Brown',
   },
   {
-    id: 'long-youtube-world-model',
+    id: 'long-youtube-state-of-gpt',
     tier: 'long',
     difficulty: 'normal',
     platform: 'youtube',
-    videoId: 'SYuSZIIYOfI',
-    url: 'https://www.youtube.com/watch?v=SYuSZIIYOfI',
-    note: '长视频',
+    videoId: 'bZQun8Y4L2A',
+    url: 'https://www.youtube.com/watch?v=bZQun8Y4L2A',
+    note: 'English long technical talk, single primary speaker',
   },
   {
-    id: 'long-hard-youtube-saas-ai',
+    id: 'long-hard-youtube-openai-devday',
     tier: 'long',
     difficulty: 'hard',
     platform: 'youtube',
-    videoId: 'wVHIhiT1Ow0',
-    url: 'https://www.youtube.com/watch?v=wVHIhiT1Ow0',
-    note: '长视频 / 难',
+    videoId: 'U9mJuUkhUzk',
+    url: 'https://www.youtube.com/watch?v=U9mJuUkhUzk',
+    note: 'English long-hard keynote with live pacing, demos, audience audio, and speaker transitions',
   },
 ];
 
 function parseArgs(argv: string[]): {
-  dataRoot: string;
-  outputDir: string;
+  config?: string;
+  outputDir?: string;
+  validateConfig: boolean;
   strict: boolean;
 } {
-  let dataRoot = process.env.DATA_ROOT
-    ? path.resolve(process.env.DATA_ROOT)
-    : DEFAULT_DATA_ROOT;
-  let outputDir = DEFAULT_OUTPUT_DIR;
+  let config: string | undefined;
+  let outputDir: string | undefined;
+  let validateConfig = false;
   let strict = false;
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -111,11 +83,14 @@ function parseArgs(argv: string[]): {
     };
 
     switch (arg) {
-      case '--data-root':
-        dataRoot = path.resolve(next());
+      case '--config':
+        config = next();
         break;
       case '--output-dir':
         outputDir = path.resolve(next());
+        break;
+      case '--validate-config':
+        validateConfig = true;
         break;
       case '--strict':
         strict = true;
@@ -129,45 +104,24 @@ function parseArgs(argv: string[]): {
     }
   }
 
-  return { dataRoot, outputDir, strict };
+  return {
+    ...(config ? { config } : {}),
+    ...(outputDir ? { outputDir } : {}),
+    validateConfig,
+    strict,
+  };
 }
 
 function printHelp(): void {
   console.log(`Usage:
-  npm run eval:golden:build
+  npm run eval:golden:build -- --config eval/config.local.yaml
 
 Options:
-  --data-root <dir>    Needle runtime data root (default: DATA_ROOT or ./data)
+  --config <yaml>     Eval config file (recommended)
   --output-dir <dir>   Golden dataset output directory (default: eval/data)
-  --strict             Exit non-zero if any target subtitle is missing
+  --validate-config    Validate YAML config and exit without fetching live data
+  --strict             Exit non-zero if any target cannot be fetched
 `);
-}
-
-function readVideoRows(dbPath: string): Map<string, VideoRow> {
-  const db = new Database(dbPath, { readonly: true });
-  try {
-    const rows = db
-      .prepare(
-        `
-        SELECT platform,
-               video_id,
-               title,
-               duration,
-               published_at,
-               channel_name,
-               subtitle_status,
-               subtitle_path,
-               subtitle_language,
-               subtitle_format
-        FROM videos
-        WHERE video_id IN (${TARGETS.map(() => '?').join(', ')})
-      `,
-      )
-      .all(...TARGETS.map((target) => target.videoId)) as VideoRow[];
-    return new Map(rows.map((row) => [row.video_id, row]));
-  } finally {
-    db.close();
-  }
 }
 
 function parseDurationSeconds(
@@ -184,31 +138,34 @@ function parseDurationSeconds(
   return parts[0]! * 3600 + parts[1]! * 60 + parts[2]!;
 }
 
-function resolveSubtitlePath(
-  dataRoot: string,
-  row: VideoRow | undefined,
-  target: TargetVideo,
-): string | null {
-  const candidates = [
-    row?.subtitle_path || '',
-    path.join(dataRoot, 'subtitles', target.platform, `${target.videoId}.json`),
-  ].filter(Boolean);
-
-  for (const candidate of candidates) {
-    const resolved = path.isAbsolute(candidate)
-      ? candidate
-      : path.resolve(process.cwd(), candidate);
-    if (fs.existsSync(resolved)) return resolved;
-  }
-  return null;
+function isChineseExpectedLanguage(expectedLanguage?: string): boolean {
+  return Boolean(expectedLanguage?.toLowerCase().startsWith('zh'));
 }
 
-function normalizeSegments(payload: SubtitlePayload) {
+function normalizeReferenceText(
+  text: string,
+  expectedLanguage?: string,
+): string {
+  const normalized = text.trim();
+  if (!isChineseExpectedLanguage(expectedLanguage)) return normalized;
+
+  const firstCjkIndex = normalized.search(/[\u3400-\u9fff]/u);
+  if (firstCjkIndex > 0) return normalized.slice(firstCjkIndex).trim();
+  return normalized;
+}
+
+function normalizeSegments(
+  payload: SubtitlePayload,
+  expectedLanguage?: string,
+) {
   return (payload.segments || [])
     .map((segment) => {
       const start = Number(segment.start);
       const end = Number(segment.end);
-      const text = typeof segment.text === 'string' ? segment.text.trim() : '';
+      const text =
+        typeof segment.text === 'string'
+          ? normalizeReferenceText(segment.text, expectedLanguage)
+          : '';
       if (!Number.isFinite(start) || !Number.isFinite(end) || !text) {
         return null;
       }
@@ -256,75 +213,161 @@ function writeText(filePath: string, value: string): void {
   fs.writeFileSync(filePath, `${value.trim()}\n`, 'utf8');
 }
 
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function buildEvalVideo(
+  target: EvalConfigTargetVideo,
+  detail: LiveVideoDetail | null,
+): EvalSubtitleVideo {
+  return {
+    id: 0,
+    channel_id: 0,
+    platform: target.platform,
+    video_id: target.videoId,
+    title: detail?.title || target.videoId,
+    thumbnail_url: detail?.thumbnail_url || null,
+    published_at: detail?.published_at || null,
+    duration: detail?.duration || null,
+    is_read: 0,
+    is_members_only: 0,
+    access_status: null,
+    availability_status: null,
+    availability_reason: null,
+    availability_checked_at: null,
+    subtitle_path: null,
+    subtitle_language: null,
+    subtitle_format: null,
+    subtitle_status: null,
+    subtitle_error: null,
+    subtitle_last_attempt_at: null,
+    subtitle_retry_count: 0,
+    subtitle_cooldown_until: null,
+    members_only_checked_at: null,
+    created_at: new Date().toISOString(),
+    channel_name: detail?.channel_name || null,
+  };
+}
+
 async function main(): Promise<void> {
+  loadRepoEnv();
   const options = parseArgs(process.argv.slice(2));
-  const dbPath = path.join(options.dataRoot, 'folo.db');
-  const videoRows = readVideoRows(dbPath);
+  const configLoad = options.config
+    ? loadEvalConfig(options.config, { requireApiKey: false })
+    : null;
+  const dataset: EvalConfigDataset = configLoad
+    ? {
+        ...configLoad.config.dataset,
+        outputDir: options.outputDir || configLoad.config.dataset.outputDir,
+      }
+    : {
+        outputDir: options.outputDir || DEFAULT_OUTPUT_DIR,
+        expectedLanguage: 'en',
+        live: { metadata: true, subtitles: true, audio: true },
+        targets: TARGETS,
+      };
+  const outputDir = dataset.outputDir;
+  if (options.validateConfig) {
+    if (!configLoad) {
+      throw new Error('--validate-config requires --config');
+    }
+    console.log(
+      `[ok] eval config ${path.relative(process.cwd(), configLoad.configSource)} targets=${dataset.targets.length} outputDir=${path.relative(process.cwd(), outputDir)}`,
+    );
+    return;
+  }
+
   const generatedAt = new Date().toISOString();
   const cases = [];
   const missing = [];
+  const { fetchYouTubeVideoDetail, fetchBilibiliVideoDetail } =
+    await import('@/lib/fetcher');
+  const { cacheAudioForEval, fetchBrowserSubtitleForEval } =
+    await import('@/lib/subtitles');
 
-  for (const target of TARGETS) {
-    const row = videoRows.get(target.videoId);
-    const subtitlePath = resolveSubtitlePath(options.dataRoot, row, target);
-    if (!row || !subtitlePath) {
-      missing.push({
-        ...target,
-        reason: !row ? 'missing_video_row' : 'missing_local_subtitle',
-        dbSubtitleStatus: row?.subtitle_status || null,
-        dbSubtitlePath: row?.subtitle_path || null,
-        title: row?.title || null,
-        duration: row?.duration || null,
+  for (const target of dataset.targets) {
+    const caseDir = path.join(outputDir, 'cases', target.id);
+    try {
+      const detail = dataset.live.metadata
+        ? target.platform === 'youtube'
+          ? await fetchYouTubeVideoDetail(target.videoId)
+          : await fetchBilibiliVideoDetail(target.videoId)
+        : null;
+      const video = buildEvalVideo(target, detail);
+      if (!dataset.live.subtitles) {
+        throw new Error(
+          'dataset.live.subtitles is false; golden builder needs a live subtitle reference',
+        );
+      }
+      const payload = await fetchBrowserSubtitleForEval(video, {
+        language: target.expectedLanguage || dataset.expectedLanguage,
       });
-      continue;
-    }
+      const cachedAudio = dataset.live.audio
+        ? await cacheAudioForEval(video, caseDir)
+        : null;
+      const expectedLanguage =
+        target.expectedLanguage || dataset.expectedLanguage;
+      const requireManualCaptions =
+        target.requireManualCaptions ?? dataset.requireManualCaptions ?? false;
+      const isAutoGenerated = Number(payload.metadata?.is_auto_generated) === 1;
+      if (expectedLanguage && video.platform === 'youtube') {
+        const actualLanguage = payload.language || 'unknown';
+        if (
+          actualLanguage === 'unknown' ||
+          !actualLanguage
+            .toLowerCase()
+            .startsWith(expectedLanguage.toLowerCase())
+        ) {
+          throw new Error(
+            `expected ${expectedLanguage} subtitles, got ${actualLanguage}`,
+          );
+        }
+      }
+      if (requireManualCaptions && video.platform === 'youtube') {
+        if (isAutoGenerated) {
+          throw new Error(
+            `expected manual subtitles, got auto-generated track ${String(
+              payload.metadata?.track_name || payload.language || 'unknown',
+            )}`,
+          );
+        }
+      }
+      const segments = normalizeSegments(payload, expectedLanguage);
+      if (segments.length === 0) {
+        throw new Error('live subtitle fetch produced zero valid segments');
+      }
 
-    const payload = JSON.parse(
-      fs.readFileSync(subtitlePath, 'utf8'),
-    ) as SubtitlePayload;
-    const segments = normalizeSegments(payload);
-    const text = typeof payload.text === 'string' ? payload.text.trim() : '';
-    const durationSeconds =
-      parseDurationSeconds(row.duration) ||
-      segments.reduce((max, segment) => Math.max(max, segment.end), 0);
-    const maxSegmentSeconds = segments.reduce(
-      (max, segment) => Math.max(max, segment.end - segment.start),
-      0,
-    );
-    const caseDir = path.join(options.outputDir, 'cases', target.id);
-    const goldenJsonPath = path.join(caseDir, 'golden.json');
-    const goldenTxtPath = path.join(caseDir, 'golden.txt');
-    const subtitleText = buildSubtitleText(segments);
+      const text = isChineseExpectedLanguage(expectedLanguage)
+        ? segments.map((segment) => segment.text).join('\n')
+        : typeof payload.text === 'string' && payload.text.trim()
+          ? payload.text.trim()
+          : segments.map((segment) => segment.text).join('\n');
+      const durationSeconds =
+        parseDurationSeconds(video.duration) ||
+        cachedAudio?.durationSeconds ||
+        segments.reduce((max, segment) => Math.max(max, segment.end), 0);
+      const maxSegmentSeconds = segments.reduce(
+        (max, segment) => Math.max(max, segment.end - segment.start),
+        0,
+      );
+      const goldenJsonPath = path.join(caseDir, 'golden.json');
+      const goldenTxtPath = path.join(caseDir, 'golden.txt');
+      const metadataPath = path.join(caseDir, 'metadata.json');
+      const subtitleText = buildSubtitleText(segments);
 
-    const golden = {
-      datasetId: DATASET_ID,
-      datasetVersion: DATASET_VERSION,
-      generatedAt,
-      id: target.id,
-      tier: target.tier,
-      difficulty: target.difficulty,
-      note: target.note,
-      video: {
+      const videoMetadata = {
         platform: target.platform,
         videoId: target.videoId,
         url: target.url,
-        title: row.title,
-        channelName: row.channel_name,
-        duration: row.duration,
+        title: video.title,
+        channelName: video.channel_name,
+        duration: video.duration,
         durationSeconds,
-        publishedAt: row.published_at,
-      },
-      reference: {
-        language: payload.language || row.subtitle_language || 'unknown',
-        format: payload.format || row.subtitle_format || 'unknown',
-        sourceMethod: payload.sourceMethod || null,
-        segmentStyle: payload.segmentStyle || null,
-        sourceSubtitlePath: path.relative(process.cwd(), subtitlePath),
-        rawPath: payload.raw_path || null,
-        text,
-        segments,
-      },
-      stats: {
+        publishedAt: video.published_at,
+        thumbnailUrl: video.thumbnail_url,
+      };
+      const stats = {
         segmentCount: segments.length,
         textCharCount: text.length,
         maxSegmentSeconds: Number(maxSegmentSeconds.toFixed(3)),
@@ -339,27 +382,115 @@ async function main(): Promise<void> {
                 ).toFixed(3),
               )
             : 0,
-      },
-    };
+      };
+      const golden = {
+        datasetId: DATASET_ID,
+        datasetVersion: DATASET_VERSION,
+        generatedAt,
+        id: target.id,
+        tier: target.tier,
+        difficulty: target.difficulty,
+        note: target.note,
+        video: videoMetadata,
+        reference: {
+          language: payload.language || 'unknown',
+          format: payload.format || 'unknown',
+          sourceMethod: payload.sourceMethod || null,
+          segmentStyle: payload.segmentStyle || null,
+          expectedLanguage: expectedLanguage || null,
+          trackName:
+            typeof payload.metadata?.track_name === 'string'
+              ? payload.metadata.track_name
+              : null,
+          isAutoGenerated,
+          textTransform: isChineseExpectedLanguage(expectedLanguage)
+            ? 'strip-leading-latin-before-cjk'
+            : null,
+          source: 'needle-browser-live',
+          text,
+          segments,
+        },
+        stats,
+      };
+      const metadata = {
+        datasetId: DATASET_ID,
+        datasetVersion: DATASET_VERSION,
+        generatedAt,
+        id: target.id,
+        tier: target.tier,
+        difficulty: target.difficulty,
+        note: target.note,
+        video: videoMetadata,
+        golden: {
+          jsonPath: path.relative(process.cwd(), goldenJsonPath),
+          textPath: path.relative(process.cwd(), goldenTxtPath),
+          source: 'needle-browser-live',
+          sourceMethod: payload.sourceMethod || null,
+          expectedLanguage: expectedLanguage || null,
+          language: payload.language || 'unknown',
+          trackName:
+            typeof payload.metadata?.track_name === 'string'
+              ? payload.metadata.track_name
+              : null,
+          isAutoGenerated,
+          segmentCount: segments.length,
+          textCharCount: text.length,
+        },
+        audio: {
+          cachedAudioPath: cachedAudio
+            ? path.relative(process.cwd(), cachedAudio.audioPath)
+            : null,
+          cached: Boolean(cachedAudio),
+          durationSeconds: cachedAudio?.durationSeconds || null,
+          source: cachedAudio ? 'yt-dlp-live' : null,
+        },
+        stats,
+      };
 
-    writeJson(goldenJsonPath, golden);
-    writeText(goldenTxtPath, subtitleText);
-    cases.push({
-      id: target.id,
-      tier: target.tier,
-      difficulty: target.difficulty,
-      platform: target.platform,
-      videoId: target.videoId,
-      url: target.url,
-      title: row.title,
-      duration: row.duration,
-      durationSeconds,
-      segmentCount: segments.length,
-      textCharCount: text.length,
-      sourceSubtitlePath: path.relative(process.cwd(), subtitlePath),
-      goldenJsonPath: path.relative(process.cwd(), goldenJsonPath),
-      goldenTextPath: path.relative(process.cwd(), goldenTxtPath),
-    });
+      writeJson(goldenJsonPath, golden);
+      writeText(goldenTxtPath, subtitleText);
+      writeJson(metadataPath, metadata);
+      cases.push({
+        id: target.id,
+        tier: target.tier,
+        difficulty: target.difficulty,
+        platform: target.platform,
+        videoId: target.videoId,
+        url: target.url,
+        title: video.title,
+        duration: video.duration,
+        durationSeconds,
+        expectedLanguage: expectedLanguage || null,
+        language: payload.language || 'unknown',
+        trackName:
+          typeof payload.metadata?.track_name === 'string'
+            ? payload.metadata.track_name
+            : null,
+        isAutoGenerated,
+        segmentCount: segments.length,
+        textCharCount: text.length,
+        caseDir: path.relative(process.cwd(), caseDir),
+        ...(cachedAudio
+          ? { audioPath: path.relative(process.cwd(), cachedAudio.audioPath) }
+          : {}),
+        goldenJsonPath: path.relative(process.cwd(), goldenJsonPath),
+        goldenTextPath: path.relative(process.cwd(), goldenTxtPath),
+        metadataPath: path.relative(process.cwd(), metadataPath),
+      });
+      console.log(
+        `[ok] ${target.id} segments=${segments.length} chars=${text.length} audio=${
+          cachedAudio
+            ? path.relative(process.cwd(), cachedAudio.audioPath)
+            : 'skipped'
+        }`,
+      );
+    } catch (error) {
+      missing.push({
+        ...target,
+        reason: errorMessage(error),
+      });
+      console.warn(`[missing] ${target.id}: ${errorMessage(error)}`);
+    }
   }
 
   const manifest = {
@@ -367,17 +498,27 @@ async function main(): Promise<void> {
     datasetVersion: DATASET_VERSION,
     generatedAt,
     source: {
-      kind: 'needle-local-subtitles',
-      dataRoot: path.relative(process.cwd(), options.dataRoot) || '.',
-      databasePath: path.relative(process.cwd(), dbPath),
+      kind: 'needle-live-app-interfaces',
+      ...(configLoad
+        ? {
+            configSource: path.relative(process.cwd(), configLoad.configSource),
+            configSnapshot: configLoad.configSnapshot,
+          }
+        : {}),
+      subtitleSource: 'fetchBrowserSubtitleForEval',
+      audioSource: 'cacheAudioForEval',
+      metadataSource: 'fetchYouTubeVideoDetail/fetchBilibiliVideoDetail',
+      live: dataset.live,
+      expectedLanguage: dataset.expectedLanguage || null,
+      requireManualCaptions: dataset.requireManualCaptions || false,
     },
     cases,
     missing,
   };
 
-  writeJson(path.join(options.outputDir, 'manifest.json'), manifest);
+  writeJson(path.join(outputDir, 'manifest.json'), manifest);
   writeText(
-    path.join(options.outputDir, 'README.md'),
+    path.join(outputDir, 'README.md'),
     [
       '# LLM Aligner Golden Dataset',
       '',
@@ -386,18 +527,10 @@ async function main(): Promise<void> {
       `Complete cases: ${cases.length}`,
       `Missing cases: ${missing.length}`,
       '',
-      'See `manifest.json` for case metadata and `cases/*/golden.json` for reference subtitles.',
+      'See `manifest.json` for case metadata and `cases/*/{metadata.json,golden.json,audio.*}` for stable eval inputs.',
     ].join('\n'),
   );
 
-  for (const entry of cases) {
-    console.log(
-      `[ok] ${entry.id} segments=${entry.segmentCount} chars=${entry.textCharCount}`,
-    );
-  }
-  for (const entry of missing) {
-    console.warn(`[missing] ${entry.id}: ${entry.reason}`);
-  }
   if (options.strict && missing.length > 0) {
     process.exitCode = 1;
   }

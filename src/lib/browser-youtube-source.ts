@@ -166,10 +166,18 @@ export async function fetchBrowserYoutubeChannelInfo(
 
 export async function fetchBrowserYoutubeTranscriptRows(
   videoUrlOrId: string,
-  options?: BrowserExecOptions,
+  options?: BrowserExecOptions & { language?: string },
 ): Promise<BrowserSubtitleRow[]> {
+  const language = options?.language?.trim();
   const result = await runBrowserJson(
-    ['youtube', 'transcript', videoUrlOrId, '--mode', 'raw'],
+    [
+      'youtube',
+      'transcript',
+      videoUrlOrId,
+      '--mode',
+      'raw',
+      ...(language ? ['--lang', language] : []),
+    ],
     options,
   );
   if (!Array.isArray(result)) {

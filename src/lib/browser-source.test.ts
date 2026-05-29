@@ -39,9 +39,8 @@ describe('browser source commands', () => {
       },
     ]);
 
-    const { fetchBrowserYoutubeChannelVideos } = await import(
-      './browser-youtube-source'
-    );
+    const { fetchBrowserYoutubeChannelVideos } =
+      await import('./browser-youtube-source');
     await expect(
       fetchBrowserYoutubeChannelVideos('UC123', 10),
     ).resolves.toEqual([
@@ -83,9 +82,8 @@ describe('browser source commands', () => {
       },
     ]);
 
-    const { fetchBrowserYoutubeChannelVideos } = await import(
-      './browser-youtube-source'
-    );
+    const { fetchBrowserYoutubeChannelVideos } =
+      await import('./browser-youtube-source');
     await expect(
       fetchBrowserYoutubeChannelVideos('UC123', 10),
     ).resolves.toEqual([
@@ -120,16 +118,16 @@ describe('browser source commands', () => {
       },
     ]);
 
-    const { fetchBrowserYoutubeChannelVideos } = await import(
-      './browser-youtube-source'
-    );
+    const { fetchBrowserYoutubeChannelVideos } =
+      await import('./browser-youtube-source');
     const results = await fetchBrowserYoutubeChannelVideos('UC123', 10);
     expect(results).toHaveLength(1);
     expect(results[0].published_at).toMatch(/^\d{4}-\d{2}-\d{2}T/);
   });
 
   it('normalizes english relative published_at text via shared helper', async () => {
-    const { normalizePublishedAtValue } = await import('./browser-source-shared');
+    const { normalizePublishedAtValue } =
+      await import('./browser-source-shared');
     expect(normalizePublishedAtValue('29 minutes ago')).toMatch(
       /^\d{4}-\d{2}-\d{2}T/,
     );
@@ -148,9 +146,8 @@ describe('browser source commands', () => {
       },
     ]);
 
-    const { fetchBrowserBilibiliUserVideos } = await import(
-      './browser-bilibili-source'
-    );
+    const { fetchBrowserBilibiliUserVideos } =
+      await import('./browser-bilibili-source');
     await expect(fetchBrowserBilibiliUserVideos('12345', 10)).resolves.toEqual([
       {
         video_id: 'BV1xx411c7mD',
@@ -178,9 +175,8 @@ describe('browser source commands', () => {
       },
     ]);
 
-    const { fetchBrowserBilibiliUserVideos } = await import(
-      './browser-bilibili-source'
-    );
+    const { fetchBrowserBilibiliUserVideos } =
+      await import('./browser-bilibili-source');
     await expect(fetchBrowserBilibiliUserVideos('12345', 10)).resolves.toEqual([
       {
         video_id: 'BVcharge001',
@@ -204,9 +200,8 @@ describe('browser source commands', () => {
       { field: 'duration', value: '125s' },
     ]);
 
-    const { fetchBrowserYoutubeVideoMeta } = await import(
-      './browser-youtube-source'
-    );
+    const { fetchBrowserYoutubeVideoMeta } =
+      await import('./browser-youtube-source');
     await expect(fetchBrowserYoutubeVideoMeta('abc123def45')).resolves.toEqual({
       video_id: 'abc123def45',
       title: 'Example Video',
@@ -229,9 +224,8 @@ describe('browser source commands', () => {
       is_members_only: 0,
     });
 
-    const { fetchBrowserYoutubeVideoMeta } = await import(
-      './browser-youtube-source'
-    );
+    const { fetchBrowserYoutubeVideoMeta } =
+      await import('./browser-youtube-source');
     await fetchBrowserYoutubeVideoMeta('abc123def45');
 
     expect(mockExecFile).toHaveBeenCalledTimes(1);
@@ -252,9 +246,8 @@ describe('browser source commands', () => {
       recentVideos: [],
     });
 
-    const { fetchBrowserYoutubeChannelInfo } = await import(
-      './browser-youtube-source'
-    );
+    const { fetchBrowserYoutubeChannelInfo } =
+      await import('./browser-youtube-source');
     await expect(fetchBrowserYoutubeChannelInfo('UC123')).resolves.toEqual({
       channel_id: 'UC123',
       name: 'Test Channel',
@@ -276,9 +269,8 @@ describe('browser source commands', () => {
       },
     ]);
 
-    const { fetchBrowserYoutubeTranscriptRows } = await import(
-      './browser-youtube-source'
-    );
+    const { fetchBrowserYoutubeTranscriptRows } =
+      await import('./browser-youtube-source');
     await expect(
       fetchBrowserYoutubeTranscriptRows(
         'https://www.youtube.com/watch?v=abc123def45',
@@ -297,6 +289,38 @@ describe('browser source commands', () => {
     ]);
   });
 
+  it('requests the configured youtube transcript language', async () => {
+    mockJsonOnce([
+      {
+        start: '0.0',
+        end: '1.5',
+        text: 'Hello world',
+        language: 'en',
+      },
+    ]);
+
+    const { fetchBrowserYoutubeTranscriptRows } =
+      await import('./browser-youtube-source');
+    await fetchBrowserYoutubeTranscriptRows(
+      'https://www.youtube.com/watch?v=abc123def45',
+      { language: 'en' },
+    );
+
+    expect(mockExecFile).toHaveBeenCalledTimes(1);
+    const args = mockExecFile.mock.calls[0]?.[1] as string[];
+    expect(args.slice(0, 7)).toEqual([
+      'youtube',
+      'transcript',
+      'https://www.youtube.com/watch?v=abc123def45',
+      '--mode',
+      'raw',
+      '--lang',
+      'en',
+    ]);
+    expect(args).toContain('-f');
+    expect(args).toContain('json');
+  });
+
   it('parses bilibili channel info from direct structured output', async () => {
     mockJsonOnce({
       channel_id: '12345',
@@ -304,9 +328,8 @@ describe('browser source commands', () => {
       avatar_url: 'https://img.example/avatar.jpg',
     });
 
-    const { fetchBrowserBilibiliChannelInfo } = await import(
-      './browser-bilibili-source'
-    );
+    const { fetchBrowserBilibiliChannelInfo } =
+      await import('./browser-bilibili-source');
     await expect(fetchBrowserBilibiliChannelInfo('12345')).resolves.toEqual({
       channel_id: '12345',
       name: 'UP 主',
@@ -324,9 +347,8 @@ describe('browser source commands', () => {
       access_status: 'members_only',
     });
 
-    const { fetchBrowserBilibiliVideoMeta } = await import(
-      './browser-bilibili-source'
-    );
+    const { fetchBrowserBilibiliVideoMeta } =
+      await import('./browser-bilibili-source');
     await expect(
       fetchBrowserBilibiliVideoMeta('BV1xx411c7mD'),
     ).resolves.toEqual({
@@ -350,9 +372,8 @@ describe('browser source commands', () => {
       },
     ]);
 
-    const { fetchBrowserBilibiliSubtitleRows } = await import(
-      './browser-bilibili-source'
-    );
+    const { fetchBrowserBilibiliSubtitleRows } =
+      await import('./browser-bilibili-source');
     await expect(
       fetchBrowserBilibiliSubtitleRows('BV1xx411c7mD'),
     ).resolves.toEqual([
@@ -374,9 +395,8 @@ describe('browser source commands', () => {
       },
     ]);
 
-    const { fetchBrowserBilibiliFollowing } = await import(
-      './browser-bilibili-source'
-    );
+    const { fetchBrowserBilibiliFollowing } =
+      await import('./browser-bilibili-source');
     await expect(
       fetchBrowserBilibiliFollowing({
         uid: '12345',

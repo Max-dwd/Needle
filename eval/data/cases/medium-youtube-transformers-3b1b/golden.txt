@@ -1,0 +1,443 @@
+[00:00-00:04] The initials GPT stand for Generative Pretrained Transformer.
+[00:05-00:09] So that first word is straightforward enough, these are bots that generate new text.
+[00:09-00:13] Pretrained refers to how the model went through a process of learning
+[00:13-00:16] from a massive amount of data, and the prefix insinuates that there's
+[00:16-00:20] more room to fine-tune it on specific tasks with additional training.
+[00:20-00:22] But the last word, that's the real key piece.
+[00:23-00:27] A transformer is a specific kind of neural network, a machine learning model,
+[00:27-00:31] and it's the core invention underlying the current boom in AI.
+[00:31-00:35] What I want to do with this video and the following chapters is go through a
+[00:35-00:39] visually-driven explanation for what actually happens inside a transformer.
+[00:39-00:42] We're going to follow the data that flows through it and go step by step.
+[00:43-00:47] There are many different kinds of models that you can build using transformers.
+[00:47-00:50] Some models take in audio and produce a transcript.
+[00:51-00:54] This sentence comes from a model going the other way around,
+[00:54-00:56] producing synthetic speech just from text.
+[00:56-01:01] All those tools that took the world by storm in 2022 like DALL-E and Midjourney
+[01:01-01:05] that take in a text description and produce an image are based on transformers.
+[01:06-01:09] Even if I can't quite get it to understand what a pi creature is supposed to be,
+[01:09-01:13] I'm still blown away that this kind of thing is even remotely possible.
+[01:13-01:18] And the original transformer introduced in 2017 by Google was invented for
+[01:18-01:22] the specific use case of translating text from one language into another.
+[01:22-01:26] But the variant that you and I will focus on, which is the type that
+[01:26-01:31] underlies tools like ChatGPT, will be a model that's trained to take in a piece of text,
+[01:31-01:34] maybe even with some surrounding images or sound accompanying it,
+[01:34-01:38] and produce a prediction for what comes next in the passage.
+[01:38-01:41] That prediction takes the form of a probability distribution
+[01:41-01:43] over many different chunks of text that might follow.
+[01:45-01:47] At first glance, you might think that predicting the next word
+[01:47-01:49] feels like a very different goal from generating new text.
+[01:50-01:52] But once you have a prediction model like this,
+[01:52-01:56] a simple thing you could try to make it generate, a longer piece of text,
+[01:56-01:58] is to give it an initial snippet to work with,
+[01:58-02:02] have it take a random sample from the distribution it just generated,
+[02:02-02:05] append that sample to the text, and then run the whole process again to make
+[02:05-02:09] a new prediction based on all the new text, including what it just added.
+[02:10-02:13] I don't know about you, but it really doesn't feel like this should actually work.
+[02:13-02:17] In this animation, for example, I'm running GPT-2 on my laptop and having it repeatedly
+[02:17-02:22] predict and sample the next chunk of text to generate a story based on the seed text.
+[02:22-02:26] The story just doesn't actually really make that much sense.
+[02:26-02:31] But if I swap it out for API calls to GPT-3 instead, which is the same basic model,
+[02:31-02:35] just much bigger, suddenly almost magically we do get a sensible story,
+[02:35-02:40] one that even seems to infer that a pi creature would live in a land of math and
+[02:40-02:41] computation.
+[02:41-02:44] This process here of repeated prediction and sampling is essentially
+[02:44-02:47] what's happening when you interact with ChatGPT,
+[02:47-02:50] or any of these other large language models, and you see them producing
+[02:50-02:51] one word at a time.
+[02:52-02:55] In fact, one feature that I would very much enjoy is the ability to
+[02:55-02:59] see the underlying distribution for each new word that it chooses.
+[03:03-03:06] Let's kick things off with a very high level preview
+[03:06-03:08] of how data flows through a transformer.
+[03:08-03:11] We will spend much more time motivating and interpreting and expanding
+[03:11-03:14] on the details of each step, but in broad strokes,
+[03:14-03:18] when one of these chatbots generates a given word, here's what's going on under the hood.
+[03:19-03:22] First, the input is broken up into a bunch of little pieces.
+[03:22-03:26] These pieces are called tokens, and in the case of text these tend to be
+[03:26-03:29] words or little pieces of words or other common character combinations.
+[03:30-03:34] If images or sound are involved, then tokens could be little
+[03:34-03:37] patches of that image or little chunks of that sound.
+[03:37-03:42] Each one of these tokens is then associated with a vector, meaning some list of numbers,
+[03:42-03:45] which is meant to somehow encode the meaning of that piece.
+[03:45-03:50] If you think of these vectors as giving coordinates in some very high dimensional space,
+[03:50-03:53] words with similar meanings tend to land on vectors that are
+[03:53-03:54] close to each other in that space.
+[03:55-03:58] This sequence of vectors then passes through an operation that's
+[03:58-04:01] known as an attention block, and this allows the vectors to talk to
+[04:01-04:04] each other and pass information back and forth to update their values.
+[04:04-04:08] For example, the meaning of the word model in the phrase "a machine learning
+[04:08-04:11] model" is different from its meaning in the phrase "a fashion model".
+[04:12-04:15] The attention block is what's responsible for figuring out which
+[04:15-04:19] words in context are relevant to updating the meanings of which other words,
+[04:19-04:21] and how exactly those meanings should be updated.
+[04:22-04:25] And again, whenever I use the word meaning, this is
+[04:25-04:28] somehow entirely encoded in the entries of those vectors.
+[04:29-04:32] After that, these vectors pass through a different kind of operation,
+[04:32-04:35] and depending on the source that you're reading this will be referred
+[04:35-04:38] to as a multi-layer perceptron or maybe a feed-forward layer.
+[04:38-04:40] And here the vectors don't talk to each other,
+[04:40-04:42] they all go through the same operation in parallel.
+[04:43-04:45] And while this block is a little bit harder to interpret,
+[04:45-04:49] later on we'll talk about how the step is a little bit like asking a long list
+[04:49-04:53] of questions about each vector, and then updating them based on the answers
+[04:53-04:54] to those questions.
+[04:54-04:58] All of the operations in both of these blocks look like a
+[04:58-05:01] giant pile of matrix multiplications, and our primary job is
+[05:01-05:05] going to be to understand how to read the underlying matrices.
+[05:06-05:10] I'm glossing over some details about some normalization steps that happen in between,
+[05:10-05:12] but this is after all a high-level preview.
+[05:13-05:17] After that, the process essentially repeats, you go back and forth
+[05:17-05:20] between attention blocks and multi-layer perceptron blocks,
+[05:20-05:24] until at the very end the hope is that all of the essential meaning
+[05:24-05:28] of the passage has somehow been baked into the very last vector in the sequence.
+[05:28-05:33] We then perform a certain operation on that last vector that produces a probability
+[05:33-05:37] distribution over all possible tokens, all possible little chunks of text that might
+[05:37-05:38] come next.
+[05:38-05:42] And like I said, once you have a tool that predicts what comes next
+[05:42-05:45] given a snippet of text, you can feed it a little bit of seed text and
+[05:45-05:49] have it repeatedly play this game of predicting what comes next,
+[05:49-05:53] sampling from the distribution, appending it, and then repeating over and over.
+[05:53-05:57] Some of you in the know may remember how long before ChatGPT came into the scene,
+[05:57-06:00] this is what early demos of GPT-3 looked like,
+[06:00-06:04] you would have it autocomplete stories and essays based on an initial snippet.
+[06:05-06:09] To make a tool like this into a chatbot, the easiest starting point is to have a
+[06:09-06:13] little bit of text that establishes the setting of a user interacting with a
+[06:13-06:17] helpful AI assistant, what you would call the system prompt,
+[06:17-06:21] and then you would use the user's initial question or prompt as the first bit of
+[06:21-06:25] dialogue, and then you have it start predicting what such a helpful AI assistant
+[06:25-06:26] would say in response.
+[06:27-06:30] There is more to say about an added step of training that's required
+[06:30-06:33] to make this work well, but at a high level this is the idea.
+[06:35-06:39] In this chapter, you and I are going to expand on the details of what happens at the very
+[06:39-06:42] beginning of the network, at the very end of the network,
+[06:42-06:46] and I also want to spend a lot of time reviewing some important bits of background
+[06:46-06:50] knowledge, things that would have been second nature to any machine learning engineer by
+[06:50-06:52] the time transformers came around.
+[06:53-06:56] If you're comfortable with that background knowledge and a little impatient,
+[06:56-06:58] you could probably feel free to skip to the next chapter,
+[06:58-07:00] which is going to focus on the attention blocks,
+[07:00-07:02] generally considered the heart of the transformer.
+[07:03-07:06] After that, I want to talk more about these multi-layer perceptron blocks,
+[07:06-07:11] how training works, and a number of other details that will have been skipped up to
+[07:11-07:12] that point.
+[07:12-07:16] For broader context, these videos are additions to a mini-series about deep learning,
+[07:16-07:18] and it's okay if you haven't watched the previous ones,
+[07:18-07:22] I think you can do it out of order, but before diving into transformers specifically,
+[07:22-07:27] I do think it's worth making sure that we're on the same page about the basic premise
+[07:27-07:28] and structure of deep learning.
+[07:29-07:33] At the risk of stating the obvious, this is one approach to machine learning,
+[07:33-07:37] which describes any model where you're using data to somehow determine how a model
+[07:37-07:38] behaves.
+[07:39-07:42] What I mean by that is, let's say you want a function that takes in
+[07:42-07:44] an image and it produces a label describing it,
+[07:44-07:48] or our example of predicting the next word given a passage of text,
+[07:48-07:51] or any other task that seems to require some element of intuition
+[07:51-07:52] and pattern recognition.
+[07:53-07:57] We almost take this for granted these days, but the idea with machine learning is that
+[07:57-08:02] rather than trying to explicitly define a procedure for how to do that task in code,
+[08:02-08:05] which is what people would have done in the earliest days of AI,
+[08:05-08:09] instead you set up a very flexible structure with tunable parameters,
+[08:09-08:11] like a bunch of knobs and dials, and then, somehow,
+[08:11-08:16] you use many examples of what the output should look like for a given input to tweak
+[08:16-08:19] and tune the values of those parameters to mimic this behavior.
+[08:19-08:24] For example, maybe the simplest form of machine learning is linear regression,
+[08:24-08:27] where your inputs and outputs are each single numbers,
+[08:27-08:30] something like the square footage of a house and its price,
+[08:30-08:34] and what you want is to find a line of best fit through this data, you know,
+[08:34-08:36] to predict future house prices.
+[08:37-08:40] That line is described by two continuous parameters,
+[08:40-08:43] say the slope and the y-intercept, and the goal of linear
+[08:43-08:48] regression is to determine those parameters to closely match the data.
+[08:48-08:52] Needless to say, deep learning models get much more complicated.
+[08:52-08:57] GPT-3, for example, has not two, but 175 billion parameters.
+[08:58-09:01] But here's the thing, it's not a given that you can create some giant
+[09:01-09:05] model with a huge number of parameters without it either grossly
+[09:05-09:09] overfitting the training data or being completely intractable to train.
+[09:10-09:13] Deep learning describes a class of models that in the
+[09:13-09:16] last couple decades have proven to scale remarkably well.
+[09:16-09:19] What unifies them is that they all use the same training algorithm,
+[09:19-09:22] it's called backpropagation, we talked about it in previous chapters,
+[09:22-09:26] and the context that I want you to have as we go in is that in order for this
+[09:26-09:30] training algorithm to work well at scale, these models have to follow a certain
+[09:30-09:31] specific format.
+[09:31-09:36] And if you know this format going in, it helps to explain many of the choices for how a
+[09:36-09:40] transformer processes language, which otherwise run the risk of feeling kinda arbitrary.
+[09:41-09:43] First, whatever kind of model you're making, the
+[09:43-09:46] input has to be formatted as an array of real numbers.
+[09:46-09:50] This could simply mean a list of numbers, it could be a two-dimensional array,
+[09:50-09:53] or very often you deal with higher dimensional arrays,
+[09:53-09:56] where the general term used is tensor.
+[09:56-10:00] You often think of that input data as being progressively transformed into many
+[10:00-10:04] distinct layers, where again, each layer is always structured as some kind of
+[10:04-10:08] array of real numbers, until you get to a final layer which you consider the output.
+[10:09-10:13] For example, the final layer in our text processing model is a list of numbers
+[10:13-10:17] representing the probability distribution for all possible next tokens.
+[10:17-10:22] In deep learning, these model parameters are almost always referred to as weights,
+[10:22-10:25] and this is because a key feature of these models is that the only way these
+[10:25-10:29] parameters interact with the data being processed is through weighted sums.
+[10:30-10:32] You also sprinkle some non-linear functions throughout,
+[10:32-10:34] but they won't depend on parameters.
+[10:35-10:38] Typically, though, instead of seeing the weighted sums all naked
+[10:38-10:41] and written out explicitly like this, you'll instead find them
+[10:41-10:45] packaged together as various components in a matrix vector product.
+[10:46-10:50] It amounts to saying the same thing, if you think back to how matrix vector
+[10:50-10:54] multiplication works, each component in the output looks like a weighted sum.
+[10:54-10:58] It's just often conceptually cleaner for you and me to think
+[10:58-11:01] about matrices that are filled with tunable parameters that
+[11:01-11:05] transform vectors that are drawn from the data being processed.
+[11:06-11:10] For example, those 175 billion weights in GPT-3 are
+[11:10-11:14] organized into just under 28,000 distinct matrices.
+[11:14-11:17] Those matrices in turn fall into eight different categories,
+[11:17-11:21] and what you and I are going to do is step through each one of those categories to
+[11:21-11:22] understand what that type does.
+[11:23-11:27] As we go through, I think it's kind of fun to reference the specific
+[11:27-11:31] numbers from GPT-3 to count up exactly where those 175 billion come from.
+[11:31-11:34] Even if nowadays there are bigger and better models,
+[11:34-11:37] this one has a certain charm as the first large-language
+[11:37-11:40] model to really capture the world's attention outside of ML communities.
+[11:41-11:44] Also, practically speaking, companies tend to keep much tighter
+[11:44-11:46] lips around the specific numbers for more modern networks.
+[11:47-11:50] I just want to set the scene going in, that as you peek under the
+[11:50-11:53] hood to see what happens inside a tool like ChatGPT,
+[11:53-11:57] almost all of the actual computation looks like matrix vector multiplication.
+[11:57-12:01] There's a little bit of a risk getting lost in the sea of billions of numbers,
+[12:01-12:05] but you should draw a very sharp distinction in your mind between
+[12:05-12:08] the weights of the model, which I'll always color in blue or red,
+[12:08-12:11] and the data being processed, which I'll always color in gray.
+[12:12-12:16] The weights are the actual brains, they are the things learned during training,
+[12:16-12:17] and they determine how it behaves.
+[12:18-12:22] The data being processed simply encodes whatever specific input is
+[12:22-12:26] fed into the model for a given run, like an example snippet of text.
+[12:27-12:31] With all of that as foundation, let's dig into the first step of this text processing
+[12:31-12:35] example, which is to break up the input into little chunks and turn those chunks into
+[12:35-12:36] vectors.
+[12:37-12:39] I mentioned how those chunks are called tokens,
+[12:39-12:41] which might be pieces of words or punctuation,
+[12:41-12:44] but every now and then in this chapter and especially in the next one,
+[12:44-12:48] I'd like to just pretend that it's broken more cleanly into words.
+[12:48-12:51] Because we humans think in words, this will just make it much
+[12:51-12:54] easier to reference little examples and clarify each step.
+[12:55-12:59] The model has a predefined vocabulary, some list of all possible words,
+[12:59-13:03] say 50,000 of them, and the first matrix that we'll encounter,
+[13:03-13:07] known as the embedding matrix, has a single column for each one of these words.
+[13:08-13:13] These columns are what determines what vector each word turns into in that first step.
+[13:15-13:18] We label it W_E, and like all the matrices we see,
+[13:18-13:22] its values begin random, but they're going to be learned based on data.
+[13:23-13:27] Turning words into vectors was common practice in machine learning long before
+[13:27-13:30] transformers, but it's a little weird if you've never seen it before,
+[13:30-13:33] and it sets the foundation for everything that follows,
+[13:33-13:35] so let's take a moment to get familiar with it.
+[13:36-13:39] We often call this embedding a word, which invites you to think of these
+[13:39-13:43] vectors very geometrically as points in some high dimensional space.
+[13:44-13:48] Visualizing a list of three numbers as coordinates for points in 3D space would
+[13:48-13:51] be no problem, but word embeddings tend to be much much higher dimensional.
+[13:52-13:55] In GPT-3 they have 12,288 dimensions, and as you'll see,
+[13:55-14:00] it matters to work in a space that has a lot of distinct directions.
+[14:01-14:05] In the same way that you could take a two-dimensional slice through a 3D space
+[14:05-14:08] and project all the points onto that slice, for the sake of animating word
+[14:08-14:12] embeddings that a simple model is giving me, I'm going to do an analogous
+[14:12-14:16] thing by choosing a three-dimensional slice through this very high dimensional space,
+[14:16-14:20] and projecting the word vectors down onto that and displaying the results.
+[14:21-14:25] The big idea here is that as a model tweaks and tunes its weights to determine
+[14:25-14:28] how exactly words get embedded as vectors during training,
+[14:28-14:33] it tends to settle on a set of embeddings where directions in the space have a
+[14:33-14:34] kind of semantic meaning.
+[14:34-14:37] For the simple word-to-vector model I'm running here,
+[14:37-14:42] if I run a search for all the words whose embeddings are closest to that of tower,
+[14:42-14:45] you'll notice how they all seem to give very similar tower-ish vibes.
+[14:46-14:48] And if you want to pull up some Python and play along at home,
+[14:48-14:51] this is the specific model that I'm using to make the animations.
+[14:51-14:54] It's not a transformer, but it's enough to illustrate the
+[14:54-14:57] idea that directions in the space can carry semantic meaning.
+[14:58-15:02] A very classic example of this is how if you take the difference between
+[15:02-15:05] the vectors for woman and man, something you would visualize as a
+[15:05-15:09] little vector in the space connecting the tip of one to the tip of the other,
+[15:09-15:13] it's very similar to the difference between king and queen.
+[15:15-15:18] So let's say you didn't know the word for a female monarch,
+[15:18-15:22] you could find it by taking king, adding this woman minus man direction,
+[15:22-15:25] and searching for the embedding closest to that point.
+[15:27-15:28] At least, kind of.
+[15:28-15:31] Despite this being a classic example for the model I'm playing with,
+[15:31-15:35] the true embedding of queen is actually a little farther off than this would suggest,
+[15:35-15:39] presumably because the way queen is used in training data is not merely a feminine
+[15:39-15:40] version of king.
+[15:41-15:45] When I played around, family relations seemed to illustrate the idea much better.
+[15:46-15:50] The point is, it looks like during training the model found it advantageous to
+[15:50-15:54] choose embeddings such that one direction in this space encodes gender information.
+[15:56-16:00] Another example is that if you take the embedding of Italy,
+[16:00-16:04] and you subtract the embedding of Germany, and add that to the embedding of Hitler,
+[16:04-16:08] you get something very close to the embedding of Mussolini.
+[16:08-16:13] It's as if the model learned to associate some directions with Italian-ness,
+[16:13-16:15] and others with WWII axis leaders.
+[16:16-16:19] Maybe my favorite example in this vein is how in some models,
+[16:19-16:24] if you take the difference between Germany and Japan, and add it to sushi,
+[16:24-16:26] you end up very close to bratwurst.
+[16:27-16:30] Also in playing this game of finding nearest neighbors,
+[16:30-16:33] I was very pleased to see how close cat was to both beast and monster.
+[16:34-16:37] One bit of mathematical intuition that's helpful to have in mind,
+[16:37-16:40] especially for the next chapter, is how the dot product of two
+[16:40-16:43] vectors can be thought of as a way to measure how well they align.
+[16:44-16:47] Computationally, dot products involve multiplying all the
+[16:47-16:51] corresponding components and then adding the results, which is good,
+[16:51-16:54] since so much of our computation has to look like weighted sums.
+[16:55-17:00] Geometrically, the dot product is positive when vectors point in similar directions,
+[17:00-17:03] it's zero if they're perpendicular, and it's negative whenever
+[17:03-17:05] they point in opposite directions.
+[17:06-17:09] For example, let's say you were playing with this model,
+[17:09-17:14] and you hypothesize that the embedding of cats minus cat might represent a sort of
+[17:14-17:17] plurality direction in this space.
+[17:17-17:20] To test this, I'm going to take this vector and compute its dot
+[17:20-17:23] product against the embeddings of certain singular nouns,
+[17:23-17:27] and compare it to the dot products with the corresponding plural nouns.
+[17:27-17:30] If you play around with this, you'll notice that the plural ones
+[17:30-17:33] do indeed seem to consistently give higher values than the singular ones,
+[17:33-17:36] indicating that they align more with this direction.
+[17:37-17:41] It's also fun how if you take this dot product with the embeddings of the words one,
+[17:41-17:44] two, three, and so on, they give increasing values,
+[17:44-17:49] so it's as if we can quantitatively measure how plural the model finds a given word.
+[17:50-17:53] Again, the specifics for how words get embedded is learned using data.
+[17:54-17:57] This embedding matrix, whose columns tell us what happens to each word,
+[17:57-17:59] is the first pile of weights in our model.
+[18:00-18:04] Using the GPT-3 numbers, the vocabulary size specifically is 50,257,
+[18:04-18:09] and again, technically this consists not of words per se, but of tokens.
+[18:10-18:14] The embedding dimension is 12,288, and multiplying those
+[18:14-18:17] tells us this consists of about 617 million weights.
+[18:18-18:20] Let's go ahead and add this to a running tally,
+[18:20-18:23] remembering that by the end we should count up to 175 billion.
+[18:25-18:28] In the case of transformers, you really want to think of the vectors
+[18:28-18:32] in this embedding space as not merely representing individual words.
+[18:32-18:36] For one thing, they also encode information about the position of that word,
+[18:36-18:39] which we'll talk about later, but more importantly,
+[18:39-18:42] you should think of them as having the capacity to soak in context.
+[18:43-18:47] A vector that started its life as the embedding of the word king, for example,
+[18:47-18:51] might progressively get tugged and pulled by various blocks in this network,
+[18:51-18:55] so that by the end it points in a much more specific and nuanced direction that
+[18:55-18:58] somehow encodes that it was a king who lived in Scotland,
+[18:58-19:01] and who had achieved his post after murdering the previous king,
+[19:01-19:04] and who's being described in Shakespearean language.
+[19:05-19:07] Think about your own understanding of a given word.
+[19:08-19:11] The meaning of that word is clearly informed by the surroundings,
+[19:11-19:15] and sometimes this includes context from a long distance away,
+[19:15-19:19] so in putting together a model that has the ability to predict what word comes next,
+[19:19-19:23] the goal is to somehow empower it to incorporate context efficiently.
+[19:24-19:27] To be clear, in that very first step, when you create the array of
+[19:27-19:30] vectors based on the input text, each one of those is simply plucked
+[19:30-19:33] out of the embedding matrix, so initially each one can only encode
+[19:33-19:36] the meaning of a single word without any input from its surroundings.
+[19:37-19:41] But you should think of the primary goal of this network that it flows through
+[19:41-19:45] as being to enable each one of those vectors to soak up a meaning that's much
+[19:45-19:48] more rich and specific than what mere individual words could represent.
+[19:49-19:52] The network can only process a fixed number of vectors at a time,
+[19:52-19:54] known as its context size.
+[19:54-19:57] For GPT-3 it was trained with a context size of 2048,
+[19:57-20:02] so the data flowing through the network always looks like this array of 2048 columns,
+[20:02-20:05] each of which has 12,000 dimensions.
+[20:05-20:08] This context size limits how much text the transformer can
+[20:08-20:11] incorporate when it's making a prediction of the next word.
+[20:12-20:15] This is why long conversations with certain chatbots,
+[20:15-20:18] like the early versions of ChatGPT, often gave the feeling of
+[20:18-20:22] the bot kind of losing the thread of conversation as you continued too long.
+[20:23-20:25] We'll go into the details of attention in due time,
+[20:25-20:28] but skipping ahead I want to talk for a minute about what happens at the very end.
+[20:29-20:31] Remember, the desired output is a probability
+[20:31-20:34] distribution over all tokens that might come next.
+[20:35-20:37] For example, if the very last word is Professor,
+[20:37-20:40] and the context includes words like Harry Potter,
+[20:40-20:43] and immediately preceding we see least favorite teacher,
+[20:43-20:47] and also if you give me some leeway by letting me pretend that tokens simply
+[20:47-20:51] look like full words, then a well-trained network that had built up knowledge
+[20:51-20:55] of Harry Potter would presumably assign a high number to the word Snape.
+[20:56-20:57] This involves two different steps.
+[20:58-21:03] The first one is to use another matrix that maps the very last vector in that
+[21:03-21:07] context to a list of 50,000 values, one for each token in the vocabulary.
+[21:08-21:12] Then there's a function that normalizes this into a probability distribution,
+[21:12-21:15] it's called softmax and we'll talk more about it in just a second,
+[21:15-21:19] but before that it might seem a little bit weird to only use this last embedding
+[21:19-21:23] to make a prediction, when after all in that last step there are thousands of
+[21:23-21:28] other vectors in the layer just sitting there with their own context-rich meanings.
+[21:28-21:32] This has to do with the fact that in the training process it turns out to be
+[21:32-21:36] much more efficient if you use each one of those vectors in the final layer
+[21:36-21:40] to simultaneously make a prediction for what would come immediately after it.
+[21:40-21:43] There's a lot more to be said about training later on,
+[21:43-21:45] but I just want to call that out right now.
+[21:45-21:49] This matrix is called the Unembedding matrix and we give it the label WU.
+[21:50-21:53] Again, like all the weight matrices we see, its entries begin at random,
+[21:53-21:55] but they are learned during the training process.
+[21:56-21:59] Keeping score on our total parameter count, this Unembedding
+[21:59-22:02] matrix has one row for each word in the vocabulary,
+[22:02-22:05] and each row has the same number of elements as the embedding dimension.
+[22:06-22:10] It's very similar to the embedding matrix, just with the order swapped,
+[22:10-22:13] so it adds another 617 million parameters to the network,
+[22:13-22:16] meaning our count so far is a little over a billion,
+[22:16-22:20] a small but not wholly insignificant fraction of the 175 billion
+[22:20-22:21] we'll end up with in total.
+[22:22-22:24] As the very last mini-lesson for this chapter,
+[22:24-22:26] I want to talk more about this softmax function,
+[22:26-22:30] since it makes another appearance for us once we dive into the attention blocks.
+[22:31-22:36] The idea is that if you want a sequence of numbers to act as a probability distribution,
+[22:36-22:39] say a distribution over all possible next words,
+[22:39-22:44] then each value has to be between 0 and 1, and you also need all of them to add up to 1.
+[22:45-22:49] However, if you're playing the deep learning game where everything you do looks like
+[22:49-22:54] matrix-vector multiplication, the outputs you get by default don't abide by this at all.
+[22:55-22:57] The values are often negative, or much bigger than 1,
+[22:57-22:59] and they almost certainly don't add up to 1.
+[23:00-23:04] Softmax is the standard way to turn an arbitrary list of numbers
+[23:04-23:08] into a valid distribution in such a way that the largest values end up closest to 1,
+[23:08-23:11] and the smaller values end up very close to 0.
+[23:11-23:13] That's all you really need to know.
+[23:13-23:17] But if you're curious, the way it works is to first raise e to the power
+[23:17-23:21] of each of the numbers, which means you now have a list of positive values,
+[23:21-23:25] and then you can take the sum of all those positive values and divide each
+[23:25-23:29] term by that sum, which normalizes it into a list that adds up to 1.
+[23:30-23:34] You'll notice that if one of the numbers in the input is meaningfully bigger than the
+[23:34-23:37] rest, then in the output the corresponding term dominates the distribution,
+[23:37-23:42] so if you were sampling from it you'd almost certainly just be picking the maximizing
+[23:42-23:43] input.
+[23:42-23:47] But it's softer than just picking the max in the sense that when other values
+[23:47-23:50] are similarly large, they also get meaningful weight in the distribution,
+[23:50-23:54] and everything changes continuously as you continuously vary the inputs.
+[23:55-23:59] In some situations, like when ChatGPT is using this distribution to create a next word,
+[23:59-24:04] there's room for a little bit of extra fun by adding a little extra spice into this
+[24:04-24:08] function, with a constant T thrown into the denominator of those exponents.
+[24:09-24:14] We call it the temperature, since it vaguely resembles the role of temperature in
+[24:14-24:18] certain thermodynamics equations, and the effect is that when T is larger,
+[24:18-24:22] you give more weight to the lower values, meaning the distribution is a little bit
+[24:22-24:26] more uniform, and if T is smaller, then the bigger values will dominate more
+[24:26-24:31] aggressively, where in the extreme, setting T equal to zero means all of the weight
+[24:31-24:32] goes to maximum value.
+[24:33-24:37] For example, I'll have GPT-3 generate a story with the seed text,
+[24:37-24:42] "once upon a time there was A", but I'll use different temperatures in each case.
+[24:43-24:48] Temperature zero means that it always goes with the most predictable word,
+[24:48-24:52] and what you get ends up being a trite derivative of Goldilocks.
+[24:53-24:56] A higher temperature gives it a chance to choose less likely words,
+[24:56-24:57] but it comes with a risk.
+[24:58-25:01] In this case, the story starts out more originally,
+[25:01-25:06] about a young web artist from South Korea, but it quickly degenerates into nonsense.
+[25:06-25:10] Technically speaking, the API doesn't actually let you pick a temperature bigger than 2.
+[25:11-25:15] There's no mathematical reason for this, it's just an arbitrary constraint imposed
+[25:15-25:19] to keep their tool from being seen generating things that are too nonsensical.
+[25:19-25:24] So if you're curious, the way this animation is actually working is I'm taking the
+[25:24-25:27] 20 most probable next tokens that GPT-3 generates,
+[25:27-25:29] which seems to be the maximum they'll give me,
+[25:29-25:32] and then I tweak the probabilities based on an exponent of 1/5.
+[25:33-25:37] As another bit of jargon, in the same way that you might call the components of
+[25:37-25:42] the output of this function probabilities, people often refer to the inputs as logits,
+[25:42-25:46] or some people say logits, some people say logits, I'm gonna say logits.
+[25:46-25:50] So for instance, when you feed in some text, you have all these word embeddings
+[25:50-25:53] flow through the network, and you do this final multiplication with the
+[25:53-25:58] unembedding matrix, machine learning people would refer to the components in that raw,
+[25:58-26:01] unnormalized output as the logits for the next word prediction.
+[26:03-26:06] A lot of the goal with this chapter was to lay the foundations for
+[26:06-26:10] understanding the attention mechanism, Karate Kid wax-on-wax-off style.
+[26:10-26:14] You see, if you have a strong intuition for word embeddings, for softmax,
+[26:14-26:19] for how dot products measure similarity, and also the underlying premise that
+[26:19-26:23] most of the calculations have to look like matrix multiplication with matrices
+[26:23-26:27] full of tunable parameters, then understanding the attention mechanism,
+[26:27-26:32] this cornerstone piece in the whole modern boom in AI, should be relatively smooth.
+[26:32-26:34] For that, come join me in the next chapter.
+[26:36-26:38] As I'm publishing this, a draft of that next chapter
+[26:38-26:41] is available for review by Patreon supporters.
+[26:41-26:44] A final version should be up in public in a week or two,
+[26:44-26:47] it usually depends on how much I end up changing based on that review.
+[26:47-26:49] In the meantime, if you want to dive into attention,
+[26:49-26:52] and if you want to help the channel out a little bit, it's there waiting.
