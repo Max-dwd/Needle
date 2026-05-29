@@ -150,15 +150,12 @@ async function uploadGeminiFile(
       },
     );
     if (!startRes.ok) {
-      if (attempt < GEMINI_RETRY_ATTEMPTS) {
-        throw new Error(
-          `Gemini file upload start failed: HTTP ${startRes.status}`,
-        );
-      }
       const body = await startRes.text().catch(() => '');
-      throw new Error(
-        `Gemini file upload start failed: HTTP ${startRes.status}${body ? ` ${body.slice(0, 200)}` : ''}`,
-      );
+      const message = `Gemini file upload start failed: HTTP ${startRes.status}${body ? ` ${body.slice(0, 500)}` : ''}`;
+      if (attempt < GEMINI_RETRY_ATTEMPTS) {
+        throw new Error(message);
+      }
+      throw new Error(message);
     }
 
     const uploadUrl = startRes.headers.get('x-goog-upload-url');
@@ -177,15 +174,12 @@ async function uploadGeminiFile(
       signal,
     });
     if (!finalizeRes.ok) {
-      if (attempt < GEMINI_RETRY_ATTEMPTS) {
-        throw new Error(
-          `Gemini file upload finalize failed: HTTP ${finalizeRes.status}`,
-        );
-      }
       const body = await finalizeRes.text().catch(() => '');
-      throw new Error(
-        `Gemini file upload finalize failed: HTTP ${finalizeRes.status}${body ? ` ${body.slice(0, 200)}` : ''}`,
-      );
+      const message = `Gemini file upload finalize failed: HTTP ${finalizeRes.status}${body ? ` ${body.slice(0, 500)}` : ''}`;
+      if (attempt < GEMINI_RETRY_ATTEMPTS) {
+        throw new Error(message);
+      }
+      throw new Error(message);
     }
 
     const uploaded = (await finalizeRes.json()) as {
@@ -267,7 +261,10 @@ async function generateGeminiContent(
           !response.ok &&
           ([408, 409, 429].includes(response.status) || response.status >= 500)
         ) {
-          throw new Error(`HTTP ${response.status}`);
+          const body = await response.text().catch(() => '');
+          throw new Error(
+            `HTTP ${response.status}${body ? ` ${body.slice(0, 500)}` : ''}`,
+          );
         }
         return response;
       },

@@ -7,9 +7,20 @@ import { DEFAULT_FORCED_ALIGNER_MODEL_ID } from './subtitle-llm-aligner-settings
 
 const execFileAsync = promisify(execFile);
 
-const MLX_FORCED_ALIGNER_BIN = (
-  process.env.MLX_FORCED_ALIGNER_BIN || 'mlx_forced_aligner'
-).trim();
+function getDefaultForcedAlignerBin(): string {
+  const repoWrapper = path.resolve(
+    process.cwd(),
+    'scripts',
+    'mlx_forced_aligner_wrapper.py',
+  );
+  return fs.existsSync(repoWrapper) ? repoWrapper : 'mlx_forced_aligner';
+}
+
+function getMlxForcedAlignerBin(): string {
+  return (
+    process.env.MLX_FORCED_ALIGNER_BIN || getDefaultForcedAlignerBin()
+  ).trim();
+}
 const FORCED_ALIGNER_REMOTE_URL = (
   process.env.FORCED_ALIGNER_REMOTE_URL || ''
 ).trim();
@@ -206,7 +217,8 @@ export async function getForcedAlignerStatus(
   }
 
   try {
-    await execFileAsync(MLX_FORCED_ALIGNER_BIN, ['--help'], {
+    const alignerBin = getMlxForcedAlignerBin();
+    await execFileAsync(alignerBin, ['--help'], {
       signal: AbortSignal.timeout(10_000),
       maxBuffer: 512 * 1024,
     } as Parameters<typeof execFileAsync>[2]);
@@ -214,7 +226,7 @@ export async function getForcedAlignerStatus(
     let version: string | null = null;
     try {
       const versionResult = await execFileAsync(
-        MLX_FORCED_ALIGNER_BIN,
+        alignerBin,
         ['--version'],
         {
           signal: AbortSignal.timeout(10_000),
@@ -231,7 +243,7 @@ export async function getForcedAlignerStatus(
     const status: MlxForcedAlignerStatus = {
       available: true,
       runtime: 'local',
-      binPath: MLX_FORCED_ALIGNER_BIN,
+      binPath: alignerBin,
       version,
       checkedAt,
     };
@@ -241,7 +253,7 @@ export async function getForcedAlignerStatus(
     const status: MlxForcedAlignerStatus = {
       available: false,
       runtime: 'local',
-      binPath: MLX_FORCED_ALIGNER_BIN,
+      binPath: getMlxForcedAlignerBin(),
       version: null,
       checkedAt,
       error: readExecError(error),
@@ -390,7 +402,7 @@ export async function runForcedAligner(
   );
 
   await execFileAsync(
-    MLX_FORCED_ALIGNER_BIN,
+    getMlxForcedAlignerBin(),
     [
       '--audio',
       audioPath,

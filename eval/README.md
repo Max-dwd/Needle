@@ -44,17 +44,18 @@ and viewed without the extension.
 cp eval/config.example.yaml eval/config.local.yaml
 ```
 
-5. Put required secrets and local tool paths in the repo-root `.env.local`.
+5. Put required secrets and any local tool path overrides in the repo-root `.env.local`.
 
 The YAML chooses the provider with `model.protocol`, `model.endpoint`, and
-`model.model`; `.env.local` only stores secrets and machine-local paths.
+`model.model`; `.env.local` only stores secrets and optional machine-local path overrides.
 
 ```env
 # .env.example
 NEEDLE_EVAL_API_KEY=replace-with-your-provider-key
-MLX_FORCED_ALIGNER_BIN=./scripts/mlx_forced_aligner_wrapper.py
 FFMPEG_BIN=ffmpeg
 FFPROBE_BIN=ffprobe
+# Optional: defaults to ./scripts/mlx_forced_aligner_wrapper.py when present.
+MLX_FORCED_ALIGNER_BIN=./scripts/mlx_forced_aligner_wrapper.py
 ```
 
 6. In `eval/config.local.yaml`, point `apiKeyEnv` at the key name above:
@@ -63,7 +64,7 @@ FFPROBE_BIN=ffprobe
 model:
   protocol: gemini
   endpoint: https://generativelanguage.googleapis.com/v1beta
-  model: gemini-3.1-flash-lite
+  model: gemini-2.5-flash-lite
   apiKeyEnv: NEEDLE_EVAL_API_KEY
 ```
 
@@ -108,7 +109,7 @@ npm run eval:ui -- --port 4174
 ## Eval Results
 
 Snapshot: 12 configured cases from `eval/config.example.yaml`, generated on
-2026-05-26 with `gemini-3.1-flash-lite`. The latest recorded run passed 10 of
+2026-05-26 with `gemini-2.5-flash-lite`. The latest recorded run passed 10 of
 12 quality gates.
 
 Precision and recall are reported as eval proxies because the current harness

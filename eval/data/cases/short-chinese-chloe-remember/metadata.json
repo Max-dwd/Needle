@@ -1,7 +1,7 @@
 {
   "datasetId": "llm-aligner-golden-v1",
   "datasetVersion": 1,
-  "generatedAt": "2026-05-26T17:34:22.893Z",
+  "generatedAt": "2026-05-29T04:20:25.928Z",
   "id": "short-chinese-chloe-remember",
   "tier": "short",
   "difficulty": "normal",
@@ -32,7 +32,7 @@
   "audio": {
     "cachedAudioPath": "eval/data/cases/short-chinese-chloe-remember/audio.mp3",
     "cached": true,
-    "durationSeconds": 550.378667,
+    "durationSeconds": 550.498685,
     "source": "yt-dlp-live"
   },
   "stats": {

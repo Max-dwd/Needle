@@ -173,6 +173,7 @@ MLX_WHISPER_BIN=mlx_whisper
 WHISPER_MODEL_ID=mlx-community/whisper-base-mlx-q4
 FORCED_ALIGNER_RUNTIME=local
 FORCED_ALIGNER_REMOTE_URL=http://host.docker.internal:8766
+# Optional: defaults to ./scripts/mlx_forced_aligner_wrapper.py when present
 MLX_FORCED_ALIGNER_BIN=./scripts/mlx_forced_aligner_wrapper.py
 FORCED_ALIGNER_MODEL_ID=mlx-community/Qwen3-ForcedAligner-0.6B-8bit
 
@@ -229,7 +230,7 @@ python3.13 -m venv .venv
 
 Then:
 
-1. Set `MLX_FORCED_ALIGNER_BIN=./scripts/mlx_forced_aligner_wrapper.py` in `.env.local` if it is not already there.
+1. `MLX_FORCED_ALIGNER_BIN` is optional for normal repo-local runs; Needle defaults to `./scripts/mlx_forced_aligner_wrapper.py` when that file exists. Set it only to use a custom aligner executable.
 2. Keep or override `FORCED_ALIGNER_MODEL_ID`; the default is `mlx-community/Qwen3-ForcedAligner-0.6B-8bit`.
 3. Keep `FORCED_ALIGNER_RUNTIME=local` when the Next.js app runs directly on macOS. Use `FORCED_ALIGNER_RUNTIME=remote` and `FORCED_ALIGNER_REMOTE_URL=http://host.docker.internal:8766` when the app runs in Docker and the aligner sidecar runs on the host.
 4. Open Settings → Subtitles, enable **LLM transcription + local alignment**, and click the forced aligner environment check. Needle calls `/api/settings/forced-aligner-status`.
