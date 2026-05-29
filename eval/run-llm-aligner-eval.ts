@@ -9,6 +9,7 @@ import {
 import type {
   LlmAlignerEvalDefaults,
   LlmAlignerEvalExperiment,
+  LlmAlignerEvalResult,
 } from './llm-aligner-pipeline';
 
 interface ManifestFile {
@@ -298,6 +299,46 @@ function buildConfigManifest(
   };
 }
 
+function formatDurationMs(value: number | undefined): string {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return 'n/a';
+  if (value < 1000) return `${Math.round(value)}ms`;
+  return `${Number((value / 1000).toFixed(1))}s`;
+}
+
+function compactMessage(value: string, maxLength = 180): string {
+  const compact = value.replace(/\s+/g, ' ').trim();
+  return compact.length > maxLength
+    ? `${compact.slice(0, maxLength - 3)}...`
+    : compact;
+}
+
+function getFirstChunkError(result: LlmAlignerEvalResult): string | null {
+  for (const chunk of result.chunks) {
+    if (chunk.error) return compactMessage(chunk.error);
+  }
+  return null;
+}
+
+function getRunFailureReason(result: LlmAlignerEvalResult): string | null {
+  const { summary } = result;
+  if (
+    summary.chunkCount > 0 &&
+    summary.transcribeFailedCount === summary.chunkCount
+  ) {
+    return `all ${summary.chunkCount} chunks failed transcription`;
+  }
+  if (summary.transcribeFailedCount > 0) {
+    return `${summary.transcribeFailedCount}/${summary.chunkCount} chunks failed transcription`;
+  }
+  if (summary.chunkCount > 0 && summary.interpolatedCount === summary.chunkCount) {
+    return `all ${summary.chunkCount} chunks used interpolated aligner fallback`;
+  }
+  if (result.qualityGateResult && !result.qualityGateResult.passed) {
+    return 'quality gate failed';
+  }
+  return null;
+}
+
 async function main(): Promise<void> {
   loadRepoEnv();
 
@@ -333,15 +374,25 @@ async function main(): Promise<void> {
   for (const entry of results) {
     if (entry.ok) {
       const { result } = entry;
+      const runFailureReason = getRunFailureReason(result);
+      if (runFailureReason) failed += 1;
       const quality = result.quality
         ? ` ncer=${result.quality.text.normalizedCharErrorRate} coverage=${result.quality.text.coverage} startMae=${result.quality.timing.startMaeSeconds ?? 'n/a'}s endMae=${result.quality.timing.endMaeSeconds ?? 'n/a'}s`
         : '';
       const qualityGate = result.qualityGateResult
         ? ` gate=${result.qualityGateResult.passed ? 'pass' : 'fail'}`
         : '';
-      console.log(
-        `[ok] ${result.id} segments=${result.summary.segmentCount} chunks=${result.summary.chunkCount} fallback=${result.summary.fallbackRatio}${quality}${qualityGate} out=${result.outputDir}`,
-      );
+      const diagnostics = ` transcribeFailed=${result.summary.transcribeFailedCount}/${result.summary.chunkCount} interpolated=${result.summary.interpolatedCount}/${result.summary.chunkCount} transcribe=${formatDurationMs(result.phaseTiming.transcribeDurationMs)} aligner=${formatDurationMs(result.phaseTiming.alignerDurationMs)}`;
+      const firstError = getFirstChunkError(result);
+      const failure = runFailureReason
+        ? ` reason="${runFailureReason}"${firstError ? ` firstError="${firstError}"` : ''}`
+        : '';
+      const line = `[${runFailureReason ? 'failed' : 'ok'}] ${result.id} segments=${result.summary.segmentCount} chunks=${result.summary.chunkCount} fallback=${result.summary.fallbackRatio}${diagnostics}${quality}${qualityGate}${failure} out=${result.outputDir}`;
+      if (runFailureReason) {
+        console.error(line);
+      } else {
+        console.log(line);
+      }
     } else {
       failed += 1;
       console.error(`[failed] ${entry.id}: ${entry.error}`);
