@@ -18,7 +18,7 @@ quality.
 npm install
 ```
 
-1. Install the local forced-aligner runtime:
+2. Install the local forced-aligner runtime:
 
 ```bash
 python3.13 -m venv .venv
@@ -26,13 +26,25 @@ python3.13 -m venv .venv
 .venv/bin/python -m pip install mlx-audio mlx-forced-aligner
 ```
 
-1. Copy the eval config and edit the video targets, provider, and model:
+3. Prepare the Needle Browser runtime and Chrome extension. This is required
+when the golden builder fetches live browser captions or audio.
+
+```bash
+npm run browser:prepare
+```
+
+Then open `chrome://extensions`, enable Developer mode, click Load unpacked,
+and select `browser-bridge/extension`. If the extension is already loaded and
+up to date, you can skip this step. Existing `eval/data` cases can be evaluated
+and viewed without the extension.
+
+4. Copy the eval config and edit the video targets, provider, and model:
 
 ```bash
 cp eval/config.example.yaml eval/config.local.yaml
 ```
 
-1. Put required secrets and local tool paths in the repo-root `.env.local`.
+5. Put required secrets and local tool paths in the repo-root `.env.local`.
 
 The YAML chooses the provider with `model.protocol`, `model.endpoint`, and
 `model.model`; `.env.local` only stores secrets and machine-local paths.
@@ -45,7 +57,7 @@ FFMPEG_BIN=ffmpeg
 FFPROBE_BIN=ffprobe
 ```
 
-1. In `eval/config.local.yaml`, point `apiKeyEnv` at the key name above:
+6. In `eval/config.local.yaml`, point `apiKeyEnv` at the key name above:
 
 ```yaml
 model:
@@ -55,7 +67,7 @@ model:
   apiKeyEnv: NEEDLE_EVAL_API_KEY
 ```
 
-1. Validate the config before running live fetches or eval jobs:
+7. Validate the config before running live fetches or eval jobs:
 
 ```bash
 npm run eval:llm-aligner -- --config eval/config.local.yaml --validate-config
@@ -129,30 +141,24 @@ Known failures:
 ## Pipeline Stages
 
 1. Golden dataset build: fetch video metadata, trusted browser captions, and
-
 audio for configured videos. This creates stable case directories so later runs
 can compare against the same references.
 
-1. Audio chunking: split long audio into smaller chunks. This keeps LLM audio
-
+2. Audio chunking: split long audio into smaller chunks. This keeps LLM audio
 requests manageable and makes retries/debugging cheaper.
 
-1. LLM transcription: send each audio chunk to the configured multimodal model.
-
+3. LLM transcription: send each audio chunk to the configured multimodal model.
 This stage is used because the target pipeline must work even when platform
 captions are missing or insufficient.
 
-1. Forced alignment: align the transcript text back to audio with a local MLX
-
+4. Forced alignment: align the transcript text back to audio with a local MLX
 forced aligner. This stage gives word/segment timing instead of relying on the
 LLM to invent timestamps.
 
-1. Quality scoring: compare generated subtitles against golden captions with
-
+5. Quality scoring: compare generated subtitles against golden captions with
 text coverage, normalized character error rate, segment count ratio, and
 timestamp MAE/P95. This makes pipeline changes measurable instead of judged by
 manual inspection alone.
 
-1. Artifact viewer: inspect saved runs from `eval/runs` without starting long
-
+6. Artifact viewer: inspect saved runs from `eval/runs` without starting long
 eval jobs from the UI. This keeps generation, logging, and review separate.
