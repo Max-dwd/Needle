@@ -10,49 +10,110 @@
     <header class="topbar">
       <div>
         <div class="eyebrow">Needle Eval</div>
-        <h1>Subtitle Evaluation Artifacts</h1>
+        <h1>Subtitle Evaluation Dashboard</h1>
       </div>
-      <button id="refresh" type="button" title="Reload artifacts">
-        <span>Refresh</span>
-      </button>
+      <div class="topbar-actions">
+        <label id="pipeline-field" title="Subtitle pipeline to run">
+          <span class="pipeline-label">Pipeline</span>
+          <select id="pipeline-select">
+            <option value="llm-aligner">llm-aligner (forced align)</option>
+            <option value="gemini-fallback">gemini-fallback (LLM timestamps)</option>
+          </select>
+        </label>
+        <button id="run-all" type="button" title="Run the whole golden set">
+          <span>Run all</span>
+        </button>
+        <button id="refresh" type="button" title="Reload artifacts">
+          <span>Refresh</span>
+        </button>
+      </div>
     </header>
 
     <div id="error" class="error" hidden></div>
 
     <div class="layout">
       <aside class="sidebar">
+        <section class="add-video">
+          <h2>Add Video</h2>
+          <form id="add-video-form" autocomplete="off">
+            <input
+              id="video-url"
+              type="text"
+              placeholder="YouTube or Bilibili URL"
+              required
+            />
+            <div class="field-row">
+              <select id="video-tier" title="Tier">
+                <option value="short">short</option>
+                <option value="medium">medium</option>
+                <option value="long">long</option>
+              </select>
+              <select id="video-difficulty" title="Difficulty">
+                <option value="normal">normal</option>
+                <option value="hard">hard</option>
+              </select>
+              <input
+                id="video-language"
+                type="text"
+                placeholder="lang (e.g. en, zh)"
+              />
+            </div>
+            <input id="video-note" type="text" placeholder="note (optional)" />
+            <button id="submit-url" type="submit">Build &amp; run</button>
+          </form>
+          <p class="hint">
+            Adds the video to a generated <code>config.adhoc.yaml</code>, fetches
+            its golden captions, then runs the pipeline. No manual config edits.
+          </p>
+        </section>
+
         <section>
-          <h2>Runs</h2>
+          <h2>Run History</h2>
           <div id="runs" class="list"></div>
-        </section>
-        <section>
-          <h2>Cases</h2>
-          <div id="cases" class="case-list"></div>
-        </section>
-        <section>
-          <h2>Pipelines</h2>
-          <div id="pipelines" class="chips"></div>
         </section>
       </aside>
 
       <main class="content">
+        <section id="jobs" class="jobs" hidden></section>
+
+        <section class="overview">
+          <div class="overview-head">
+            <h2>Golden Set Overview</h2>
+            <span id="overview-meta" class="overview-meta"></span>
+          </div>
+          <div class="overview-table">
+            <div class="overview-row overview-head-row">
+              <span>Case</span>
+              <span class="cell-platform">Platform</span>
+              <span class="cell-gate">Gate</span>
+              <span class="num">Coverage</span>
+              <span class="num">NCER</span>
+              <span class="num">Start MAE</span>
+              <span class="num">Segments</span>
+              <span class="cell-run">Actions</span>
+            </div>
+            <div id="overview-body"></div>
+          </div>
+        </section>
+
         <section id="run-head" class="run-head empty">
           <div>
             <div class="meta">No run selected</div>
             <h2>Run artifacts will appear here</h2>
-            <p>Run the CLI harness, then refresh this viewer.</p>
+            <p>Run a case from the overview, or pick an existing run.</p>
           </div>
         </section>
 
         <section id="metrics" class="metrics"></section>
         <section id="timing" class="timing"></section>
-        <section id="alignment-summary" class="alignment-summary"></section>
+
+        <section id="alignment-summary" class="diff-toolbar" hidden></section>
 
         <section class="table">
           <div class="table-head">
             <span>Time</span>
-            <span>Golden</span>
-            <span>Generated</span>
+            <span>Golden <em>reference</em></span>
+            <span>Generated <em>hypothesis</em></span>
             <span>Status</span>
           </div>
           <div id="pairs"></div>

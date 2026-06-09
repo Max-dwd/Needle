@@ -65,11 +65,13 @@ function parseArgs(argv: string[]): {
   outputDir?: string;
   validateConfig: boolean;
   strict: boolean;
+  cases: string[];
 } {
   let config: string | undefined;
   let outputDir: string | undefined;
   let validateConfig = false;
   let strict = false;
+  const cases: string[] = [];
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
@@ -88,6 +90,10 @@ function parseArgs(argv: string[]): {
         break;
       case '--output-dir':
         outputDir = path.resolve(next());
+        break;
+      case '--case':
+      case '--case-id':
+        cases.push(next());
         break;
       case '--validate-config':
         validateConfig = true;
@@ -109,6 +115,7 @@ function parseArgs(argv: string[]): {
     ...(outputDir ? { outputDir } : {}),
     validateConfig,
     strict,
+    cases,
   };
 }
 
@@ -119,6 +126,9 @@ function printHelp(): void {
 Options:
   --config <yaml>     Eval config file (recommended)
   --output-dir <dir>   Golden dataset output directory (default: eval/data)
+  --case <id>          Build only this case id and merge it into the existing
+                       manifest (repeatable). Without --case, all targets are
+                       rebuilt and the manifest is overwritten.
   --validate-config    Validate YAML config and exit without fetching live data
   --strict             Exit non-zero if any target cannot be fetched
 `);
@@ -268,6 +278,21 @@ async function main(): Promise<void> {
         targets: TARGETS,
       };
   const outputDir = dataset.outputDir;
+
+  const selectedCaseIds = new Set(options.cases);
+  if (selectedCaseIds.size > 0) {
+    const knownIds = new Set(dataset.targets.map((target) => target.id));
+    const unknown = options.cases.filter((id) => !knownIds.has(id));
+    if (unknown.length > 0) {
+      throw new Error(
+        `case id(s) not found in config targets: ${unknown.join(', ')}`,
+      );
+    }
+    dataset.targets = dataset.targets.filter((target) =>
+      selectedCaseIds.has(target.id),
+    );
+  }
+
   if (options.validateConfig) {
     if (!configLoad) {
       throw new Error('--validate-config requires --config');
@@ -493,6 +518,44 @@ async function main(): Promise<void> {
     }
   }
 
+  let mergedCases = cases;
+  let mergedMissing = missing;
+  if (selectedCaseIds.size > 0) {
+    const existing = (() => {
+      try {
+        return JSON.parse(
+          fs.readFileSync(path.join(outputDir, 'manifest.json'), 'utf8'),
+        ) as { cases?: typeof cases; missing?: typeof missing };
+      } catch {
+        return { cases: [], missing: [] };
+      }
+    })();
+    const keep = <T extends { id?: string }>(entries: T[] | undefined) =>
+      (entries || []).filter(
+        (entry) => !entry.id || !selectedCaseIds.has(entry.id),
+      );
+    mergedCases = [...keep(existing.cases), ...cases];
+    mergedMissing = [...keep(existing.missing), ...missing];
+  }
+
+  if (selectedCaseIds.size === 0 && cases.length === 0 && missing.length > 0) {
+    const existingCaseCount = (() => {
+      try {
+        const existing = JSON.parse(
+          fs.readFileSync(path.join(outputDir, 'manifest.json'), 'utf8'),
+        ) as { cases?: unknown[] };
+        return Array.isArray(existing.cases) ? existing.cases.length : 0;
+      } catch {
+        return 0;
+      }
+    })();
+    if (existingCaseCount > 0) {
+      throw new Error(
+        `refusing to overwrite ${existingCaseCount} existing golden case(s) with an empty manifest; fix the fetch error or rebuild selected cases with --case`,
+      );
+    }
+  }
+
   const manifest = {
     datasetId: DATASET_ID,
     datasetVersion: DATASET_VERSION,
@@ -512,8 +575,8 @@ async function main(): Promise<void> {
       expectedLanguage: dataset.expectedLanguage || null,
       requireManualCaptions: dataset.requireManualCaptions || false,
     },
-    cases,
-    missing,
+    cases: mergedCases,
+    missing: mergedMissing,
   };
 
   writeJson(path.join(outputDir, 'manifest.json'), manifest);
@@ -524,8 +587,8 @@ async function main(): Promise<void> {
       '',
       `Generated at: ${generatedAt}`,
       '',
-      `Complete cases: ${cases.length}`,
-      `Missing cases: ${missing.length}`,
+      `Complete cases: ${mergedCases.length}`,
+      `Missing cases: ${mergedMissing.length}`,
       '',
       'See `manifest.json` for case metadata and `cases/*/{metadata.json,golden.json,audio.*}` for stable eval inputs.',
     ].join('\n'),

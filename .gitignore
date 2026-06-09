@@ -58,7 +58,9 @@ test/outputs/
 .tmp/biliscope/
 biliscope-repo/
 eval/runs/
+eval/runs-gemini-fallback/
 eval/data/cases/*/audio.*
+eval/config.adhoc.yaml
 
 # python cache
 .venv/

@@ -1,15 +1,14 @@
 {
   "datasetId": "llm-aligner-golden-v1",
   "datasetVersion": 1,
-  "generatedAt": "2026-05-29T04:20:25.928Z",
+  "generatedAt": "2026-06-08T19:17:24.810Z",
   "source": {
     "kind": "needle-live-app-interfaces",
-    "configSource": "eval/config.local.yaml",
+    "configSource": "eval/config.adhoc.yaml",
     "configSnapshot": {
       "dataset": {
         "outputDir": "eval/data",
-        "expectedLanguage": "en",
-        "requireManualCaptions": true,
+        "requireManualCaptions": false,
         "live": {
           "metadata": true,
           "subtitles": true,
@@ -17,116 +16,41 @@
         },
         "targets": [
           {
-            "id": "short-youtube-llm-ibm",
+            "id": "adhoc-youtube-5sLYAQS9sWQ",
             "tier": "short",
             "difficulty": "normal",
             "platform": "youtube",
             "videoId": "5sLYAQS9sWQ",
             "url": "https://www.youtube.com/watch?v=5sLYAQS9sWQ",
-            "note": "English short LLM explainer from IBM Technology"
+            "note": "Ad-hoc youtube video submitted from the dashboard"
           },
           {
-            "id": "short-english-ted-ai-century",
+            "id": "adhoc-youtube-Fjg0troUubY",
             "tier": "short",
             "difficulty": "normal",
             "platform": "youtube",
-            "videoId": "-T__YWoq45I",
-            "url": "https://www.youtube.com/watch?v=-T__YWoq45I",
-            "note": "English short TED-Ed explainer about AI as a century-scale technology"
+            "videoId": "Fjg0troUubY",
+            "url": "https://www.youtube.com/watch?v=Fjg0troUubY",
+            "note": "Ad-hoc youtube video submitted from the dashboard"
           },
           {
-            "id": "short-chinese-chloe-remember",
+            "id": "adhoc-youtube-LAwBdRR4wQk",
+            "tier": "medium",
+            "difficulty": "normal",
+            "platform": "youtube",
+            "videoId": "LAwBdRR4wQk",
+            "url": "https://www.youtube.com/watch?v=LAwBdRR4wQk",
+            "note": "Ad-hoc youtube video submitted from the dashboard",
+            "expectedLanguage": "en"
+          },
+          {
+            "id": "adhoc-youtube-not-a-video",
             "tier": "short",
             "difficulty": "normal",
             "platform": "youtube",
-            "videoId": "s2a7Ejc552A",
-            "url": "https://www.youtube.com/watch?v=s2a7Ejc552A",
-            "note": "Chinese short natural conversation lesson about remembering and daily language",
-            "expectedLanguage": "zh"
-          },
-          {
-            "id": "medium-youtube-transformers-3b1b",
-            "tier": "medium",
-            "difficulty": "normal",
-            "platform": "youtube",
-            "videoId": "wjZofJX0v4M",
-            "url": "https://www.youtube.com/watch?v=wjZofJX0v4M",
-            "note": "English medium visual transformer explainer from 3Blue1Brown"
-          },
-          {
-            "id": "medium-english-ted-climate-talk",
-            "tier": "medium",
-            "difficulty": "normal",
-            "platform": "youtube",
-            "videoId": "-BvcToPZCLI",
-            "url": "https://www.youtube.com/watch?v=-BvcToPZCLI",
-            "note": "English medium TED talk about climate communication"
-          },
-          {
-            "id": "medium-chinese-chloe-why",
-            "tier": "medium",
-            "difficulty": "normal",
-            "platform": "youtube",
-            "videoId": "9rwKFTBbopM",
-            "url": "https://www.youtube.com/watch?v=9rwKFTBbopM",
-            "note": "Chinese medium podcast-style lesson about why-questions and natural phrasing",
-            "expectedLanguage": "zh"
-          },
-          {
-            "id": "long-youtube-state-of-gpt",
-            "tier": "long",
-            "difficulty": "normal",
-            "platform": "youtube",
-            "videoId": "bZQun8Y4L2A",
-            "url": "https://www.youtube.com/watch?v=bZQun8Y4L2A",
-            "note": "English long technical talk, single primary speaker"
-          },
-          {
-            "id": "long-english-ted-climate-realism",
-            "tier": "long",
-            "difficulty": "normal",
-            "platform": "youtube",
-            "videoId": "Ztx0Bch3h9s",
-            "url": "https://www.youtube.com/watch?v=Ztx0Bch3h9s",
-            "note": "English long TED climate policy talk with dense argument structure"
-          },
-          {
-            "id": "long-chinese-chloe-beijing-spring",
-            "tier": "long",
-            "difficulty": "normal",
-            "platform": "youtube",
-            "videoId": "SihlSCDkKas",
-            "url": "https://www.youtube.com/watch?v=SihlSCDkKas",
-            "note": "Chinese long listening practice about Beijing spring, food, music, and city life",
-            "expectedLanguage": "zh"
-          },
-          {
-            "id": "long-hard-youtube-openai-devday",
-            "tier": "long",
-            "difficulty": "hard",
-            "platform": "youtube",
-            "videoId": "U9mJuUkhUzk",
-            "url": "https://www.youtube.com/watch?v=U9mJuUkhUzk",
-            "note": "English long-hard keynote with live pacing, demos, audience audio, and speaker transitions"
-          },
-          {
-            "id": "long-hard-english-android-io-show",
-            "tier": "long",
-            "difficulty": "hard",
-            "platform": "youtube",
-            "videoId": "dXCCleAddEA",
-            "url": "https://www.youtube.com/watch?v=dXCCleAddEA",
-            "note": "English long-hard Android I/O edition show with product demos and speaker changes"
-          },
-          {
-            "id": "long-hard-chinese-chloe-xinjiang",
-            "tier": "long",
-            "difficulty": "hard",
-            "platform": "youtube",
-            "videoId": "ea3mvITEDlU",
-            "url": "https://www.youtube.com/watch?v=ea3mvITEDlU",
-            "note": "Chinese long-hard multi-topic travel conversation about Xinjiang memories",
-            "expectedLanguage": "zh"
+            "videoId": "not-a-video",
+            "url": "not-a-video",
+            "note": "Ad-hoc youtube video submitted from the dashboard"
           }
         ]
       },
@@ -137,7 +61,7 @@
         "endpoint": "https://generativelanguage.googleapis.com/v1beta",
         "model": "gemini-3.1-flash-lite",
         "apiKeyEnv": "NEEDLE_EVAL_API_KEY",
-        "apiKey": "",
+        "apiKey": "[redacted]",
         "isMultimodal": true
       },
       "pipeline": {
@@ -176,10 +100,11 @@
       "subtitles": true,
       "audio": true
     },
-    "expectedLanguage": "en",
-    "requireManualCaptions": true
+    "expectedLanguage": null,
+    "requireManualCaptions": false
   },
-  "cases": [
+  "cases": [],
+  "missing": [
     {
       "id": "short-youtube-llm-ibm",
       "tier": "short",
@@ -187,20 +112,8 @@
       "platform": "youtube",
       "videoId": "5sLYAQS9sWQ",
       "url": "https://www.youtube.com/watch?v=5sLYAQS9sWQ",
-      "title": "How Large Language Models Work",
-      "duration": "5:33",
-      "durationSeconds": 333,
-      "expectedLanguage": "en",
-      "language": "en-US",
-      "trackName": "English (United States)",
-      "isAutoGenerated": false,
-      "segmentCount": 78,
-      "textCharCount": 4248,
-      "caseDir": "eval/data/cases/short-youtube-llm-ibm",
-      "audioPath": "eval/data/cases/short-youtube-llm-ibm/audio.mp3",
-      "goldenJsonPath": "eval/data/cases/short-youtube-llm-ibm/golden.json",
-      "goldenTextPath": "eval/data/cases/short-youtube-llm-ibm/golden.txt",
-      "metadataPath": "eval/data/cases/short-youtube-llm-ibm/metadata.json"
+      "note": "English short LLM explainer from IBM Technology",
+      "reason": "Daemon is running but the Needle Browser Bridge extension is not connected.\nPlease install and enable the Needle Browser Bridge extension in Chrome."
     },
     {
       "id": "short-english-ted-ai-century",
@@ -209,20 +122,8 @@
       "platform": "youtube",
       "videoId": "-T__YWoq45I",
       "url": "https://www.youtube.com/watch?v=-T__YWoq45I",
-      "title": "Is AI the most important technology of the century?",
-      "duration": "5:20",
-      "durationSeconds": 320,
-      "expectedLanguage": "en",
-      "language": "en",
-      "trackName": "English",
-      "isAutoGenerated": false,
-      "segmentCount": 80,
-      "textCharCount": 4251,
-      "caseDir": "eval/data/cases/short-english-ted-ai-century",
-      "audioPath": "eval/data/cases/short-english-ted-ai-century/audio.mp3",
-      "goldenJsonPath": "eval/data/cases/short-english-ted-ai-century/golden.json",
-      "goldenTextPath": "eval/data/cases/short-english-ted-ai-century/golden.txt",
-      "metadataPath": "eval/data/cases/short-english-ted-ai-century/metadata.json"
+      "note": "English short TED-Ed explainer about AI as a century-scale technology",
+      "reason": "Daemon is running but the Needle Browser Bridge extension is not connected.\nPlease install and enable the Needle Browser Bridge extension in Chrome."
     },
     {
       "id": "short-chinese-chloe-remember",
@@ -231,20 +132,9 @@
       "platform": "youtube",
       "videoId": "s2a7Ejc552A",
       "url": "https://www.youtube.com/watch?v=s2a7Ejc552A",
-      "title": "How to Use 记得 (remember) : Learn Chinese with Natural Chinese Conversations | HSK 2 ｜Chinese podcast",
-      "duration": "9:10",
-      "durationSeconds": 550,
+      "note": "Chinese short natural conversation lesson about remembering and daily language",
       "expectedLanguage": "zh",
-      "language": "zh",
-      "trackName": "Chinese",
-      "isAutoGenerated": false,
-      "segmentCount": 312,
-      "textCharCount": 2523,
-      "caseDir": "eval/data/cases/short-chinese-chloe-remember",
-      "audioPath": "eval/data/cases/short-chinese-chloe-remember/audio.mp3",
-      "goldenJsonPath": "eval/data/cases/short-chinese-chloe-remember/golden.json",
-      "goldenTextPath": "eval/data/cases/short-chinese-chloe-remember/golden.txt",
-      "metadataPath": "eval/data/cases/short-chinese-chloe-remember/metadata.json"
+      "reason": "Daemon is running but the Needle Browser Bridge extension is not connected.\nPlease install and enable the Needle Browser Bridge extension in Chrome."
     },
     {
       "id": "medium-youtube-transformers-3b1b",
@@ -253,20 +143,8 @@
       "platform": "youtube",
       "videoId": "wjZofJX0v4M",
       "url": "https://www.youtube.com/watch?v=wjZofJX0v4M",
-      "title": "Transformers, the tech behind LLMs | Deep Learning Chapter 5",
-      "duration": "27:14",
-      "durationSeconds": 1634,
-      "expectedLanguage": "en",
-      "language": "en",
-      "trackName": "English",
-      "isAutoGenerated": false,
-      "segmentCount": 443,
-      "textCharCount": 29115,
-      "caseDir": "eval/data/cases/medium-youtube-transformers-3b1b",
-      "audioPath": "eval/data/cases/medium-youtube-transformers-3b1b/audio.mp3",
-      "goldenJsonPath": "eval/data/cases/medium-youtube-transformers-3b1b/golden.json",
-      "goldenTextPath": "eval/data/cases/medium-youtube-transformers-3b1b/golden.txt",
-      "metadataPath": "eval/data/cases/medium-youtube-transformers-3b1b/metadata.json"
+      "note": "English medium visual transformer explainer from 3Blue1Brown",
+      "reason": "Daemon is running but the Needle Browser Bridge extension is not connected.\nPlease install and enable the Needle Browser Bridge extension in Chrome."
     },
     {
       "id": "medium-english-ted-climate-talk",
@@ -275,20 +153,8 @@
       "platform": "youtube",
       "videoId": "-BvcToPZCLI",
       "url": "https://www.youtube.com/watch?v=-BvcToPZCLI",
-      "title": "The most important thing you can do to fight climate change: talk about it | Katharine Hayhoe",
-      "duration": "17:12",
-      "durationSeconds": 1032,
-      "expectedLanguage": "en",
-      "language": "en",
-      "trackName": "English",
-      "isAutoGenerated": false,
-      "segmentCount": 333,
-      "textCharCount": 14972,
-      "caseDir": "eval/data/cases/medium-english-ted-climate-talk",
-      "audioPath": "eval/data/cases/medium-english-ted-climate-talk/audio.mp3",
-      "goldenJsonPath": "eval/data/cases/medium-english-ted-climate-talk/golden.json",
-      "goldenTextPath": "eval/data/cases/medium-english-ted-climate-talk/golden.txt",
-      "metadataPath": "eval/data/cases/medium-english-ted-climate-talk/metadata.json"
+      "note": "English medium TED talk about climate communication",
+      "reason": "Daemon is running but the Needle Browser Bridge extension is not connected.\nPlease install and enable the Needle Browser Bridge extension in Chrome."
     },
     {
       "id": "medium-chinese-chloe-why",
@@ -297,20 +163,9 @@
       "platform": "youtube",
       "videoId": "9rwKFTBbopM",
       "url": "https://www.youtube.com/watch?v=9rwKFTBbopM",
-      "title": "How to Use 为什么 (why) : Learn Chinese with Chinese podcast | HSK 2 ｜CC SUB (pinyin)",
-      "duration": "13:25",
-      "durationSeconds": 805,
+      "note": "Chinese medium podcast-style lesson about why-questions and natural phrasing",
       "expectedLanguage": "zh",
-      "language": "zh",
-      "trackName": "Chinese",
-      "isAutoGenerated": false,
-      "segmentCount": 370,
-      "textCharCount": 3791,
-      "caseDir": "eval/data/cases/medium-chinese-chloe-why",
-      "audioPath": "eval/data/cases/medium-chinese-chloe-why/audio.mp3",
-      "goldenJsonPath": "eval/data/cases/medium-chinese-chloe-why/golden.json",
-      "goldenTextPath": "eval/data/cases/medium-chinese-chloe-why/golden.txt",
-      "metadataPath": "eval/data/cases/medium-chinese-chloe-why/metadata.json"
+      "reason": "Daemon is running but the Needle Browser Bridge extension is not connected.\nPlease install and enable the Needle Browser Bridge extension in Chrome."
     },
     {
       "id": "long-youtube-state-of-gpt",
@@ -319,20 +174,8 @@
       "platform": "youtube",
       "videoId": "bZQun8Y4L2A",
       "url": "https://www.youtube.com/watch?v=bZQun8Y4L2A",
-      "title": "State of GPT | BRK216HFS",
-      "duration": "42:40",
-      "durationSeconds": 2560,
-      "expectedLanguage": "en",
-      "language": "en-US",
-      "trackName": "English (United States)",
-      "isAutoGenerated": false,
-      "segmentCount": 1133,
-      "textCharCount": 43265,
-      "caseDir": "eval/data/cases/long-youtube-state-of-gpt",
-      "audioPath": "eval/data/cases/long-youtube-state-of-gpt/audio.mp3",
-      "goldenJsonPath": "eval/data/cases/long-youtube-state-of-gpt/golden.json",
-      "goldenTextPath": "eval/data/cases/long-youtube-state-of-gpt/golden.txt",
-      "metadataPath": "eval/data/cases/long-youtube-state-of-gpt/metadata.json"
+      "note": "English long technical talk, single primary speaker",
+      "reason": "Daemon is running but the Needle Browser Bridge extension is not connected.\nPlease install and enable the Needle Browser Bridge extension in Chrome."
     },
     {
       "id": "long-english-ted-climate-realism",
@@ -341,20 +184,8 @@
       "platform": "youtube",
       "videoId": "Ztx0Bch3h9s",
       "url": "https://www.youtube.com/watch?v=Ztx0Bch3h9s",
-      "title": "Why Climate Action Is Unstoppable — and “Climate Realism” Is a Myth  | Al Gore | TED",
-      "duration": "24:11",
-      "durationSeconds": 1451,
-      "expectedLanguage": "en",
-      "language": "en",
-      "trackName": "English",
-      "isAutoGenerated": false,
-      "segmentCount": 431,
-      "textCharCount": 19568,
-      "caseDir": "eval/data/cases/long-english-ted-climate-realism",
-      "audioPath": "eval/data/cases/long-english-ted-climate-realism/audio.mp3",
-      "goldenJsonPath": "eval/data/cases/long-english-ted-climate-realism/golden.json",
-      "goldenTextPath": "eval/data/cases/long-english-ted-climate-realism/golden.txt",
-      "metadataPath": "eval/data/cases/long-english-ted-climate-realism/metadata.json"
+      "note": "English long TED climate policy talk with dense argument structure",
+      "reason": "Daemon is running but the Needle Browser Bridge extension is not connected.\nPlease install and enable the Needle Browser Bridge extension in Chrome."
     },
     {
       "id": "long-chinese-chloe-beijing-spring",
@@ -363,20 +194,9 @@
       "platform": "youtube",
       "videoId": "SihlSCDkKas",
       "url": "https://www.youtube.com/watch?v=SihlSCDkKas",
-      "title": "How to spend Spring in Beijing? Food, Jazz, and Real-Life Mandarin｜Chinese Listening Practice CC SUB",
-      "duration": "35:25",
-      "durationSeconds": 2125,
+      "note": "Chinese long listening practice about Beijing spring, food, music, and city life",
       "expectedLanguage": "zh",
-      "language": "zh",
-      "trackName": "Chinese",
-      "isAutoGenerated": false,
-      "segmentCount": 984,
-      "textCharCount": 10275,
-      "caseDir": "eval/data/cases/long-chinese-chloe-beijing-spring",
-      "audioPath": "eval/data/cases/long-chinese-chloe-beijing-spring/audio.mp3",
-      "goldenJsonPath": "eval/data/cases/long-chinese-chloe-beijing-spring/golden.json",
-      "goldenTextPath": "eval/data/cases/long-chinese-chloe-beijing-spring/golden.txt",
-      "metadataPath": "eval/data/cases/long-chinese-chloe-beijing-spring/metadata.json"
+      "reason": "Daemon is running but the Needle Browser Bridge extension is not connected.\nPlease install and enable the Needle Browser Bridge extension in Chrome."
     },
     {
       "id": "long-hard-youtube-openai-devday",
@@ -385,20 +205,8 @@
       "platform": "youtube",
       "videoId": "U9mJuUkhUzk",
       "url": "https://www.youtube.com/watch?v=U9mJuUkhUzk",
-      "title": "OpenAI DevDay: Opening Keynote",
-      "duration": "45:36",
-      "durationSeconds": 2736,
-      "expectedLanguage": "en",
-      "language": "en",
-      "trackName": "English",
-      "isAutoGenerated": false,
-      "segmentCount": 919,
-      "textCharCount": 39445,
-      "caseDir": "eval/data/cases/long-hard-youtube-openai-devday",
-      "audioPath": "eval/data/cases/long-hard-youtube-openai-devday/audio.mp3",
-      "goldenJsonPath": "eval/data/cases/long-hard-youtube-openai-devday/golden.json",
-      "goldenTextPath": "eval/data/cases/long-hard-youtube-openai-devday/golden.txt",
-      "metadataPath": "eval/data/cases/long-hard-youtube-openai-devday/metadata.json"
+      "note": "English long-hard keynote with live pacing, demos, audience audio, and speaker transitions",
+      "reason": "Daemon is running but the Needle Browser Bridge extension is not connected.\nPlease install and enable the Needle Browser Bridge extension in Chrome."
     },
     {
       "id": "long-hard-english-android-io-show",
@@ -407,20 +215,8 @@
       "platform": "youtube",
       "videoId": "dXCCleAddEA",
       "url": "https://www.youtube.com/watch?v=dXCCleAddEA",
-      "title": "🎬 Watch The Android Show | I/O Edition 2026",
-      "duration": "38:08",
-      "durationSeconds": 2288,
-      "expectedLanguage": "en",
-      "language": "en",
-      "trackName": "English",
-      "isAutoGenerated": false,
-      "segmentCount": 672,
-      "textCharCount": 32160,
-      "caseDir": "eval/data/cases/long-hard-english-android-io-show",
-      "audioPath": "eval/data/cases/long-hard-english-android-io-show/audio.mp3",
-      "goldenJsonPath": "eval/data/cases/long-hard-english-android-io-show/golden.json",
-      "goldenTextPath": "eval/data/cases/long-hard-english-android-io-show/golden.txt",
-      "metadataPath": "eval/data/cases/long-hard-english-android-io-show/metadata.json"
+      "note": "English long-hard Android I/O edition show with product demos and speaker changes",
+      "reason": "Daemon is running but the Needle Browser Bridge extension is not connected.\nPlease install and enable the Needle Browser Bridge extension in Chrome."
     },
     {
       "id": "long-hard-chinese-chloe-xinjiang",
@@ -429,21 +225,29 @@
       "platform": "youtube",
       "videoId": "ea3mvITEDlU",
       "url": "https://www.youtube.com/watch?v=ea3mvITEDlU",
-      "title": "The \"Most\" of Xinjiang: Our Best & Worst Memories｜新疆之最 | Chinese Podcast[CC+ Pinyin / 60mins]",
-      "duration": "59:34",
-      "durationSeconds": 3574,
+      "note": "Chinese long-hard multi-topic travel conversation about Xinjiang memories",
       "expectedLanguage": "zh",
-      "language": "zh",
-      "trackName": "Chinese",
-      "isAutoGenerated": false,
-      "segmentCount": 1854,
-      "textCharCount": 17355,
-      "caseDir": "eval/data/cases/long-hard-chinese-chloe-xinjiang",
-      "audioPath": "eval/data/cases/long-hard-chinese-chloe-xinjiang/audio.mp3",
-      "goldenJsonPath": "eval/data/cases/long-hard-chinese-chloe-xinjiang/golden.json",
-      "goldenTextPath": "eval/data/cases/long-hard-chinese-chloe-xinjiang/golden.txt",
-      "metadataPath": "eval/data/cases/long-hard-chinese-chloe-xinjiang/metadata.json"
+      "reason": "Daemon is running but the Needle Browser Bridge extension is not connected.\nPlease install and enable the Needle Browser Bridge extension in Chrome."
+    },
+    {
+      "id": "adhoc-youtube-Fjg0troUubY",
+      "tier": "short",
+      "difficulty": "normal",
+      "platform": "youtube",
+      "videoId": "Fjg0troUubY",
+      "url": "https://www.youtube.com/watch?v=Fjg0troUubY",
+      "note": "Ad-hoc youtube video submitted from the dashboard",
+      "reason": "No captions available for this video\nPlease open Chrome and log in to https://youtube.com"
+    },
+    {
+      "id": "adhoc-youtube-not-a-video",
+      "tier": "short",
+      "difficulty": "normal",
+      "platform": "youtube",
+      "videoId": "not-a-video",
+      "url": "not-a-video",
+      "note": "Ad-hoc youtube video submitted from the dashboard",
+      "reason": "No captions available for this video\nPlease open Chrome and log in to https://youtube.com"
     }
-  ],
-  "missing": []
+  ]
 }

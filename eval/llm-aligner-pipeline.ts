@@ -169,6 +169,10 @@ export interface LlmAlignerAlignmentPair {
   textSimilarity: number | null;
   startDriftSeconds: number | null;
   endDriftSeconds: number | null;
+  // True when the matched generated segment also covers other golden segments
+  // (a coarse segment spanning several fine golden segments). The words are
+  // present, just merged into one generated segment.
+  merged?: boolean;
 }
 
 export interface LlmAlignerAlignmentArtifact {
@@ -193,6 +197,7 @@ export interface LlmAlignerAlignmentArtifact {
     timestampDriftCount: number;
     missingGeneratedCount: number;
     extraGeneratedCount: number;
+    mergedCount: number;
   };
   pairs: LlmAlignerAlignmentPair[];
 }
@@ -877,7 +882,7 @@ function collectLcsAnchorPairs(
   return pairs.reverse();
 }
 
-function readGoldenSubtitle(input: {
+export function readGoldenSubtitle(input: {
   goldenJsonPath?: string;
   goldenSubtitlePath?: string;
 }): {
@@ -968,7 +973,7 @@ export function scoreLlmAlignerQuality(input: {
   };
 }
 
-function evaluateQualityGate(
+export function evaluateQualityGate(
   gate: LlmAlignerQualityGate,
   quality: LlmAlignerQualityMetrics | undefined,
 ): LlmAlignerQualityGateResult {
@@ -1113,24 +1118,36 @@ function resolveEvalCaseInput(experiment: LlmAlignerEvalExperiment): {
           (candidate as Record<string, unknown>).id === caseId,
         ),
     );
-    if (!entry) throw new Error(`eval case not found: ${caseId}`);
     const manifestDir = path.dirname(manifestPath);
-    if (typeof entry.caseDir === 'string') {
-      caseDir = resolveMaybeRelative(entry.caseDir);
-    } else if (typeof entry.goldenJsonPath === 'string') {
-      caseDir = path.dirname(resolveMaybeRelative(entry.goldenJsonPath));
+    if (!entry) {
+      const caseDirFallback = path.join(manifestDir, 'cases', caseId);
+      if (
+        fs.existsSync(path.join(caseDirFallback, 'metadata.json')) ||
+        fs.existsSync(path.join(caseDirFallback, 'golden.json'))
+      ) {
+        caseDir = caseDirFallback;
+      } else {
+        throw new Error(`eval case not found: ${caseId}`);
+      }
     }
-    if (!experiment.audioPath && typeof entry.audioPath === 'string') {
-      experiment = { ...experiment, audioPath: entry.audioPath };
-    }
-    if (
-      !experiment.goldenJsonPath &&
-      typeof entry.goldenJsonPath === 'string'
-    ) {
-      experiment = { ...experiment, goldenJsonPath: entry.goldenJsonPath };
-    }
-    if (!caseDir && typeof entry.caseDir === 'string') {
-      caseDir = resolveMaybeRelative(entry.caseDir, manifestDir);
+    if (entry) {
+      if (typeof entry.caseDir === 'string') {
+        caseDir = resolveMaybeRelative(entry.caseDir);
+      } else if (typeof entry.goldenJsonPath === 'string') {
+        caseDir = path.dirname(resolveMaybeRelative(entry.goldenJsonPath));
+      }
+      if (!experiment.audioPath && typeof entry.audioPath === 'string') {
+        experiment = { ...experiment, audioPath: entry.audioPath };
+      }
+      if (
+        !experiment.goldenJsonPath &&
+        typeof entry.goldenJsonPath === 'string'
+      ) {
+        experiment = { ...experiment, goldenJsonPath: entry.goldenJsonPath };
+      }
+      if (!caseDir && typeof entry.caseDir === 'string') {
+        caseDir = resolveMaybeRelative(entry.caseDir, manifestDir);
+      }
     }
   }
 
@@ -1213,7 +1230,16 @@ function overlapSeconds(
   );
 }
 
-function buildAlignmentArtifact(input: {
+// True when `outer`'s normalized text strictly contains `inner`'s — i.e. the
+// inner segment's words are present inside a longer outer segment. The min
+// length guard avoids spurious single-character containment.
+function textContains(outer: string, inner: string): boolean {
+  const o = normalizeQualityText(outer);
+  const i = normalizeQualityText(inner);
+  return i.length >= 2 && o.length > i.length && o.includes(i);
+}
+
+export function buildAlignmentArtifact(input: {
   caseId?: string;
   golden: {
     goldenPath: string;
@@ -1251,11 +1277,35 @@ function buildAlignmentArtifact(input: {
       }
     }
 
-    const generated =
-      bestIndex >= 0 ? input.generatedSegments[bestIndex]! : null;
+    let generated = bestIndex >= 0 ? input.generatedSegments[bestIndex]! : null;
     if (bestIndex >= 0) usedGenerated.add(bestIndex);
+
+    // Containment fallback: a coarse generated segment can span several golden
+    // segments. If no unused candidate is left, reuse an already-matched
+    // generated segment that overlaps this golden segment in time and already
+    // contains its text — the words are present, just merged upstream.
+    if (!generated) {
+      const mergedIndex = input.generatedSegments.findIndex(
+        (candidate, candidateIndex) =>
+          usedGenerated.has(candidateIndex) &&
+          overlapSeconds(golden, candidate) > 0 &&
+          textContains(candidate.text, golden.text),
+      );
+      if (mergedIndex >= 0) generated = input.generatedSegments[mergedIndex]!;
+    }
+
+    const contained = generated
+      ? textContains(generated.text, golden.text)
+      : false;
+    const reverseContained =
+      generated && !contained
+        ? textContains(golden.text, generated.text)
+        : false;
+    const merged = contained;
     const textSimilarity = generated
-      ? normalizedTextSimilarity(golden.text, generated.text)
+      ? contained || reverseContained
+        ? 1
+        : normalizedTextSimilarity(golden.text, generated.text)
       : null;
     const startDriftSeconds = generated
       ? Number((generated.start - golden.start).toFixed(3))
@@ -1265,12 +1315,14 @@ function buildAlignmentArtifact(input: {
       : null;
     const status: LlmAlignerAlignmentPair['status'] = !generated
       ? 'missing_generated'
-      : textSimilarity !== null && textSimilarity < minTextSimilarity
-        ? 'text_mismatch'
-        : Math.abs(startDriftSeconds || 0) > maxStartDriftSeconds ||
-            Math.abs(endDriftSeconds || 0) > maxEndDriftSeconds
-          ? 'timestamp_drift'
-          : 'match';
+      : contained || reverseContained
+        ? 'match'
+        : textSimilarity !== null && textSimilarity < minTextSimilarity
+          ? 'text_mismatch'
+          : Math.abs(startDriftSeconds || 0) > maxStartDriftSeconds ||
+              Math.abs(endDriftSeconds || 0) > maxEndDriftSeconds
+            ? 'timestamp_drift'
+            : 'match';
 
     pairs.push({
       index: goldenIndex,
@@ -1280,6 +1332,7 @@ function buildAlignmentArtifact(input: {
       textSimilarity,
       startDriftSeconds,
       endDriftSeconds,
+      ...(merged ? { merged: true } : {}),
     });
   }
 
@@ -1310,6 +1363,7 @@ function buildAlignmentArtifact(input: {
     extraGeneratedCount: pairs.filter(
       (pair) => pair.status === 'extra_generated',
     ).length,
+    mergedCount: pairs.filter((pair) => pair.merged).length,
   };
 
   return {
@@ -1827,39 +1881,14 @@ export async function runLlmAlignerManifest(input: {
         return { ok: true as const, result };
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        const failedAt = new Date().toISOString();
-        writeJson(path.join(outputDir, 'error.json'), {
-          id: fallbackId,
-          error: message,
-          failedAt,
-          configSource: experiment.configSource || null,
-          configSnapshot: experiment.configSnapshot || null,
-        });
-        writeJson(path.join(outputDir, 'run.json'), {
-          version: 1,
-          status: 'failed',
-          pipeline: 'llm-aligner',
-          id: fallbackId,
-          case: experiment.caseId ? { id: experiment.caseId } : null,
-          startedAt: null,
-          completedAt: failedAt,
-          durationMs: null,
-          error: message,
-          configSource: experiment.configSource || null,
-          configSnapshot: experiment.configSnapshot || null,
-          qualityGate: experiment.qualityGate || null,
-          qualityGateResult: experiment.qualityGate
-            ? {
-                passed: false,
-                checks: [],
-                reason: 'run failed before quality metrics were available',
-              }
-            : null,
-          files: {
-            run: path.join(outputDir, 'run.json'),
-            error: path.join(outputDir, 'error.json'),
-          },
-        });
+        // Failed runs are not recorded: drop any partial output directory so the
+        // dashboard never lists a failed/incomplete run. The failure is surfaced
+        // through the return value (and the CLI/job log) instead.
+        try {
+          fs.rmSync(outputDir, { recursive: true, force: true });
+        } catch {
+          // best-effort cleanup
+        }
         return {
           ok: false as const,
           id: fallbackId,

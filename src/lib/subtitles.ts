@@ -262,7 +262,7 @@ function getVideoLabel(video: Pick<Video, 'title' | 'video_id'>): string {
   return (video.title || '').trim() || video.video_id;
 }
 
-function formatSecondsForAiRange(seconds: number): string {
+export function formatSecondsForAiRange(seconds: number): string {
   const total = Math.max(0, Math.floor(seconds));
   const h = Math.floor(total / 3600);
   const m = Math.floor((total % 3600) / 60);
@@ -487,7 +487,7 @@ function parseTimestampToSeconds(raw: string): number | null {
   return null;
 }
 
-function parseAiRangeBlock(raw: string): SubtitleSegment[] {
+export function parseAiRangeBlock(raw: string): SubtitleSegment[] {
   const normalized = raw.replace(/\r\n/g, '\n').trim();
   if (!normalized) return [];
 
@@ -690,7 +690,7 @@ function parseTranscriptJsonSegments(raw: string): SubtitleSegment[] {
   }
 }
 
-function dedupeSegments(segments: SubtitleSegment[]): SubtitleSegment[] {
+export function dedupeSegments(segments: SubtitleSegment[]): SubtitleSegment[] {
   const output: SubtitleSegment[] = [];
   for (const segment of segments) {
     const text = segment.text.trim();
@@ -1093,7 +1093,7 @@ function parseVideoDurationSeconds(
   return Math.floor(seconds);
 }
 
-async function probeAudioDurationSeconds(
+export async function probeAudioDurationSeconds(
   filePath: string,
 ): Promise<number | null> {
   try {
@@ -1121,7 +1121,7 @@ async function probeAudioDurationSeconds(
   }
 }
 
-function buildSegmentedSubtitlePrompt(
+export function buildSegmentedSubtitlePrompt(
   baseTemplate: string,
   segmentTemplate: string,
   startSeconds: number,
@@ -1137,7 +1137,7 @@ function buildSegmentedSubtitlePrompt(
   ].join('\n');
 }
 
-function shiftSubtitleSegments(
+export function shiftSubtitleSegments(
   segments: SubtitleSegment[],
   offsetSeconds: number,
 ): SubtitleSegment[] {
@@ -1170,7 +1170,7 @@ function buildLlmAlignerSubtitleSegments(
   });
 }
 
-async function splitAudioIntoChunks(
+export async function splitAudioIntoChunks(
   audioPath: string,
   tempDir: string,
   totalDurationSeconds: number,
