@@ -277,11 +277,17 @@ function isTruthyAccessFlag(value: unknown): boolean {
   return false;
 }
 
+// 空间投稿列表（/x/space/wbi/arc/search 的 vlist 项）里只有 is_charging_arc /
+// is_pay 这类扁平字段；rights.* 与 is_upower_* 只出现在 view / player 详情接口。
+const BILIBILI_FEED_ACCESS_FLAG_KEYS = ['is_charging_arc', 'is_pay'] as const;
+
 function detectBilibiliAccessStatus(
   item: Record<string, unknown>,
 ): BilibiliAccessStatus | undefined {
   const rights = (item.rights as Record<string, unknown>) || {};
   if (
+    isTruthyAccessFlag(item.is_charging_arc) ||
+    isTruthyAccessFlag(item.is_pay) ||
     isTruthyAccessFlag(item.is_upower_exclusive) ||
     isTruthyAccessFlag(item.is_ugc_pay) ||
     isTruthyAccessFlag(item.is_ugc_pay_preview) ||
@@ -412,6 +418,10 @@ export async function runBilibiliUserVideos(
     return videos.slice(0, limit).map((item) => {
       const video = (item as Record<string, unknown>) || {};
       const accessStatus = detectBilibiliAccessStatus(video);
+      // 列表项带有访问控制字段时才断言 0，避免接口缺字段时误清除已知的会员标记
+      const hasAccessFlags = BILIBILI_FEED_ACCESS_FLAG_KEYS.some(
+        (key) => key in video,
+      );
       return {
         video_id: String(video.bvid || ''),
         title: String(video.title || ''),
@@ -423,7 +433,8 @@ export async function runBilibiliUserVideos(
           ? new Date(Number(video.created) * 1000).toISOString()
           : '',
         duration: typeof video.length === 'string' ? video.length : '',
-        is_members_only: accessStatus === 'members_only' ? 1 : undefined,
+        is_members_only:
+          accessStatus === 'members_only' ? 1 : hasAccessFlags ? 0 : undefined,
         access_status: accessStatus,
       };
     });

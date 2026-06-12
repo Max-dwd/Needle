@@ -272,6 +272,87 @@ describe('bilibili runtime commands', () => {
     ]);
   });
 
+  it('marks Bilibili user-videos members-only from is_charging_arc and asserts 0 otherwise', async () => {
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce({
+        ok: true,
+        text: async () =>
+          JSON.stringify({
+            code: 0,
+            data: {
+              wbi_img: {
+                img_url:
+                  'https://i0.hdslb.com/bfs/wbi/abcdefghijklmnopqrstuvwxyzabcdef.png',
+                sub_url:
+                  'https://i0.hdslb.com/bfs/wbi/ghijklmnopqrstuvwxyzabcdefghijkl.png',
+              },
+            },
+          }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        text: async () =>
+          JSON.stringify({
+            code: 0,
+            data: {
+              list: {
+                vlist: [
+                  {
+                    bvid: 'BVcharge002',
+                    title: 'Charging Exclusive Video',
+                    pic: '//i0.hdslb.com/bfs/archive/charge2.jpg',
+                    created: 1774708800,
+                    length: '08:01',
+                    is_charging_arc: true,
+                    is_pay: 0,
+                  },
+                  {
+                    bvid: 'BVfree001',
+                    title: 'Free Video',
+                    pic: '//i0.hdslb.com/bfs/archive/free.jpg',
+                    created: 1774708800,
+                    length: '03:21',
+                    is_charging_arc: false,
+                    is_pay: 0,
+                  },
+                ],
+              },
+            },
+          }),
+      } as Response);
+    global.fetch = fetchMock;
+
+    const page = createPageMock();
+    await expect(
+      runBilibiliUserVideos(page, {
+        positionals: ['12345'],
+        flags: { limit: '20' },
+      }),
+    ).resolves.toEqual([
+      {
+        video_id: 'BVcharge002',
+        title: 'Charging Exclusive Video',
+        url: 'https://www.bilibili.com/video/BVcharge002',
+        thumbnail_url: 'https://i0.hdslb.com/bfs/archive/charge2.jpg',
+        published_at: '2026-03-28T14:40:00.000Z',
+        duration: '08:01',
+        is_members_only: 1,
+        access_status: 'members_only',
+      },
+      {
+        video_id: 'BVfree001',
+        title: 'Free Video',
+        url: 'https://www.bilibili.com/video/BVfree001',
+        thumbnail_url: 'https://i0.hdslb.com/bfs/archive/free.jpg',
+        published_at: '2026-03-28T14:40:00.000Z',
+        duration: '03:21',
+        is_members_only: 0,
+        access_status: undefined,
+      },
+    ]);
+  });
+
   it('does not mark Bilibili video-meta as members-only for a charge button alone', async () => {
     const fetchMock = vi
       .fn<typeof fetch>()

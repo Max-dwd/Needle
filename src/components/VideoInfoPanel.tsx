@@ -13,7 +13,10 @@ import React, {
 import MarkdownRenderer from '@/components/MarkdownRenderer';
 import ChatPanel from '@/components/ChatPanel';
 import { formatSecondsLabel, normalizeCommentUrl } from '@/lib/format';
-import { findActiveSegmentIndex } from '@/lib/subtitle-segments';
+import {
+  findActiveSegmentIndex,
+  getOverlayEligibleSubtitleSegments,
+} from '@/lib/subtitle-segments';
 import { Info, RefreshCw, Cpu, BrainCircuit, History, BarChart3, Languages, FileText, Download } from 'lucide-react';
 import ResearchFavoriteModal from '@/components/ResearchFavoriteModal';
 import type {
@@ -942,6 +945,14 @@ export default forwardRef<VideoInfoPanelRef, VideoInfoPanelProps>(
       () => (Array.isArray(subtitle?.segments) ? subtitle.segments : []),
       [subtitle?.segments],
     );
+    const overlayEligibleSubtitleSegments = useMemo(
+      () =>
+        getOverlayEligibleSubtitleSegments(
+          subtitleSegments,
+          subtitle?.segmentStyle,
+        ),
+      [subtitleSegments, subtitle?.segmentStyle],
+    );
     const activeSegmentIndex = useMemo(() => {
       if (activePanel !== 'subtitle' || subtitleSegments.length === 0) {
         return -1;
@@ -970,7 +981,7 @@ export default forwardRef<VideoInfoPanelRef, VideoInfoPanelProps>(
       if (status !== 'fetched' || subtitleSegments.length === 0) {
         return 'unavailable';
       }
-      if (subtitle?.segmentStyle === 'coarse') return 'coarse';
+      if (overlayEligibleSubtitleSegments.length === 0) return 'coarse';
       return 'available';
     })();
     const subtitleOverlayTitle =

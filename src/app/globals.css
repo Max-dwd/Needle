@@ -537,6 +537,26 @@ button {
   letter-spacing: 0.3px;
 }
 
+.members-crown {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #b8860b, #ffd700);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  line-height: 1;
+  z-index: 3;
+  pointer-events: none;
+}
+
+.members-crown-overlay {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+}
+
 .summary-indicator {
   width: 20px;
   height: 20px;

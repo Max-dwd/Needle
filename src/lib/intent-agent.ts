@@ -1,11 +1,10 @@
 import fs from 'fs';
 import path from 'path';
 import { getDb, type Intent, type Video } from './db';
+import { resolveStoredSubtitlePath } from './subtitles';
 
 const DATA_ROOT = process.env.DATA_ROOT || path.resolve(process.cwd(), 'data');
 const AGENT_ARTIFACT_ROOT = path.join(DATA_ROOT, 'agent-artifacts');
-const SUBTITLE_ROOT =
-  process.env.SUBTITLE_ROOT || path.join(DATA_ROOT, 'subtitles');
 
 // ---------------------------------------------------------------------------
 // Path safety
@@ -171,14 +170,14 @@ export function getAgentContext(
 
   const videoContexts: AgentVideoContext[] = videos.map((v) => {
     let subtitleText: string | null = null;
-    if (includeSubtitles && v.subtitle_path) {
-      const fullPath = path.isAbsolute(v.subtitle_path)
-        ? v.subtitle_path
-        : path.join(SUBTITLE_ROOT, v.subtitle_path);
-      try {
-        subtitleText = parseSubtitleJson(fs.readFileSync(fullPath, 'utf-8'));
-      } catch {
-        // subtitle file missing or unreadable
+    if (includeSubtitles) {
+      const fullPath = resolveStoredSubtitlePath(v.subtitle_path);
+      if (fullPath) {
+        try {
+          subtitleText = parseSubtitleJson(fs.readFileSync(fullPath, 'utf-8'));
+        } catch {
+          // subtitle file missing or unreadable
+        }
       }
     }
 
@@ -296,11 +295,8 @@ export function readSubtitleText(
     )
     .get(videoId, platform) as { subtitle_path: string | null } | undefined;
 
-  if (!video?.subtitle_path) return null;
-
-  const fullPath = path.isAbsolute(video.subtitle_path)
-    ? video.subtitle_path
-    : path.join(SUBTITLE_ROOT, video.subtitle_path);
+  const fullPath = resolveStoredSubtitlePath(video?.subtitle_path);
+  if (!fullPath) return null;
 
   try {
     return parseSubtitleJson(fs.readFileSync(fullPath, 'utf-8'));

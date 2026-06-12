@@ -30,6 +30,10 @@ import {
   recordSubtitleRateLimit,
   recordSubtitleSuccess,
 } from './subtitle-backoff';
+import {
+  inferSubtitleSegmentStyle,
+  type SubtitleSegmentStyle,
+} from './subtitle-segments';
 import { getSubtitleBrowserFetchConfig } from './subtitle-browser-fetch-settings';
 import { getSubtitleWhisperAiConfig } from './subtitle-whisper-ai-settings';
 import {
@@ -350,6 +354,47 @@ function classifySubtitleErrorType(message: string): string {
     return 'no_pipeline';
   }
   return 'api_error';
+}
+
+/**
+ * 字幕抓取因会员限制失败时，把视频本身标记为会员专属，
+ * 让前端显示明确的会员标志而不是普通的失败标志。
+ */
+function markVideoMembersOnlyFromSubtitleFailure(video: Video, reason: string) {
+  // 限免视频的失败同样会被归类为 members_only，但不应覆盖已知的限免状态
+  if (video.access_status === 'limited_free') return;
+  const checkedAt = new Date().toISOString();
+  getDb()
+    .prepare(
+      `UPDATE videos
+       SET is_members_only = 1,
+           access_status = 'members_only',
+           members_only_checked_at = ?
+       WHERE id = ?`,
+    )
+    .run(checkedAt, video.id);
+
+  if (video.is_members_only !== 1) {
+    log.info('subtitle', 'marked_members_only', {
+      platform: video.platform,
+      target: video.video_id,
+      channel_id: video.channel_id,
+      channel_name: video.channel_name ?? null,
+      reason: compactLogValue(reason).slice(0, 300),
+    });
+  }
+
+  appEvents.emit('video:enriched', {
+    videoDbId: video.id,
+    videoId: video.video_id,
+    platform: video.platform,
+    channel_id: video.channel_id,
+    channel_name: video.channel_name ?? null,
+    fields: {
+      is_members_only: 1,
+      access_status: 'members_only',
+    },
+  });
 }
 
 function logSubtitleFailure(
@@ -1063,7 +1108,7 @@ function buildAiSubtitlePayloadFromSegments(
   segments: SubtitleSegment[],
   rawText: string,
   sourceMethod: string,
-  segmentStyle: 'coarse' | 'fine' = 'coarse',
+  segmentStyle?: SubtitleSegmentStyle,
 ): AiGeneratedSubtitlePayload {
   if (segments.length === 0) {
     throw new Error('AI subtitle fallback returned unparseable content');
@@ -1080,7 +1125,7 @@ function buildAiSubtitlePayloadFromSegments(
     segments,
     rawText,
     sourceMethod,
-    segmentStyle,
+    segmentStyle: segmentStyle ?? inferSubtitleSegmentStyle(segments),
   };
 }
 
@@ -2889,6 +2934,9 @@ export async function fetchAndStoreSubtitle(
     updateSubtitleStateAndTrack({
       ...buildFailureState(video, failureStatus, combinedError, attemptAt),
     });
+    if (classifySubtitleErrorType(combinedError) === 'members_only') {
+      markVideoMembersOnlyFromSubtitleFailure(video, combinedError);
+    }
     logSubtitleFailure(video, statusPreferredMethod, combinedError);
     markSubtitleError(
       video,
@@ -3077,16 +3125,35 @@ export async function ensureSubtitleForVideo(
   return video;
 }
 
+/**
+ * 把数据库里存的字幕文件路径解析成本机可读的路径。
+ * 数据库可能带着其它部署环境(如 Docker 的 /app)写入的绝对路径,
+ * 此时用本地 SUBTITLE_ROOT + 平台目录 + 文件名兜底重定位。
+ */
+export function resolveStoredSubtitlePath(
+  storedPath: string | null | undefined,
+): string | null {
+  if (!storedPath) return null;
+  if (fs.existsSync(storedPath)) return storedPath;
+  const fallback = path.join(
+    SUBTITLE_ROOT,
+    path.basename(path.dirname(storedPath)),
+    path.basename(storedPath),
+  );
+  return fs.existsSync(fallback) ? fallback : null;
+}
+
 export function readStoredSubtitle(
   video: Pick<Video, 'subtitle_path'>,
 ): SubtitlePayload | null {
-  if (!video.subtitle_path || !fs.existsSync(video.subtitle_path)) return null;
+  const subtitlePath = resolveStoredSubtitlePath(video.subtitle_path);
+  if (!subtitlePath) return null;
   const payload = JSON.parse(
-    fs.readFileSync(video.subtitle_path, 'utf8'),
+    fs.readFileSync(subtitlePath, 'utf8'),
   ) as SubtitlePayload;
   if (!Array.isArray(payload.segments)) {
-    const rawPath = payload.raw_path;
-    if (rawPath && fs.existsSync(rawPath)) {
+    const rawPath = resolveStoredSubtitlePath(payload.raw_path);
+    if (rawPath) {
       try {
         const raw = fs.readFileSync(rawPath, 'utf8');
         payload.segments = parseSubtitleSegments(raw, payload.format);
@@ -3096,6 +3163,9 @@ export function readStoredSubtitle(
     } else {
       payload.segments = estimateTxtSegments(payload.text || '');
     }
+  }
+  if (payload.segmentStyle !== 'fine') {
+    payload.segmentStyle = inferSubtitleSegmentStyle(payload.segments);
   }
   return payload;
 }

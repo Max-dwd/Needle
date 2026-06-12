@@ -8,6 +8,7 @@ import EmbeddedPlayer from '@/components/player/EmbeddedPlayer';
 import type { EmbeddedPlayerSeekRequest } from '@/components/player/EmbeddedPlayer';
 import AudioModeOverlay from '@/components/AudioModeOverlay';
 import SubtitleOverlay from '@/components/player/SubtitleOverlay';
+import { getOverlayEligibleSubtitleSegments } from '@/lib/subtitle-segments';
 
 interface MobileVideoSheetProps {
   video: VideoWithMeta;
@@ -425,14 +426,15 @@ export default function MobileVideoSheet({
 
   const [subtitle, setSubtitle] = useState<SubtitleData | null>(null);
   const overlaySegments = useMemo(() => {
-    if (
-      !subtitle ||
-      subtitle.status !== 'fetched' ||
-      subtitle.segmentStyle === 'coarse'
-    ) {
+    if (!subtitle || subtitle.status !== 'fetched') {
       return [];
     }
-    return Array.isArray(subtitle.segments) ? subtitle.segments : [];
+    return Array.isArray(subtitle.segments)
+      ? getOverlayEligibleSubtitleSegments(
+          subtitle.segments,
+          subtitle.segmentStyle,
+        )
+      : [];
   }, [subtitle]);
 
   const isYt = video.platform === 'youtube';
@@ -444,13 +446,16 @@ export default function MobileVideoSheet({
   const activePlayerDuration =
     playerState.videoId === video.id ? playerState.duration : 0;
   const channelName = (video as { channel_name?: string }).channel_name ?? '';
-  const subtitleBadge = getSubtitleBadgeLabel(video);
+  const isMembersOnly =
+    video.access_status === 'members_only' || video.is_members_only === 1;
+  // 会员专属视频用右上角皇冠取代普通的字幕失败标志
+  const rawSubtitleBadge = getSubtitleBadgeLabel(video);
+  const subtitleBadge =
+    isMembersOnly && rawSubtitleBadge === '!' ? null : rawSubtitleBadge;
   const accessBadge =
     video.access_status === 'limited_free'
       ? { label: '🎟 限免', title: '限时免费视频' }
-      : video.access_status === 'members_only' || video.is_members_only === 1
-        ? { label: '👑 会员', title: '会员专属视频' }
-        : null;
+      : null;
 
   const handlePlayerTimeUpdate = useCallback(
     (seconds: number) => {
@@ -820,6 +825,14 @@ export default function MobileVideoSheet({
                     <span className="video-duration">
                       {video.duration || '--:--'}
                     </span>
+                    {isMembersOnly && (
+                      <span
+                        className="members-crown members-crown-overlay"
+                        title="会员专属视频"
+                      >
+                        👑
+                      </span>
+                    )}
                     {accessBadge && (
                       <span className="members-badge" title={accessBadge.title}>
                         {accessBadge.label}
@@ -1077,6 +1090,14 @@ export default function MobileVideoSheet({
                       <span className="video-duration">
                         {video.duration || '--:--'}
                       </span>
+                      {isMembersOnly && (
+                        <span
+                          className="members-crown members-crown-overlay"
+                          title="会员专属视频"
+                        >
+                          👑
+                        </span>
+                      )}
                       {accessBadge && (
                         <span
                           className="members-badge"

@@ -19,6 +19,7 @@ import type { SubtitleData, VideoWithMeta } from '@/types';
 import VideoInfoPanel, { type VideoInfoPanelRef } from '@/components/VideoInfoPanel';
 import AudioModeOverlay from '@/components/AudioModeOverlay';
 import SubtitleOverlay from '@/components/player/SubtitleOverlay';
+import { getOverlayEligibleSubtitleSegments } from '@/lib/subtitle-segments';
 import { useMediaSession } from '@/hooks/useMediaSession';
 import { extractSummaryChapters, findChapterIndexForSeconds } from '@/lib/summary-chapters';
 import PlayerBottomBar from '@/components/player/PlayerBottomBar';
@@ -1390,10 +1391,12 @@ export default function PlayerModal({
               )}
               <SubtitleOverlay
                 segments={
-                  subtitle?.status === 'fetched' &&
-                  subtitle?.segmentStyle !== 'coarse'
+                  subtitle?.status === 'fetched'
                     ? Array.isArray(subtitle?.segments)
-                      ? subtitle.segments
+                      ? getOverlayEligibleSubtitleSegments(
+                          subtitle.segments,
+                          subtitle.segmentStyle,
+                        )
                       : []
                     : []
                 }
@@ -1614,7 +1617,12 @@ export default function PlayerModal({
                       availability = (status === 'fetched' && subtitleSegments.length > 0) ? 'available' : 'pending';
                     } else if (status !== 'fetched' || subtitleSegments.length === 0) {
                       availability = 'unavailable';
-                    } else if (subtitle?.segmentStyle === 'coarse') {
+                    } else if (
+                      getOverlayEligibleSubtitleSegments(
+                        subtitleSegments,
+                        subtitle?.segmentStyle,
+                      ).length === 0
+                    ) {
                       availability = 'coarse';
                     } else {
                       availability = 'available';

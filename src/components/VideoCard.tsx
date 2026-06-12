@@ -45,8 +45,22 @@ function getVideoFailureDetails(video: VideoWithMeta): Array<{
 }> {
   const details: Array<{ label: string; reason: string }> = [];
   const subtitleStatus = video.subtitle_status;
+  const isMembersOnly =
+    video.access_status === 'members_only' || video.is_members_only === 1;
 
-  if (subtitleStatus === 'error') {
+  if (
+    isMembersOnly &&
+    (subtitleStatus === 'error' ||
+      subtitleStatus === 'cooldown' ||
+      subtitleStatus === 'missing' ||
+      subtitleStatus === 'empty' ||
+      video.subtitle_cooldown_until)
+  ) {
+    details.push({
+      label: '会员专属',
+      reason: '会员专属视频，普通渠道无法获取字幕',
+    });
+  } else if (subtitleStatus === 'error') {
     details.push({
       label: '字幕失败',
       reason: video.subtitle_error || '字幕抓取失败',
@@ -103,19 +117,22 @@ const VideoCard = memo(function VideoCard({
   onPlay: (video: VideoWithMeta, startSeconds?: number) => void;
 }) {
   const isYt = video.platform === 'youtube';
+  const isMembersOnly =
+    video.access_status === 'members_only' || video.is_members_only === 1;
   const accessBadge =
     video.access_status === 'limited_free'
       ? { label: '🎟 限免', title: '限时免费视频' }
-      : video.access_status === 'members_only' || video.is_members_only === 1
-        ? { label: '👑 会员', title: '会员专属视频' }
-        : null;
+      : null;
   const availabilityBadge =
     video.availability_status === 'abandoned'
       ? { label: '⛔ 放弃', title: video.availability_reason || '已确认不可用并完全放弃' }
       : video.availability_status === 'unavailable'
         ? { label: '⚠ 不可用', title: video.availability_reason || '已确认不可用' }
         : null;
-  const subtitleBadge = getSubtitleBadgeLabel(video);
+  // 会员专属视频用右上角皇冠取代普通的字幕失败标志
+  const rawSubtitleBadge = getSubtitleBadgeLabel(video);
+  const subtitleBadge =
+    isMembersOnly && rawSubtitleBadge === '!' ? null : rawSubtitleBadge;
   const failureDetails = getVideoFailureDetails(video);
   const hasFailureDetails = failureDetails.length > 0;
   const [showSummary, setShowSummary] = useState(false);
@@ -636,6 +653,11 @@ const VideoCard = memo(function VideoCard({
       >
         <div className="video-thumb-wrapper">
           <div className="video-badges-top">
+            {isMembersOnly && (
+              <span className="members-crown" title="会员专属视频">
+                👑
+              </span>
+            )}
             {video.research?.is_favorited && (
               <span className="subtitle-badge" title="已加入研究收藏" style={{ background: 'var(--accent-purple)' }}>
                 🔖

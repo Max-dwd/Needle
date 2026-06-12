@@ -312,8 +312,8 @@ describe('VAL-CROSS-001: Full Bilibili pipeline end-to-end', () => {
       ).toBe(true);
       expect(enrichRun).toHaveBeenCalledTimes(1);
       const args = enrichRun.mock.calls[0] ?? [];
-      expect(typeof args[12]).toBe('string');
-      expect(args[13]).toBe('recovered123');
+      expect(typeof args[13]).toBe('string');
+      expect(args[14]).toBe('recovered123');
     });
   });
 

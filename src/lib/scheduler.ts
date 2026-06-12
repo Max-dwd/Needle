@@ -456,7 +456,11 @@ export function insertOrUpdateVideos(
       published_at = CASE WHEN ? <> '' THEN ? ELSE published_at END,
       duration = CASE WHEN ? <> '' THEN ? ELSE duration END,
       is_members_only = CASE WHEN ? IS NOT NULL THEN ? ELSE is_members_only END,
-      access_status = CASE WHEN ? IS NOT NULL THEN ? ELSE access_status END,
+      access_status = CASE
+        WHEN ? IS NOT NULL THEN ?
+        WHEN ? = 0 AND access_status = 'members_only' THEN NULL
+        ELSE access_status
+      END,
       availability_status = NULL,
       availability_reason = NULL,
       availability_checked_at = CASE
@@ -542,6 +546,7 @@ export function insertOrUpdateVideos(
       isMembersOnly,
       accessStatus,
       accessStatus,
+      isMembersOnly,
       recoveredAt,
       video.video_id,
     );
