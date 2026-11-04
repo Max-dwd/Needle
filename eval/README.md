@@ -187,8 +187,13 @@ come from `eval:llm-aligner`; the gemini-fallback numbers from
 method (`fetchSubtitleViaSegmentedAudio`: 900s chunks, the production timestamp
 prompt, `parseAiRangeBlock`) on the same cached audio.
 
-Sample: the same 4 cases run on 2026-06-08 (other 14 golden cases left unrun for
-cost/rate limits).
+Historical comparison: the same 4 case IDs reported on 2026-06-08. This table
+is not a fresh evaluation or a claim of full-dataset coverage. The checked-in
+`config.example.yaml` and `config.local.yaml` each define 12 targets, while
+`data/manifest.json` currently lists 0 complete cases and 14 missing cases.
+Those counts describe different snapshots and must not be added to the 4-case
+comparison to infer a dataset total. Rebuild the golden manifest and rerun the
+pipelines before treating these results as current.
 
 | Case | Pipeline | Recall (cov) | Precision (1−NCER) | start MAE | end MAE | end P95 | Tokens | Gate |
 | ---- | -------- | ------------ | ------------------ | --------- | ------- | ------- | ------ | ---- |
