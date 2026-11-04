@@ -1,8 +1,12 @@
 {
   "mcpServers": {
     "needle": {
-      "command": "/opt/homebrew/bin/tsx",
-      "args": ["src/mcp-server/index.ts"]
+      "command": "node",
+      "args": [
+        "--import",
+        "tsx",
+        "src/mcp-server/index.ts"
+      ]
     }
   }
 }

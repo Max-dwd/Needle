@@ -2,7 +2,19 @@ import React from 'react';
 import type { VideoWithMeta } from '@/types';
 import MarkdownRenderer from '@/components/MarkdownRenderer';
 
-// renderInlineMarkdown removed in favor of MarkdownRenderer
+// Preserve emphasis when no interactive video context is available. React
+// escapes all text here, so summary content is never inserted as raw HTML.
+function renderPreviewText(text: string): React.ReactNode[] {
+  return text.split(/(\*\*[^*]+\*\*)/g).map((part, index) =>
+    part.startsWith('**') && part.endsWith('**') ? (
+      <strong key={index} style={{ fontWeight: 700 }}>
+        {part.slice(2, -2)}
+      </strong>
+    ) : (
+      part
+    ),
+  );
+}
 
 function stripFrontmatter(markdown: string): string {
   if (!markdown.startsWith('---\n')) return markdown;
@@ -123,7 +135,9 @@ export default function SummaryHoverPreview({
               hideTimestamps={true}
             />
           ) : (
-            <div style={{ whiteSpace: 'pre-wrap' }}>{coreSummaryText}</div>
+            <div style={{ whiteSpace: 'pre-wrap' }}>
+              {renderPreviewText(coreSummaryText)}
+            </div>
           )}
         </div>
         {detailTitles.length > 0 && (
@@ -142,7 +156,7 @@ export default function SummaryHoverPreview({
               style={{
                 display: 'flex',
                 flexDirection: 'column',
-              gap: 6,
+                gap: 6,
               }}
             >
               {detailTitles.map((title, index) => (
@@ -156,7 +170,7 @@ export default function SummaryHoverPreview({
                       hideTimestamps={true}
                     />
                   ) : (
-                    title
+                    renderPreviewText(title)
                   )}
                 </div>
               ))}

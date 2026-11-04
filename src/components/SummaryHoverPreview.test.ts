@@ -83,4 +83,17 @@ platform: youtube
     expect(html).toContain('第二段内容');
     expect(html).toContain('<strong style="font-weight:700">重点</strong>');
   });
+
+  it('renders title emphasis and escapes HTML in the non-interactive preview', () => {
+    const html = ReactDOMServer.renderToStaticMarkup(
+      React.createElement(SummaryHoverPreview, {
+        markdown:
+          '# 核心总结\n\n**<script>alert(1)</script>**\n\n# 详细总结\n\n## **重点**',
+      }),
+    );
+
+    expect(html).toContain('&lt;script&gt;alert(1)&lt;/script&gt;');
+    expect(html).not.toContain('<script>');
+    expect(html).toContain('<strong style="font-weight:700">重点</strong>');
+  });
 });
