@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { extractSummaryChapters } from './summary-chapters';
+import {
+  extractSummaryChapters,
+  findChapterIndexForSeconds,
+} from './summary-chapters';
 
 describe('extractSummaryChapters', () => {
   const dummyVideo = { platform: 'youtube' as const, video_id: '12345' };
@@ -218,7 +221,6 @@ Same time [01:00](https://youtube.com/watch?v=12345&t=60s)
 });
 
 describe('findChapterIndexForSeconds', () => {
-  const { findChapterIndexForSeconds } = require('./summary-chapters');
   const chapters = [
     { seconds: 10, title: 'Ch 1', body: '' },
     { seconds: 20, title: 'Ch 2', body: '' },
